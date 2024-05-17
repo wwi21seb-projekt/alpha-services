@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package serveralpha;
+
+option go_package = "./proto;serveralpha";
+
+service NotificationService {
+}
