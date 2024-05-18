@@ -1,14 +1,16 @@
 GOPATH:=$(shell go env GOPATH)
+PROTO_DIR=./proto
+POST_SERVICE_PROTO_DIR=$(PROTO_DIR)/post-service
 
 .PHONY: init
 init:
 	@go get -u google.golang.org/protobuf/proto
 	@go install github.com/golang/protobuf/protoc-gen-go@latest
 	@go install github.com/go-micro/generator/cmd/protoc-gen-micro@latest
+
 .PHONY: proto
 proto:
-	@protoc --proto_path=. --micro_out=. --go_out=:. proto/post-service.proto
-	@protoc --proto_path=. --micro_out=. --go_out=:. proto/health.proto
+	@protoc --proto_path=./proto/post-service --micro_out=./proto/post-service --micro_opt=paths=source_relative --go_out=:./proto/post-service --go_opt=paths=source_relative post-service.proto
 
 
 .PHONY: update
@@ -29,4 +31,4 @@ test:
 
 .PHONY: docker
 docker:
-	@docker build -t post-service:latest .
+	@docker build -t api-gateway:latest .
