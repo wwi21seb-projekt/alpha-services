@@ -4,5 +4,52 @@ package serveralpha;
 
 option go_package = "./proto;serveralpha";
 
+// ------------------ Messages ------------------ //
+message Location{
+    float latitude = 1;
+    float longitude = 2;
+    int32 accuracy = 3;
+}
+
+message Author{
+    string username = 1;
+    string nickname = 2;
+    string profile_picture_url = 3;
+}
+
+message Post{
+    string id = 1;
+    Author author = 2;
+    string created_at = 3;
+    string content = 4;
+    Location location = 5;
+}
+
+message PostPagination{
+    string last_post_id = 1;
+    int32 limit = 2;
+    int32 records = 3;
+}
+
+message Empty{}
+
+// ------------------ Post Service ------------------ //
+
 service PostService{
+    rpc CreatePost(CreatePostRequest) returns (Post);
+    rpc QueryPosts(Empty) returns (QueryPostsResponse);
+    rpc DeletePost(Empty) returns (Empty);
+    rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
+}
+
+// ------------------ Request and Response ------------------ //
+
+message CreatePostRequest{
+    string content = 1;
+    Location location = 2;
+}
+
+message QueryPostsResponse{
+    repeated Post posts = 1;
+    PostPagination pagination = 2;
 }
