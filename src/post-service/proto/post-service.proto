@@ -5,6 +5,7 @@ package serveralpha;
 option go_package = "./proto;serveralpha";
 
 // ------------------ Messages ------------------ //
+
 message Location{
     float latitude = 1;
     float longitude = 2;
@@ -39,7 +40,7 @@ service PostService{
     rpc CreatePost(CreatePostRequest) returns (Post);
     rpc QueryPosts(Empty) returns (QueryPostsResponse);
     rpc DeletePost(Empty) returns (Empty);
-    rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
+    rpc GetFeed(GetFeedRequest) returns (QueryPostsResponse);
 }
 
 // ------------------ Request and Response ------------------ //
@@ -52,4 +53,26 @@ message CreatePostRequest{
 message QueryPostsResponse{
     repeated Post posts = 1;
     PostPagination pagination = 2;
+}
+
+message QueryPostsRequest{
+    string last_post_id = 1;
+    int32 limit = 2;
+    string query = 3;
+}
+
+message GetFeedRequest{
+    string last_post_id = 1;
+    int32 limit = 2;
+    bool is_authenticated = 3;
+}
+
+// ------------------ User Service ------------------ //
+
+service UserService{
+    rpc GetAuthor(GetAuthorRequest) returns (Author);
+}
+
+message GetAuthorRequest{
+    string user_id = 1;
 }
