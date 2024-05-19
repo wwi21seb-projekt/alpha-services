@@ -74,14 +74,15 @@ func (s *PostService) CreatePost(ctx context.Context, req *pb.CreatePostRequest,
 	// Get the author from the userService outside the transaction to avoid deadlocks
 	author, err := s.UserService.GetAuthor(ctx, &pb.GetAuthorRequest{UserId: userId})
 	if err != nil {
+		// Return the error if the author could not be retrieved, but the post was successfully created
 		return err
 	}
 
 	// Update rsp fields instead of assigning a new object
-	rsp.Id = postId.String()
+	rsp.PostId = postId.String()
 	rsp.Author = author
 	rsp.Content = req.Content
-	rsp.CreatedAt = createdAt.Format(time.RFC3339)
+	rsp.CreationDate = createdAt.Format(time.RFC3339)
 	rsp.Location = req.Location
 
 	return nil
