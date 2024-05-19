@@ -3,126 +3,82 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/graceful"
+	"github.com/wwi21seb-projekt/alpha-services/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/api-gateway/middleware"
+	"github.com/wwi21seb-projekt/alpha-services/api-gateway/schema"
 	"go-micro.dev/v4"
-	"go-micro.dev/v4/auth"
-	"go-micro.dev/v4/metadata"
-	"go-micro.dev/v4/server"
-	"net/http"
-	"strings"
+	"go-micro.dev/v4/logger"
+	"os/signal"
+	"syscall"
 
 	pbPost "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
 )
 
-var rules = []*auth.Rule{
-	{
-		Resource: &auth.Resource{
-			Type:     "service",
-			Name:     "post-service",
-			Endpoint: "Health.Check",
-		},
-		Access: auth.AccessGranted,
-	},
-}
-
 func main() {
-	srv := micro.NewService()
-
-	srv.Init(
+	// Create a go-micro service
+	srv := micro.NewService(
 		micro.Name("api-gateway"),
 		micro.Version("latest"),
-		micro.Auth(auth.DefaultAuth),
-		micro.WrapHandler(authWrapper(srv)),
 	)
+	srv.Init()
 
 	// Create client stub for post-service
 	postService := pbPost.NewPostService("post-service", srv.Client())
+	// Create an instance of PostHandler
+	postHandler := handler.NewPostHandler(postService)
 
 	// Expose HTTP endpoint with go-micro server
-	r := gin.Default()
+	r, err := graceful.Default()
+	if err != nil {
+		logger.Fatal(err)
+	}
 
-	r.POST("/posts", func(c *gin.Context) {
-		// Parse request body to get post data
-		var req pbPost.CreatePostRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
+	setupRoutes(r, postHandler)
 
-		// Call CreatePost method on postService
-		rsp, err := postService.CreatePost(context.Background(), &req)
-		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
+	// Create a context that listens for termination signals
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-		// Return the response
-		c.JSON(200, rsp)
-	})
-
-	//r.GET("/health", func(c *gin.Context) {
-	//	// Call post-service
-	//	res, err := postService.Check(context.Background(), &pbPost.HealthCheckRequest{})
-	//	if err != nil {
-	//		c.JSON(500, gin.H{"error": err.Error()})
-	//		return
-	//	}
-	//
-	//	c.JSON(200, res)
-	//})
+	// Create a channel to signal termination
+	quit := make(chan struct{})
 
 	// Run the service asynchronously
 	go func() {
-		if err := srv.Run(); err != nil {
-			return
+		if err = srv.Run(); err != nil {
+			logger.Info(err)
 		}
+		close(quit)
 	}()
 
-	err := r.Run(":8080")
-	if err != nil {
-		return
+	// Run gin router asynchronously
+	go func() {
+		if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Info(err)
+		}
+		close(quit)
+	}()
+
+	// Wait for either service to terminate
+	<-quit
+
+	// Stop the service
+	if err := srv.Server().Stop(); err != nil {
+		logger.Info(err)
+	}
+
+	// Stop the gin router gracefully
+	if err := r.Stop(); err != nil {
+		logger.Info(err)
 	}
 }
 
-// authWrapper is a handler wrapper for auth validation
-func authWrapper(service micro.Service) server.HandlerWrapper {
-	return func(h server.HandlerFunc) server.HandlerFunc {
-		return func(ctx context.Context, req server.Request, rsp interface{}) error {
-			// Fetch metadata from context (request headers).
-			md, b := metadata.FromContext(ctx)
-			if !b {
-				return errors.New("no metadata found")
-			}
+// setupRoutes sets up the routes for the API Gateway
+func setupRoutes(r *graceful.Graceful, postHandler *handler.PostHandler) {
+	apiRouter := r.Group("/api")
+	apiRouter.Use(middleware.SetClaimsMiddleware())
 
-			// Get auth header.
-			authHeader, ok := md["Authorization"]
-			if !ok || !strings.HasPrefix(authHeader, auth.BearerScheme) {
-				return errors.New("no auth token provided")
-			}
-
-			// Extract auth token.
-			token := strings.TrimPrefix(authHeader, auth.BearerScheme)
-
-			// Extract account from token.
-			a := service.Options().Auth
-			acc, err := a.Inspect(token)
-			if err != nil {
-				return errors.New("auth token invalid")
-			}
-
-			// Create resource for current endpoint from request headers.
-			currentResource := auth.Resource{
-				Type:     "service",
-				Name:     md["Micro-Service"],
-				Endpoint: md["Micro-Endpoint"],
-			}
-
-			// Verify if account has access.
-			if err := auth.Verify(rules, acc, &currentResource); err != nil {
-				return errors.New("no access")
-			}
-
-			return h(ctx, req, rsp)
-		}
-	}
+	postRouter := apiRouter.Group("/posts")
+	postRouter.Use(middleware.RequireAuthMiddleware())
+	postRouter.POST("", middleware.ValidateAndSanitizeStruct(&schema.CreatePostRequest{}), postHandler.CreatePost)
 }
