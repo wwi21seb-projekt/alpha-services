@@ -8,9 +8,10 @@ import (
 	"go-micro.dev/v4/auth"
 	"go-micro.dev/v4/metadata"
 	"go-micro.dev/v4/server"
+	"net/http"
 	"strings"
 
-	postpb "github.com/wwi21seb-projekt/alpha-services/api-gateway/proto/post-service"
+	pbPost "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
 )
 
 var rules = []*auth.Rule{
@@ -35,21 +36,40 @@ func main() {
 	)
 
 	// Create client stub for post-service
-	postService := postpb.NewHealthService("post-service", srv.Client())
+	postService := pbPost.NewPostService("post-service", srv.Client())
 
 	// Expose HTTP endpoint with go-micro server
 	r := gin.Default()
 
-	r.GET("/health", func(c *gin.Context) {
-		// Call post-service
-		res, err := postService.Check(context.Background(), &postpb.HealthCheckRequest{})
+	r.POST("/posts", func(c *gin.Context) {
+		// Parse request body to get post data
+		var req pbPost.CreatePostRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Call CreatePost method on postService
+		rsp, err := postService.CreatePost(context.Background(), &req)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 
-		c.JSON(200, res)
+		// Return the response
+		c.JSON(200, rsp)
 	})
+
+	//r.GET("/health", func(c *gin.Context) {
+	//	// Call post-service
+	//	res, err := postService.Check(context.Background(), &pbPost.HealthCheckRequest{})
+	//	if err != nil {
+	//		c.JSON(500, gin.H{"error": err.Error()})
+	//		return
+	//	}
+	//
+	//	c.JSON(200, res)
+	//})
 
 	// Run the service asynchronously
 	go func() {

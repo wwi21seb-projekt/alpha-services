@@ -1,6 +1,4 @@
 GOPATH:=$(shell go env GOPATH)
-PROTO_DIR=./proto
-POST_SERVICE_PROTO_DIR=$(PROTO_DIR)/post-service
 
 .PHONY: init
 init:
@@ -10,7 +8,7 @@ init:
 
 .PHONY: proto
 proto:
-	@protoc --proto_path=./proto/post-service --micro_out=./proto/post-service --micro_opt=paths=source_relative --go_out=:./proto/post-service --go_opt=paths=source_relative post-service.proto
+	@protoc --proto_path=./proto --micro_out=./proto --micro_opt=paths=source_relative --go_out=:./proto --go_opt=paths=source_relative post-service.proto
 
 
 .PHONY: update
