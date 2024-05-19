@@ -20,7 +20,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ------------------ Messages ------------------ //
 type Location struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
