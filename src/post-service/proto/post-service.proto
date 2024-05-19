@@ -15,15 +15,18 @@ message Location{
 message Author{
     string username = 1;
     string nickname = 2;
-    string profile_picture_url = 3;
+    string profilePictureURL = 3;
 }
 
 message Post{
-    string id = 1;
+    string postId = 1;
     Author author = 2;
-    string created_at = 3;
+    string creationDate = 3;
     string content = 4;
-    Location location = 5;
+    uint32 likes = 5;
+    uint32 liked = 6;
+    Post repost = 7;
+    Location location = 8;
 }
 
 message PostPagination{
