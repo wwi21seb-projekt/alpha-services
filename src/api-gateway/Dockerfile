@@ -1,38 +1,32 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.22.3-alpine AS builder
 
 # Set Go env
 ENV CGO_ENABLED=0 GOOS=linux
-WORKDIR /go/src/serveralpha
+WORKDIR /app
 
-# Install dependencies
-RUN apk --update --no-cache add ca-certificates make protoc
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-# Download grpc_health_probe
-RUN GRPC_HEALTH_PROBE_VERSION=v0.4.11 && \
-    wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
-    chmod +x /bin/grpc_health_probe
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+RUN go mod download
 
-# Build Go binary
-COPY Makefile go.mod go.sum ./
-RUN go env -w GOPROXY=https://goproxy.io,direct/
-RUN make init && go mod download
+# Copy the source from the current directory to the Working Directory inside the container
 COPY . .
-RUN make proto tidy
 
-# Skaffold passes in debug-oriented compiler flags
-ARG SKAFFOLD_GO_GCFLAGS
-RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/api-gateway .
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /api-gateway ./cmd/api-gateway
 
-# Deployment container
-FROM scratch
+# Start a new stage from scratch
+FROM alpine:3.19.1
 
-# Definition of this variable is used by 'skaffold debug' to identify a golang binary.
-# Default behavior - a failure prints a stack trace for the current goroutine.
-# See https://golang.org/pkg/runtime/
-ENV GOTRACEBACK=single
+# Set the Current Working Directory inside the container
+WORKDIR /root/
 
-COPY --from=builder /etc/ssl/certs /etc/ssl/certs
-COPY --from=builder /bin/grpc_health_probe /bin/
-COPY --from=builder /go/src/serveralpha/api-gateway /serveralpha/api-gateway
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /api-gateway .
 
-ENTRYPOINT ["/serveralpha/api-gateway"]
+# Expose port 8080 to the outside world
+EXPOSE 8080
+
+# Command to run the executable
+CMD ["./api-gateway"]

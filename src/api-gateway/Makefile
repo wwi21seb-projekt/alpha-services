@@ -1,3 +1,7 @@
+APP_NAME := api-gateway
+IMAGE_NAME := $(APP_NAME)
+TAG := latest
+
 GOPATH:=$(shell go env GOPATH)
 
 .PHONY: init
@@ -10,7 +14,6 @@ init:
 proto:
 	@protoc --proto_path=./proto --micro_out=./proto --micro_opt=paths=source_relative --go_out=:./proto --go_opt=paths=source_relative post-service.proto
 
-
 .PHONY: update
 update:
 	@go get -u
@@ -21,12 +24,18 @@ tidy:
 
 .PHONY: build
 build:
-	@go build -o cmd/post-service/main.go *.go
+	@go build -o ./bin/$(APP_NAME) ./cmd/api-gateway
 
 .PHONY: test
 test:
 	@go test -v ./... -cover
 
-.PHONY: docker
-docker:
-	@docker build -t api-gateway:latest .
+# Build the Docker image
+.PHONY: docker-build
+docker-build:
+	docker build -t $(IMAGE_NAME):$(TAG) .
+
+# Push the Docker image to Docker Hub
+.PHONY: docker-push
+docker-push:
+	docker push $(IMAGE_NAME):$(TAG)
