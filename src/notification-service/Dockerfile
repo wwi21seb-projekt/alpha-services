@@ -21,7 +21,7 @@ RUN make proto tidy
 
 # Skaffold passes in debug-oriented compiler flags
 ARG SKAFFOLD_GO_GCFLAGS
-RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/api-gateway .
+RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/notification-service .
 
 # Deployment container
 FROM scratch
@@ -33,6 +33,6 @@ ENV GOTRACEBACK=single
 
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /bin/grpc_health_probe /bin/
-COPY --from=builder /go/src/serveralpha/api-gateway /serveralpha/api-gateway
+COPY --from=builder /go/src/serveralpha/notification-service /serveralpha/notification-service
 
-ENTRYPOINT ["/serveralpha/api-gateway"]
+ENTRYPOINT ["/serveralpha/notification-service"]
