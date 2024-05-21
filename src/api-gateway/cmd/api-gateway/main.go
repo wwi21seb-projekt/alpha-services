@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"github.com/gin-contrib/graceful"
-	"github.com/wwi21seb-projekt/alpha-services/api-gateway/handler"
-	"github.com/wwi21seb-projekt/alpha-services/api-gateway/middleware"
-	"github.com/wwi21seb-projekt/alpha-services/api-gateway/schema"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/logger"
 	"os/signal"
 	"syscall"
 
-	pbPost "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
+	pbPost "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
 )
 
 func main() {

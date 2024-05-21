@@ -1,4 +1,4 @@
-module github.com/wwi21seb-projekt/alpha-services/shared
+module github.com/wwi21seb-projekt/alpha-services/src/shared
 
 go 1.22.3
 

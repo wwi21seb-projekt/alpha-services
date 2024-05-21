@@ -3,13 +3,13 @@ package main
 import (
 	grpcc "github.com/go-micro/plugins/v4/client/grpc"
 	grpcs "github.com/go-micro/plugins/v4/server/grpc"
-	"github.com/wwi21seb-projekt/alpha-services/post-service/handler"
-	"github.com/wwi21seb-projekt/alpha-services/shared/db"
+	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/shared/db"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/auth"
 	"go-micro.dev/v4/logger"
 
-	pb "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
+	pb "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
 )
 
 var (

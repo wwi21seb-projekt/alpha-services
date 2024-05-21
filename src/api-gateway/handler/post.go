@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
-	"github.com/wwi21seb-projekt/alpha-services/api-gateway/middleware"
-	"github.com/wwi21seb-projekt/alpha-services/api-gateway/schema"
-	pbPost "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	pbPost "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
 	"go-micro.dev/v4/logger"
 	"go-micro.dev/v4/metadata"
 )
