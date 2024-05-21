@@ -1,6 +1,6 @@
 package schema
 
-import pbPost "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
+import pbPost "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
 
 // ------------------------------------------
 // ------------ Request DTOs ----------------

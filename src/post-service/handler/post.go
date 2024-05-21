@@ -8,10 +8,10 @@ import (
 	"github.com/jackc/pgx/v4"
 	"regexp"
 
-	"github.com/wwi21seb-projekt/alpha-services/shared/db"
+	"github.com/wwi21seb-projekt/alpha-services/src/shared/db"
 	"time"
 
-	pb "github.com/wwi21seb-projekt/alpha-services/post-service/proto"
+	pb "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
 )
 
 type PostService struct {

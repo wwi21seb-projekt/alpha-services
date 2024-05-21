@@ -1,9 +1,0 @@
-go 1.22.3
-
-use (
-	./src/api-gateway
-	./src/notification-service
-	./src/post-service
-	./src/shared
-	./src/user-service
-)

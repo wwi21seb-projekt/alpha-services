@@ -13,10 +13,10 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.4.11 && \
     chmod +x /bin/grpc_health_probe
 
 # Build Go binary
-COPY Makefile go.mod go.sum ./
+COPY . .
 RUN go env -w GOPROXY=https://goproxy.io,direct/
 RUN make init && go mod download
-COPY . .
+
 RUN make proto tidy
 
 # Skaffold passes in debug-oriented compiler flags

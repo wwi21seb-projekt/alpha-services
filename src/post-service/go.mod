@@ -1,4 +1,4 @@
-module github.com/wwi21seb-projekt/alpha-services/post-service
+module github.com/wwi21seb-projekt/alpha-services/src/post-service
 
 go 1.22.3
 
