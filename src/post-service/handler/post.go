@@ -3,13 +3,15 @@ package handler
 import (
 	"context"
 	"errors"
+	"regexp"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"regexp"
+
+	"time"
 
 	"github.com/wwi21seb-projekt/alpha-shared/db"
-	"time"
 
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
@@ -30,8 +32,14 @@ func (s *PostService) DeletePost(ctx context.Context, empty *pb.Empty, empty2 *p
 }
 
 func (s *PostService) GetFeed(ctx context.Context, request *pb.GetFeedRequest, response *pb.QueryPostsResponse) error {
-	//TODO implement me
-	panic("implement me")
+	response.Posts = make([]*pb.Post, 0)
+	response.Pagination = &pb.PostPagination{
+		LastPostId: "",
+		Limit:      10,
+		Records:    0,
+	}
+
+	return nil
 }
 
 func NewPostService(db *db.DB, userService pb.UserService) *PostService {

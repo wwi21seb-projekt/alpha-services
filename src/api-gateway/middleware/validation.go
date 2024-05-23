@@ -2,13 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/truemail-rb/truemail-go"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -16,6 +9,14 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/microcosm-cc/bluemonday"
+	"github.com/truemail-rb/truemail-go"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
 // contextKey is a type used for context keys to avoid conflicts with other packages' context keys.

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
@@ -39,6 +40,22 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 
 	// Call CreatePost method on postService
 	rsp, err := h.PostService.CreatePost(ctx, req)
+	if err != nil {
+		logger.Error(err)
+		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return the response
+	c.JSON(200, rsp)
+}
+
+func (h *PostHandler) GetFeed(c *gin.Context) {
+	// Determine if user is authenticated or not
+	// to-do
+
+	// Call GetFeed method on postService
+	rsp, err := h.PostService.GetFeed(c, &pbPost.GetFeedRequest{})
 	if err != nil {
 		logger.Error(err)
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
