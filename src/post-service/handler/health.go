@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
+	pb "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 )
 
 type Health struct{}

@@ -5,13 +5,13 @@ import (
 	"errors"
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"regexp"
 
-	"github.com/wwi21seb-projekt/alpha-services/src/shared/db"
+	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"time"
 
-	pb "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
+	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
 type PostService struct {
