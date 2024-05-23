@@ -9,6 +9,7 @@ require (
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/truemail-rb/truemail-go v1.1.3
+	github.com/wwi21seb-projekt/alpha-shared v0.3.0
 	github.com/wwi21seb-projekt/errors-go v0.4.0
 	go-micro.dev/v4 v4.10.2
 )
@@ -19,6 +20,7 @@ require (
 	github.com/acomagu/bufpipe v1.0.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bitly/go-simplejson v0.5.0 // indirect
+	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/brianvoe/gofakeit/v6 v6.28.0 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
@@ -76,7 +78,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
-	github.com/wwi21seb-projekt/alpha-shared v0.3.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect

@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"os/signal"
+	"syscall"
+
 	"github.com/gin-contrib/graceful"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/logger"
-	"os/signal"
-	"syscall"
 
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
@@ -76,9 +77,16 @@ func main() {
 // setupRoutes sets up the routes for the API Gateway
 func setupRoutes(r *graceful.Graceful, postHandler *handler.PostHandler) {
 	apiRouter := r.Group("/api")
-	apiRouter.Use(middleware.SetClaimsMiddleware())
+
+	// Set public routes
+	apiRouter.GET("/feed", postHandler.GetFeed)
 
 	postRouter := apiRouter.Group("/posts")
+
+	// Require authentication for the remaining post routes
 	postRouter.Use(middleware.RequireAuthMiddleware())
+	apiRouter.Use(middleware.SetClaimsMiddleware())
+
+	// Set authenticated routes
 	postRouter.POST("", middleware.ValidateAndSanitizeStruct(&schema.CreatePostRequest{}), postHandler.CreatePost)
 }
