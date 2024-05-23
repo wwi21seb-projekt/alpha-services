@@ -15,13 +15,13 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.4.11 && \
 # Build Go binary
 COPY Makefile go.mod go.sum ./
 RUN go env -w GOPROXY=https://goproxy.io,direct/
-RUN make init && go mod download
+RUN go mod download
 COPY . .
-RUN make proto tidy
+RUN make tidy
 
 # Skaffold passes in debug-oriented compiler flags
 ARG SKAFFOLD_GO_GCFLAGS
-RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/post-service .
+RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/post-service cmd/post-service/main.go
 
 # Deployment container
 FROM scratch
