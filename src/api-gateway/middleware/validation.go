@@ -7,7 +7,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/truemail-rb/truemail-go"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbPost "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"net/http"
 	"reflect"

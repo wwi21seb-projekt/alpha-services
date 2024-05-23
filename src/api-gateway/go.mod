@@ -9,7 +9,6 @@ require (
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/truemail-rb/truemail-go v1.1.3
-	github.com/wwi21seb-projekt/alpha-services/src/post-service v0.0.1
 	github.com/wwi21seb-projekt/errors-go v0.4.0
 	go-micro.dev/v4 v4.10.2
 )
@@ -77,6 +76,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
+	github.com/wwi21seb-projekt/alpha-shared v0.3.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect

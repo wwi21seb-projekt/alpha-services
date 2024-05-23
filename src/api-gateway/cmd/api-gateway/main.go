@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	pbPost "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
 func main() {

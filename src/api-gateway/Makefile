@@ -4,16 +4,6 @@ TAG := latest
 
 GOPATH:=$(shell go env GOPATH)
 
-.PHONY: init
-init:
-	@go get -u google.golang.org/protobuf/proto
-	@go install github.com/golang/protobuf/protoc-gen-go@latest
-	@go install github.com/go-micro/generator/cmd/protoc-gen-micro@latest
-
-.PHONY: proto
-proto:
-	@protoc --proto_path=./proto --micro_out=./proto --micro_opt=paths=source_relative --go_out=:./proto --go_opt=paths=source_relative post-service.proto
-
 .PHONY: update
 update:
 	@go get -u
