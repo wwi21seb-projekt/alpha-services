@@ -4,12 +4,13 @@ import (
 	grpcc "github.com/go-micro/plugins/v4/client/grpc"
 	grpcs "github.com/go-micro/plugins/v4/server/grpc"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
-	"github.com/wwi21seb-projekt/alpha-services/src/shared/db"
+	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/auth"
 	"go-micro.dev/v4/logger"
 
-	pb "github.com/wwi21seb-projekt/alpha-services/src/post-service/proto"
+	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
+	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
 var (
@@ -43,7 +44,7 @@ func main() {
 	srv.Init(opts...)
 
 	// Initialize empty database
-	db := &db.DB{}
+	db, _ := db.NewDB("localhost")
 
 	// Initialize userService
 	userService := pb.NewUserService("com.example.srv.user", srv.Client())
@@ -52,7 +53,7 @@ func main() {
 	if err := pb.RegisterPostServiceHandler(srv.Server(), handler.NewPostService(db, userService)); err != nil {
 		logger.Fatal(err)
 	}
-	if err := pb.RegisterHealthHandler(srv.Server(), new(handler.Health)); err != nil {
+	if err := pbHealth.RegisterHealthHandler(srv.Server(), new(handler.Health)); err != nil {
 		logger.Fatal(err)
 	}
 
