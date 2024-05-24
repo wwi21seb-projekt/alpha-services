@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: your-api-gateway-image
+          image: api-gateway-image
           ports:
             - containerPort: 8080
           env:
@@ -37,6 +37,6 @@ spec:
     spec:
       containers:
         - name: post-service
-          image: your-post-service-image
+          image: post-service-image
           ports:
             - containerPort: 50051

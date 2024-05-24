@@ -1,0 +1,24 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: serveralpha
+build:
+  artifacts:
+    - image: api-gateway-image
+      context: src/api-gateway
+      docker:
+        dockerfile: Dockerfile
+    - image: post-service-image
+      context: src/post-service
+      docker:
+        dockerfile: Dockerfile
+manifests:
+  kustomize:
+    paths:
+      - k8s/base
+profiles:
+  - name: local
+    manifests:
+      kustomize:
+        paths:
+          - k8s/overlays/local
