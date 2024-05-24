@@ -1,18 +1,17 @@
-package api_gateway_vanilla
+package main
 
 import (
 	"context"
 	"errors"
 	"flag"
 	"github.com/gin-contrib/graceful"
+	"github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/schema"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	"go-micro.dev/v4/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,9 +26,9 @@ func main() {
 	flag.Parse()
 
 	// Set up a connection to the gRPC server
-	postConn, err := grpc.Dial(postGrpcURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	postConn, err := grpc.NewClient(postGrpcURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server: %v", err)
+		logrus.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
 	defer postConn.Close()
 
@@ -42,7 +41,7 @@ func main() {
 	// Expose HTTP endpoint with go-micro server
 	r, err := graceful.Default()
 	if err != nil {
-		logger.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	setupRoutes(r, postHandler)
@@ -52,7 +51,7 @@ func main() {
 	defer stop()
 
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Info(err)
+		logrus.Info(err)
 	}
 }
 

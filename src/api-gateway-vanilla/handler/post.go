@@ -31,7 +31,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	}
 
 	// Create a context with the userId from the JWT claims
-	ctx := context.WithValue(c, "userId", claims["sub"].(string))
+	ctx := context.WithValue(context.Background(), "userId", claims["sub"].(string))
 
 	// Call CreatePost method on postService
 	rsp, err := h.postService.CreatePost(ctx, req)
