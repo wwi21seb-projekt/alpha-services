@@ -9,13 +9,20 @@ import (
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 )
 
-type Health struct{}
-
-func (h *Health) Check(ctx context.Context, req *pb.HealthCheckRequest, rsp *pb.HealthCheckResponse) error {
-	rsp.Status = pb.HealthCheckResponse_SERVING
-	return nil
+type healthService struct {
+	pb.UnimplementedHealthServer
 }
 
-func (h *Health) Watch(ctx context.Context, req *pb.HealthCheckRequest, stream pb.Health_WatchStream) error {
+func NewHealthServer() pb.HealthServer {
+	return &healthService{}
+}
+
+func (h *healthService) Check(ctx context.Context, request *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+	return &pb.HealthCheckResponse{
+		Status: pb.HealthCheckResponse_SERVING,
+	}, nil
+}
+
+func (h *healthService) Watch(request *pb.HealthCheckRequest, stream pb.Health_WatchServer) error {
 	return status.Errorf(codes.Unimplemented, "health check via Watch not implemented")
 }

@@ -12,6 +12,9 @@ build:
       context: src/post-service
       docker:
         dockerfile: Dockerfile
+  local:
+    useBuildkit: false
+    concurrency: 4
 manifests:
   kustomize:
     paths:
