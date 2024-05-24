@@ -18,25 +18,17 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: POST_SERVICE
+            - name: POST_ADDR
               value: "post-service:50051"
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
 metadata:
-  name: post-service
+  name: api-gateway
 spec:
-  replicas: 1
   selector:
-    matchLabels:
-      app: post-service
-  template:
-    metadata:
-      labels:
-        app: post-service
-    spec:
-      containers:
-        - name: post-service
-          image: post-service-image
-          ports:
-            - containerPort: 50051
+    app: api-gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080

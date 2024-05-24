@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: post-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: post-service
+          image: post-service-image:latest

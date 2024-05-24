@@ -2,23 +2,20 @@ package handler
 
 import (
 	"context"
-
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	"go-micro.dev/v4/logger"
-	"go-micro.dev/v4/metadata"
 )
 
 type PostHandler struct {
-	PostService pbPost.PostService
+	postService pbPost.PostServiceClient
 }
 
-func NewPostHandler(postService pbPost.PostService) *PostHandler {
+func NewPostHandler(client pbPost.PostServiceClient) *PostHandler {
 	return &PostHandler{
-		PostService: postService,
+		postService: client,
 	}
 }
 
@@ -34,14 +31,11 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	}
 
 	// Create a context with the userId from the JWT claims
-	ctx := metadata.NewContext(context.Background(), map[string]string{
-		"userId": claims["sub"].(string),
-	})
+	ctx := context.WithValue(context.Background(), "userId", claims["sub"].(string))
 
 	// Call CreatePost method on postService
-	rsp, err := h.PostService.CreatePost(ctx, req)
+	rsp, err := h.postService.CreatePost(ctx, req)
 	if err != nil {
-		logger.Error(err)
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -55,9 +49,8 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 	// to-do
 
 	// Call GetFeed method on postService
-	rsp, err := h.PostService.GetFeed(c, &pbPost.GetFeedRequest{})
+	rsp, err := h.postService.GetFeed(c, &pbPost.GetFeedRequest{})
 	if err != nil {
-		logger.Error(err)
 		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		return
 	}

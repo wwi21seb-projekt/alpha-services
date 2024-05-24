@@ -30,23 +30,24 @@ func (c *contextKey) String() string {
 }
 
 var SanitizedPayloadKey = &contextKey{"sanitizedPayload"}
+var badRequestError = &schema.ErrorDTO{Error: goerrors.BadRequest}
 
 func ValidateAndSanitizeStruct(obj interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := c.ShouldBindJSON(obj); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, &schema.ErrorDTO{Error: *goerrors.BadRequest})
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
 			return
 		}
 		validator := GetValidator()
 		// Sanitize the data
 		if err := validator.SanitizeData(obj); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, &schema.ErrorDTO{Error: *goerrors.BadRequest})
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
 			return
 		}
 
 		if err := validator.Validate.Struct(obj); err != nil {
 			// Handle validation errors as before
-			c.AbortWithStatusJSON(http.StatusBadRequest, &schema.ErrorDTO{Error: *goerrors.BadRequest})
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
 			return
 		}
 		// Set the sanitized object in the context

@@ -6,9 +6,9 @@ import (
 	"flag"
 	"github.com/gin-contrib/graceful"
 	"github.com/sirupsen/logrus"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/handler"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/middleware"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/schema"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	postGrpcURL = *flag.String("post_grpc_url", os.Getenv("POST_GRPC_URL"), "URL of the gRPC server for posts")
+	postGrpcURL = *flag.String("POST_ADDR", os.Getenv("POST_ADDR"), "URL of the gRPC server for posts")
 )
 
 func main() {

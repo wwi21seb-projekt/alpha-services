@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 )
 
 var jwtSecret = []byte("your_secret_key")
+var unauthorizedError = &schema.ErrorDTO{Error: goerrors.Unauthorized}
 
 func SetClaimsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -23,7 +25,7 @@ func SetClaimsMiddleware() gin.HandlerFunc {
 		// Bearer token check
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, goerrors.Unauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
@@ -34,13 +36,13 @@ func SetClaimsMiddleware() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, goerrors.Unauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, goerrors.Unauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
