@@ -20,7 +20,7 @@ RUN make tidy
 
 # Skaffold passes in debug-oriented compiler flags
 ARG SKAFFOLD_GO_GCFLAGS
-RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/post-service cmd/post-service/main.go
+RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/post-service cmd/main.go
 
 # Deployment container
 FROM scratch

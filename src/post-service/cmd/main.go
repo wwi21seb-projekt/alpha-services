@@ -15,8 +15,8 @@ import (
 var (
 	name     = "post-service"
 	version  = "0.1.0"
-	port     = *flag.String("port", os.Getenv("port"), "Port to listen on")
-	userAddr = *flag.String("userAddr", os.Getenv("userAddr"), "Address of the user service")
+	port     = *flag.String("port", os.Getenv("PORT"), "Port to listen on")
+	userAddr = *flag.String("userAddr", os.Getenv("USER_ADDR"), "Address of the user service")
 )
 
 func main() {
