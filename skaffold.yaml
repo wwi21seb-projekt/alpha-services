@@ -19,9 +19,9 @@ manifests:
   kustomize:
     paths:
       - k8s/base
-profiles:
-  - name: local
-    manifests:
-      kustomize:
-        paths:
-          - k8s/overlays/local
+portForward:
+  - resourceType: service
+    resourceName: api-gateway
+    namespace: default
+    port: 80
+    localPort: 8080
