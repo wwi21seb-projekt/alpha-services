@@ -7,17 +7,15 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway-vanilla/schema"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	"google.golang.org/grpc"
 )
 
 type PostHandler struct {
 	postService pbPost.PostServiceClient
 }
 
-func NewPostHandler(conn *grpc.ClientConn) *PostHandler {
-	postService := pbPost.NewPostServiceClient(conn)
+func NewPostHandler(client pbPost.PostServiceClient) *PostHandler {
 	return &PostHandler{
-		postService: postService,
+		postService: client,
 	}
 }
 
