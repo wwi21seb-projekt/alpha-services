@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: your-api-gateway-image:latest
+          image: api-gateway-image:latest
 
 ---
 apiVersion: apps/v1
@@ -19,4 +19,4 @@ spec:
     spec:
       containers:
         - name: post-service
-          image: your-post-service-image:latest
+          image: post-service-image:latest

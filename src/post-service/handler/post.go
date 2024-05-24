@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go-micro.dev/v4/logger"
 
 	"time"
 
@@ -32,6 +33,8 @@ func (s *PostService) DeletePost(ctx context.Context, empty *pb.Empty, empty2 *p
 }
 
 func (s *PostService) GetFeed(ctx context.Context, request *pb.GetFeedRequest, response *pb.QueryPostsResponse) error {
+	logger.Info("GetFeed called")
+
 	response.Posts = make([]*pb.Post, 0)
 	response.Pagination = &pb.PostPagination{
 		LastPostId: "",
@@ -39,6 +42,7 @@ func (s *PostService) GetFeed(ctx context.Context, request *pb.GetFeedRequest, r
 		Records:    0,
 	}
 
+	logger.Info("GetFeed finished, returning: ", response)
 	return nil
 }
 

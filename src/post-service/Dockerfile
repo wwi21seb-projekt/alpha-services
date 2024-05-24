@@ -14,7 +14,6 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.4.11 && \
 
 # Build Go binary
 COPY Makefile go.mod go.sum ./
-RUN go env -w GOPROXY=https://goproxy.io,direct/
 RUN go mod download
 COPY . .
 RUN make tidy
