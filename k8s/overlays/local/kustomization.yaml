@@ -1,6 +1,0 @@
-resources:
-  - ../../base/kustomization.yaml
-
-patchesStrategicMerge:
-  - api-gateway-patch.yaml
-  - post-service-patch.yaml
