@@ -3,25 +3,44 @@ package main
 import (
 	"context"
 	"errors"
-	"os/signal"
-	"syscall"
-
 	"github.com/gin-contrib/graceful"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	"github.com/wwi21seb-projekt/alpha-shared/micro_utils"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/logger"
+	"os/signal"
+	"syscall"
 
+	grpcc "github.com/go-micro/plugins/v4/client/grpc"
+	_ "github.com/go-micro/plugins/v4/registry/kubernetes"
+	grpcs "github.com/go-micro/plugins/v4/server/grpc"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
+var (
+	name    = "api-gateway"
+	version = "1.0.0"
+)
+
 func main() {
+	// Load configuration
+	if err := micro_utils.Load(); err != nil {
+		logger.Fatal(err)
+	}
+
 	// Create a go-micro service
 	srv := micro.NewService(
-		micro.Name("api-gateway"),
-		micro.Version("latest"),
+		micro.Server(grpcs.NewServer()),
+		micro.Client(grpcc.NewClient()),
 	)
+	opts := []micro.Option{
+		micro.Name(name),
+		micro.Version(version),
+		micro.Address(micro_utils.Address()),
+	}
+
 	srv.Init()
 
 	// Create client stub for post-service
