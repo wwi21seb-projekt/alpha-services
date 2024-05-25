@@ -18,25 +18,29 @@ import (
 )
 
 var (
-	postGrpcURL = *flag.String("POST_ADDR", os.Getenv("POST_ADDR"), "URL of the gRPC server for posts")
+	postServiceAddress string
 )
+
+func init() {
+	flag.StringVar(&postServiceAddress, "POST_ADDR", os.Getenv("POST_ADDR"), "URL of the gRPC server for posts")
+}
 
 func main() {
 	// Parse the command-line flags
 	flag.Parse()
 
 	// Set up a connection to the gRPC server
-	postConn, err := grpc.NewClient(postGrpcURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	postConn, err := grpc.NewClient(postServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		logrus.Fatalf("Failed to connect to gRPC server: %v", err)
 	}
 	defer postConn.Close()
 
 	// Create client stubs
-	postClientStub := pbPost.NewPostServiceClient(postConn)
+	postClient := pbPost.NewPostServiceClient(postConn)
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(postClientStub)
+	postHandler := handler.NewPostHandler(postClient)
 
 	// Expose HTTP endpoint with go-micro server
 	r, err := graceful.Default()
@@ -50,9 +54,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	logrus.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logrus.Info(err)
+		logrus.Fatalf("Server error: %v", err)
 	}
+
+	logrus.Info("Server stopped gracefully")
 }
 
 // setupRoutes sets up the routes for the API Gateway
