@@ -22,6 +22,18 @@ spec:
               value: "50051"
             - name: USER_ADDR
               value: "user-service:50052"
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: mydatabase
+            - name: POSTGRES_USER
+              value: myuser
+            - name: POSTGRES_PASSWORD
+              value: mypassword
+            - name: SCHEMA_NAME
+              value: post_service
 ---
 apiVersion: v1
 kind: Service
