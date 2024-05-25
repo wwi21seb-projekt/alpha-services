@@ -7,6 +7,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	"net/http"
 )
 
 type PostHandler struct {
@@ -36,12 +37,12 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// Call CreatePost method on postService
 	rsp, err := h.postService.CreatePost(ctx, req)
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Return the response
-	c.JSON(200, rsp)
+	c.JSON(http.StatusOK, rsp)
 }
 
 func (h *PostHandler) GetFeed(c *gin.Context) {
@@ -51,7 +52,7 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 	// Call GetFeed method on postService
 	rsp, err := h.postService.GetFeed(c, &pbPost.GetFeedRequest{})
 	if err != nil {
-		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

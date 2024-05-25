@@ -1,3 +1,4 @@
 resources:
   - api-gateway.yaml
   - post-service.yaml
+  - postgres.yaml
