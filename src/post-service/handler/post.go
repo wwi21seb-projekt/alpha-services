@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	log "github.com/sirupsen/logrus"
 	"go-micro.dev/v4/logger"
+	"google.golang.org/grpc/metadata"
 	"regexp"
 
 	"time"
@@ -22,13 +23,13 @@ var hashtagRegex = regexp.MustCompile(`#\w+`)
 
 type postService struct {
 	db         *db.DB
-	UserClient pbUser.ProfileServiceClient
+	UserClient pbUser.UserServiceClient
 	pb.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(db *db.DB, userClient pbUser.ProfileServiceClient) pb.PostServiceServer {
+func NewPostServiceServer(db *db.DB, userClient pbUser.UserServiceClient) pb.UserServiceClient {
 	return &postService{
-		db:         db,
+		db:            db,
 		UserClient: userClient,
 	}
 }
@@ -88,6 +89,12 @@ func (s *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequ
 
 	/*// Get the author from the userService outside the transaction to avoid deadlocks
 	author, err := s.UserClient.GetAuthor(ctx, &pb.GetAuthorRequest{UserId: userId})
+	// Write UserID into Metadata
+	md := metadata.Pairs("user_id", userId)
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// Get the author from the userService outside the transaction to avoid deadlocks
+	author, err := s.ProfileClient.GetProfile(ctx, &pb.Empty{})
 	if err != nil {
 		// Return the error if the author could not be retrieved, but the post was successfully created
 		return nil, err

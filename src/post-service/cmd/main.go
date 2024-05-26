@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -9,7 +11,7 @@ import (
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"google.golang.org/grpc"
-	"net"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -45,8 +47,20 @@ func main() {
 	var serverOpts []grpc.ServerOption
 	grpcServer := grpc.NewServer(serverOpts...)
 
+	// Create user client
+	var dialOpts []grpc.DialOption
+	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
+	if err != nil {
+		log.Fatalf("Failed to connect to user service: %v", err)
+	}
+	defer conn.Close()
+
+	// Create user profile client
+	userProfileClient := pbPost.NewProfileServiceClient(conn)
+
 	// Register post service
-	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, nil))
+	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient))
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
