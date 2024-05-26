@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -10,8 +12,6 @@ import (
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"log"
-	"net"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 	// Create user client
 	var dialOpts []grpc.DialOption
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.NewClient(userAddr, dialOpts...)
+	conn, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
 	if err != nil {
 		log.Fatalf("Failed to connect to user service: %v", err)
 	}
