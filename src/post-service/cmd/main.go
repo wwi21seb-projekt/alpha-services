@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
-	"net"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"net"
 )
 
 var (
@@ -50,17 +50,19 @@ func main() {
 	// Create user client
 	var dialOpts []grpc.DialOption
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
+	userClient, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
 	if err != nil {
 		log.Fatalf("Failed to connect to user service: %v", err)
 	}
-	defer conn.Close()
+	defer userClient.Close()
 
-	// Create user profile client
-	userProfileClient := pbPost.NewProfileServiceClient(conn)
+	// Create client stubs
+	userProfileClient := pbUser.NewProfileServiceClient(userClient)
+	userAuthenticatorClient := pbUser.NewAuthenticationServiceClient(userClient)
+	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(userClient)
 
 	// Register post service
-	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient))
+	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient, userAuthenticatorClient, userSubscriptionClient))
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())

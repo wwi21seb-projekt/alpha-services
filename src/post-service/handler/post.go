@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	log "github.com/sirupsen/logrus"
-	"go-micro.dev/v4/logger"
-	"google.golang.org/grpc/metadata"
 	"regexp"
 
 	"time"
@@ -22,15 +20,19 @@ import (
 var hashtagRegex = regexp.MustCompile(`#\w+`)
 
 type postService struct {
-	db         *db.DB
-	UserClient pbUser.UserServiceClient
+	db                   *db.DB
+	profileClient        pbUser.ProfileServiceClient
+	authenticationClient pbUser.AuthenticationServiceClient
+	subscription         pbUser.SubscriptionServiceClient
 	pb.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(db *db.DB, userClient pbUser.UserServiceClient) pb.UserServiceClient {
+func NewPostServiceServer(db *db.DB, profileClient pbUser.ProfileServiceClient, authenticationClient pbUser.AuthenticationServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
 	return &postService{
-		db:            db,
-		UserClient: userClient,
+		db:                   db,
+		profileClient:        profileClient,
+		authenticationClient: authenticationClient,
+		subscription:         subscription,
 	}
 }
 
@@ -55,7 +57,7 @@ func (s *postService) GetFeed(ctx context.Context, request *pb.GetFeedRequest) (
 		Records:    0,
 	}
 
-	logger.Info("GetFeed finished, returning: ", response)
+	log.Info("GetFeed finished, returning: ", response)
 	return response, nil
 }
 
