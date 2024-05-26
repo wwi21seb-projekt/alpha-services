@@ -3,7 +3,7 @@ module github.com/wwi21seb-projekt/alpha-services/src/user-service
 go 1.22.3
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.6.0
+	github.com/wwi21seb-projekt/alpha-shared v0.7.2
 	google.golang.org/grpc v1.64.0
 )
 

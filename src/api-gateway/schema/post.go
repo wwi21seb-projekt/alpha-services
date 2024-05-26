@@ -17,3 +17,7 @@ type CreatePostRequest struct {
 	Content  string   `json:"content" validate:"required,max=256,post_validation"`
 	Location Location `json:"location,omitempty" validate:"location_validation"`
 }
+
+type CreateCommentRequest struct {
+	Content string `json:"content" validate:"required,max=128"`
+}
