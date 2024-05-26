@@ -1,12 +1,13 @@
 package middleware
 
 import (
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"net/http"
 	"strings"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 

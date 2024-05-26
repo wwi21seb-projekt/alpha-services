@@ -1,15 +1,8 @@
+APP_NAME := user-service
+IMAGE_NAME := $(APP_NAME)
+TAG := latest
+
 GOPATH:=$(shell go env GOPATH)
-
-.PHONY: init
-init:
-	@go get -u google.golang.org/protobuf/proto
-	@go install github.com/golang/protobuf/protoc-gen-go@latest
-	@go install github.com/go-micro/generator/cmd/protoc-gen-micro@latest
-.PHONY: proto
-proto:
-	# @protoc --proto_path=. --micro_out=. --go_out=:. proto/user-service.proto
-	@protoc --proto_path=. --micro_out=. --go_out=:. proto/health.proto
-
 
 .PHONY: update
 update:
@@ -21,12 +14,18 @@ tidy:
 
 .PHONY: build
 build:
-	@go build -o cmd/user-service/main.go *.go
+	@go build -o cmd/main.go *.go
 
 .PHONY: test
 test:
 	@go test -v ./... -cover
 
-.PHONY: docker
-docker:
-	@docker build -t user-service:latest .
+# Build the Docker image
+.PHONY: docker-build
+docker-build:
+	docker build -t $(IMAGE_NAME):$(TAG) .
+
+# Push the Docker image to Docker Hub
+.PHONY: docker-push
+docker-push:
+	docker push $(IMAGE_NAME):$(TAG)

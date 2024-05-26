@@ -31,6 +31,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/wwi21seb-projekt/alpha-shared v0.7.0 h1:jUIP8USfU9es07iXRZUTmnibsfA2heuDyfteJuVEa5o=
 github.com/wwi21seb-projekt/alpha-shared v0.7.0/go.mod h1:3/dxzzyv9wBoTTz1E5zZeX67gjO8PyvIU7lS3S0bF7I=
+github.com/wwi21seb-projekt/alpha-shared v0.7.2 h1:4Tysag7IIDPGCWT3UDYwu+L7zpJv068OWrAOG2mbdh0=
+github.com/wwi21seb-projekt/alpha-shared v0.7.2/go.mod h1:hRRIoO0elsBUg3d3AJFnXo/OvonIOhJTPl7F4TLEiZM=
 go-micro.dev/v4 v4.10.2 h1:GWQf1+FcAiMf1yca3P09RNjB31Xtk0C5HiKHSpq/2qA=
 go-micro.dev/v4 v4.10.2/go.mod h1:RV2AolXjTAil9Xm82QCMo1gknuZwD61oMUH14wJpECk=
 golang.org/x/crypto v0.23.0 h1:dIJU/v2J8Mdglj/8rJ6UUOM3Zc9zLZxVZwwxMooUSAI=

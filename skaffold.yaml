@@ -12,6 +12,10 @@ build:
       context: src/post-service
       docker:
         dockerfile: Dockerfile
+    - image: user-service-image
+      context: src/user-service
+      docker:
+          dockerfile: Dockerfile
   local:
     useBuildkit: true
     concurrency: 4
