@@ -14,7 +14,7 @@ tidy:
 
 .PHONY: build
 build:
-	@go build -o cmd/post-service/main.go *.go
+	@go build -o post-service ./cmd/main.go
 
 .PHONY: test
 test:

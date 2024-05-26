@@ -1,34 +1,42 @@
 package main
 
 import (
-	"flag"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
+	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"google.golang.org/grpc"
-	"log"
 	"net"
-	"os"
 )
 
 var (
-	name     = "post-service"
-	version  = "0.1.0"
-	port     = *flag.String("port", os.Getenv("PORT"), "Port to listen on")
-	userAddr = *flag.String("userAddr", os.Getenv("USER_ADDR"), "Address of the user service")
+	name    = "post-service"
+	version = "0.1.0"
 )
 
 func main() {
-	// Parse flags
-	flag.Parse()
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
-	// Initialize empty database
-	database, _ := db.NewDB("localhost")
+	// Construct the DSN (Data Source Name) for the database connection
+	dsn := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=disable search_path=%s",
+		cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.SchemaName)
+
+	// Initialize the database
+	database, err := db.NewDB(dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to the database: %v", err)
+	}
 	defer database.Close()
 
 	// Create listener
-	lis, err := net.Listen("tcp", ":"+port)
+	lis, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
@@ -37,18 +45,6 @@ func main() {
 	var serverOpts []grpc.ServerOption
 	grpcServer := grpc.NewServer(serverOpts...)
 
-	// Create user client
-	/*
-		var dialOpts []grpc.DialOption
-		conn, err := grpc.NewClient(userAddr, dialOpts...)
-		if err != nil {
-			log.Fatalf("Failed to connect to user service: %v", err)
-		}
-		defer conn.Close()
-
-		userClient := pb.NewUserServiceClient(conn)
-	*/
-
 	// Register post service
 	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, nil))
 
@@ -56,8 +52,8 @@ func main() {
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Start server
-	log.Printf("Starting %s v%s on port %s", name, version, port)
-	if err := grpcServer.Serve(lis); err != nil {
+	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)
+	if err = grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 }
