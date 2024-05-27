@@ -2,7 +2,10 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
 type UserHdlr interface {
@@ -23,11 +26,11 @@ type UserHdlr interface {
 
 type UserHandler struct {
 	authService         pb.AuthenticationServiceClient
-	profileService      pb.ProfileServiceClient
+	profileService      pb.UserServiceClient
 	subscriptionService pb.SubscriptionServiceClient
 }
 
-func NewUserHandler(authService pb.AuthenticationServiceClient, profileService pb.ProfileServiceClient, subscriptionService pb.SubscriptionServiceClient) *UserHandler {
+func NewUserHandler(authService pb.AuthenticationServiceClient, profileService pb.UserServiceClient, subscriptionService pb.SubscriptionServiceClient) *UserHandler {
 	return &UserHandler{
 		authService:         authService,
 		profileService:      profileService,
@@ -35,54 +38,76 @@ func NewUserHandler(authService pb.AuthenticationServiceClient, profileService p
 	}
 }
 
-func (h *UserHandler) RegisterUser(c *gin.Context) {
+func (uh *UserHandler) RegisterUser(c *gin.Context) {
+	// Fetch request from context
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RegistrationRequest)
+
+	user, err := uh.authService.RegisterUser(c, &pb.RegisterUserRequest{
+		Username: req.Username,
+		Password: req.Password,
+		Nickname: req.Nickname,
+		Email:    req.Email,
+	})
+	if err != nil {
+		if err.Error() == "username already exists" {
+			c.JSON(409, goerrors.UsernameTaken)
+			return
+		} else if err.Error() == "email already exists" {
+			c.JSON(409, goerrors.EmailTaken)
+			return
+		}
+
+		c.JSON(500, goerrors.InternalServerError)
+		return
+	}
+
+	c.JSON(201, user)
+}
+
+func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) SearchUsers(c *gin.Context) {
+func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) ChangeTrivialInfo(c *gin.Context) {
+func (uh *UserHandler) ChangePassword(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) ChangePassword(c *gin.Context) {
+func (uh *UserHandler) LoginUser(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) LoginUser(c *gin.Context) {
+func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) RefreshToken(c *gin.Context) {
+func (uh *UserHandler) ActivateUser(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) ActivateUser(c *gin.Context) {
+func (uh *UserHandler) ResendToken(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) ResendToken(c *gin.Context) {
+func (uh *UserHandler) GetUserFeed(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) GetUserFeed(c *gin.Context) {
+func (uh *UserHandler) GetUser(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) GetUser(c *gin.Context) {
+func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) CreateSubscription(c *gin.Context) {
+func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 	// to-do
 }
 
-func (h *UserHandler) DeleteSubscription(c *gin.Context) {
-	// to-do
-}
-
-func (h *UserHandler) GetSubscriptions(c *gin.Context) {
+func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	// to-do
 }

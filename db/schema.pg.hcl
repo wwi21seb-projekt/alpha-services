@@ -25,6 +25,9 @@ table "activation_tokens" {
     on_update   = CASCADE
     on_delete   = CASCADE
   }
+  unique "users_tokens_uq" {
+    columns = [column.user_id]
+  }
 }
 table "comments" {
   schema = schema.post_service
@@ -241,11 +244,11 @@ table "users" {
     type = character(60)
   }
   column "status" {
-    null = false
+    null = true
     type = character_varying(256)
   }
   column "profile_picture_url" {
-    null = false
+    null = true
     type = character_varying(256)
   }
   column "created_at" {
@@ -262,6 +265,12 @@ table "users" {
   }
   primary_key {
     columns = [column.user_id]
+  }
+  unique "username_uq" {
+    columns = [column.username]
+  }
+  unique "email_uq" {
+    columns = [column.email]
   }
 }
 schema "user_service" {
