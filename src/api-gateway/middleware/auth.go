@@ -55,15 +55,3 @@ func SetClaimsMiddleware() gin.HandlerFunc {
 	}
 
 }
-
-// RequireAuthMiddleware is a middleware that checks if the request is authenticated
-func RequireAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if _, exists := c.Get("claims"); !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}

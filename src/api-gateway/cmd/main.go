@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 
 	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
@@ -62,9 +61,11 @@ func main() {
 	}
 
 	setupCommonMiddleware(r)
-	apiRouter := r.Group("/api")
-	setupRoutes(apiRouter, postHandler, userHandler)
-	setupAuthRoutes(apiRouter, postHandler, userHandler)
+	unauthorizedRouter := r.Group("/api")
+	authorizedRouter := r.Group("/api")
+	authorizedRouter.Use(middleware.SetClaimsMiddleware())
+	setupRoutes(unauthorizedRouter, postHandler, userHandler)
+	setupAuthRoutes(authorizedRouter, postHandler, userHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -104,9 +105,6 @@ func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userH
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
-	authRouter.Use(middleware.RequireAuthMiddleware())
-	authRouter.Use(middleware.SetClaimsMiddleware())
-
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)

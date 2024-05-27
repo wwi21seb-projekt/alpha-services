@@ -1,4 +1,9 @@
-table "activation_tokens" {
+enum "token_type" {
+  schema = schema.user_service
+  values = ["activation", "password_reset"]
+}
+
+table "tokens" {
   schema = schema.user_service
   column "token_id" {
     null = false
@@ -9,8 +14,12 @@ table "activation_tokens" {
     type = character_varying(6)
   }
   column "expires_at" {
-    null = true
+    null = false
     type = timestamptz
+  }
+  column "type" {
+    null = false
+    type = enum.token_type
   }
   column "user_id" {
     null = false
@@ -25,8 +34,8 @@ table "activation_tokens" {
     on_update   = CASCADE
     on_delete   = CASCADE
   }
-  unique "users_tokens_uq" {
-    columns = [column.user_id]
+  unique "user_token_type_uq" {
+    columns = [column.user_id, column.type]
   }
 }
 table "comments" {

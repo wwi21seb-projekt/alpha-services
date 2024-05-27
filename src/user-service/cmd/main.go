@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
+	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net"
 
@@ -28,7 +30,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initizalize logger
+	// Initialize logger
 	logger := logrus.New()
 
 	opts := []logging.Option{
@@ -61,13 +63,24 @@ func main() {
 	))
 	grpcServer := grpc.NewServer(serverOpts...)
 
+	// Create client connections
+	var dialOpts []grpc.DialOption
+	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	mailConn, err := grpc.NewClient("mail-service:50053", dialOpts...)
+	if err != nil {
+		log.Fatalf("Failed to connect to mail service: %v", err)
+	}
+
+	// Create client stubs
+	mailClient := pbMail.NewMailServiceClient(mailConn)
+
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
 	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer())
 	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer())
-	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database))
+	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database, mailClient))
 
 	// Start server
 	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)
