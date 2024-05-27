@@ -2,10 +2,11 @@ package helpers
 
 import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
-func TransformLocation(location *pb.Location) *schema.Location {
+func TransformLocation(location *pbPost.Location) *schema.Location {
 	if location == nil {
 		return nil
 	}
@@ -17,36 +18,36 @@ func TransformLocation(location *pb.Location) *schema.Location {
 	}
 }
 
-func LocationToProto(location *schema.Location) *pb.Location {
+func LocationToProto(location *schema.Location) *pbPost.Location {
 	if location == nil {
 		return nil
 	}
 
-	return &pb.Location{
+	return &pbPost.Location{
 		Latitude:  location.Latitude,
 		Longitude: location.Longitude,
 		Accuracy:  location.Accuracy,
 	}
 }
 
-func TransformAuthor(author *pb.Profile) *schema.Author {
-	if author == nil {
+func TransformUser(user *pbUser.User) *schema.Author {
+	if user == nil {
 		return nil
 	}
 
 	return &schema.Author{
-		Username:          author.Username,
-		Nickname:          author.Nickname,
-		ProfilePictureUrl: author.ProfilePictureUrl,
+		Username:          user.Username,
+		Nickname:          user.Nickname,
+		ProfilePictureUrl: user.ProfilePictureUrl,
 	}
 }
 
-func AuthorToProto(author *schema.Author) *pb.Profile {
+func AuthorToProto(author *schema.Author) *pbUser.User {
 	if author == nil {
 		return nil
 	}
 
-	return &pb.Profile{
+	return &pbUser.User{
 		Username:          author.Username,
 		Nickname:          author.Nickname,
 		ProfilePictureUrl: author.ProfilePictureUrl,

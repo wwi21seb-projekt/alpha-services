@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -11,7 +13,6 @@ import (
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"net"
 )
 
 var (
@@ -57,12 +58,11 @@ func main() {
 	defer userClient.Close()
 
 	// Create client stubs
-	userProfileClient := pbUser.NewProfileServiceClient(userClient)
-	userAuthenticatorClient := pbUser.NewAuthenticationServiceClient(userClient)
+	userProfileClient := pbUser.NewUserServiceClient(userClient)
 	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(userClient)
 
 	// Register post service
-	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient, userAuthenticatorClient, userSubscriptionClient))
+	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient, userSubscriptionClient))
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())

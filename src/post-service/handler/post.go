@@ -2,17 +2,17 @@ package handler
 
 import (
 	"context"
-	"errors"
+	"regexp"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	log "github.com/sirupsen/logrus"
-	"regexp"
 
 	"time"
 
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 
+	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
@@ -20,103 +20,43 @@ import (
 var hashtagRegex = regexp.MustCompile(`#\w+`)
 
 type postService struct {
-	db                   *db.DB
-	profileClient        pbUser.ProfileServiceClient
-	authenticationClient pbUser.AuthenticationServiceClient
-	subscription         pbUser.SubscriptionServiceClient
+	db            *db.DB
+	profileClient pbUser.UserServiceClient
+	subscription  pbUser.SubscriptionServiceClient
 	pb.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(db *db.DB, profileClient pbUser.ProfileServiceClient, authenticationClient pbUser.AuthenticationServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
+func NewPostServiceServer(db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
 	return &postService{
-		db:                   db,
-		profileClient:        profileClient,
-		authenticationClient: authenticationClient,
-		subscription:         subscription,
+		db:            db,
+		profileClient: profileClient,
+		subscription:  subscription,
 	}
 }
 
-func (s *postService) QueryPosts(ctx context.Context, empty *pb.Empty) (*pb.QueryPostsResponse, error) {
+func (ps *postService) SearchPosts(ctx context.Context, empty *pb.SearchPostsRequest) (*pb.SearchPostsResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *postService) DeletePost(ctx context.Context, empty *pb.Empty) (*pb.Empty, error) {
+func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.SearchPostsResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *postService) GetFeed(ctx context.Context, request *pb.GetFeedRequest) (*pb.QueryPostsResponse, error) {
-	log.Info("GetFeed called")
-	response := &pb.QueryPostsResponse{}
-
-	response.Posts = make([]*pb.Post, 0)
-	response.Pagination = &pb.PostPagination{
-		LastPostId: "",
-		Limit:      10,
-		Records:    0,
-	}
-
-	log.Info("GetFeed finished, returning: ", response)
-	return response, nil
+func (ps *postService) GetPost(ctx context.Context, request *pb.GetPostRequest) (*pb.Post, error) {
+	panic("implement me")
 }
 
-func (s *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.Post, error) {
-	// Get the user_id from the context, create a new post_id and get the current time
-	userId, ok := ctx.Value("user_id").(string)
-	if !ok {
-		return nil, errors.New("user_id not found in context")
-	}
-	postId := uuid.New()
-	createdAt := time.Now()
-
-	// Define the transaction function, which inserts the post and hashtags into the database
-	txFunc := func(tx pgx.Tx) error {
-		if err := s.insertPost(ctx, tx, postId, userId, request.Content, createdAt, request.Location); err != nil {
-			return err
-		}
-
-		hashtags := hashtagRegex.FindAllString(request.Content, -1)
-		if err := s.insertHashtags(ctx, tx, postId, hashtags); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// Execute the transaction
-	if err := s.db.Transaction(ctx, txFunc); err != nil {
-		return nil, err
-	}
-
-	/*// Get the author from the userService outside the transaction to avoid deadlocks
-	author, err := s.UserClient.GetAuthor(ctx, &pb.GetAuthorRequest{UserId: userId})
-	// Write UserID into Metadata
-	md := metadata.Pairs("user_id", userId)
-	ctx = metadata.NewOutgoingContext(ctx, md)
-
-	// Get the author from the userService outside the transaction to avoid deadlocks
-	author, err := s.ProfileClient.GetProfile(ctx, &pb.Empty{})
-	if err != nil {
-		// Return the error if the author could not be retrieved, but the post was successfully created
-		return nil, err
-	}*/
-
-	author := &pb.Profile{} //TODO
-
-	// Update rsp fields instead of assigning a new object
-	response := &pb.Post{
-		PostId:       postId.String(),
-		Author:       author,
-		Content:      request.Content,
-		CreationDate: createdAt.Format(time.RFC3339),
-		Location:     request.Location,
-	}
-
-	return response, nil
+func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.Post, error) {
+	panic("implement me")
 }
 
-func (s *postService) insertPost(ctx context.Context, tx pgx.Tx, postId uuid.UUID, userId, content string, createdAt time.Time, location *pb.Location) error {
+func (ps *postService) DeletePost(ctx context.Context, empty *pb.GetPostRequest) (*pbCommon.Empty, error) {
+	panic("implement me")
+}
+
+func (ps *postService) insertPost(ctx context.Context, tx pgx.Tx, postId uuid.UUID, userId, content string, createdAt time.Time, location *pb.Location) error {
 	// Start building the query
 	query := squirrel.Insert("alpha_schema.posts").
 		Columns("post_id", "author_id", "content", "created_at").
@@ -138,7 +78,7 @@ func (s *postService) insertPost(ctx context.Context, tx pgx.Tx, postId uuid.UUI
 	return err
 }
 
-func (s *postService) insertHashtags(ctx context.Context, tx pgx.Tx, postId uuid.UUID, hashtags []string) error {
+func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, postId uuid.UUID, hashtags []string) error {
 	for _, hashtag := range hashtags {
 		hashtagId := uuid.New()
 

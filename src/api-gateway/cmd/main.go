@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 
 	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
@@ -46,7 +47,7 @@ func main() {
 
 	// Create client stubs
 	postClient := pbPost.NewPostServiceClient(postConn)
-	userClient := pbUser.NewProfileServiceClient(userConn)
+	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
 
