@@ -20,18 +20,29 @@ spec:
           env:
             - name: PORT
               value: "50052"
+            - name: MAIL_SERVICE_URL
+              value: "mail-service:50053"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT
               value: "5432"
-            - name: POSTGRES_DB
-              value: mydatabase
-            - name: POSTGRES_USER
-              value: myuser
-            - name: POSTGRES_PASSWORD
-              value: mypassword
             - name: SCHEMA_NAME
               value: user_service
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service

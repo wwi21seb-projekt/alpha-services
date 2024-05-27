@@ -1,0 +1,7 @@
+resources:
+  - ../../base
+
+secretGenerator:
+  - name: alpha-secrets
+    envs:
+      - .env.local

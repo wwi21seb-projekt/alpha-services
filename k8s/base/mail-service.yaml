@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mail-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mail-service
+  template:
+    metadata:
+      labels:
+        app: mail-service
+    spec:
+      containers:
+        - name: mail-service
+          image: mail-service-image
+          ports:
+            - containerPort: 50053
+          env:
+            - name: PORT
+              value: "50053"
+            - name: MAILGUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: MAILGUN_API_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mail-service
+spec:
+  selector:
+    app: mail-service
+  ports:
+    - protocol: TCP
+      port: 50053
+      targetPort: 50053

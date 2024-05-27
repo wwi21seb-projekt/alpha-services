@@ -15,7 +15,13 @@ build:
     - image: user-service-image
       context: src/user-service
       docker:
-          dockerfile: Dockerfile
+        dockerfile: Dockerfile
+    - image: mail-service-image
+      context: src/mail-service
+      docker:
+        dockerfile: Dockerfile
+  tagPolicy:
+    sha256: {}
   local:
     useBuildkit: true
     concurrency: 4
@@ -34,3 +40,18 @@ portForward:
     namespace: default
     port: 5432
     localPort: 5432
+profiles:
+  - name: local
+    activation:
+      - command: dev
+    manifests:
+      kustomize:
+        paths:
+          - k8s/overlays/local
+  - name: prod
+    activation:
+      - command: run
+    manifests:
+      kustomize:
+        paths:
+          - k8s/overlays/prod

@@ -1,4 +1,4 @@
-APP_NAME := user-service
+APP_NAME := mail-service
 IMAGE_NAME := $(APP_NAME)
 TAG := latest
 
@@ -14,7 +14,7 @@ tidy:
 
 .PHONY: build
 build:
-	@go build -o user-service ./cmd/main.go
+	@go build -o mail-service ./cmd/main.go
 
 .PHONY: test
 test:
