@@ -39,7 +39,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		log.Errorf("Error in db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer tx.Rollback(ctx)
+	defer as.db.Rollback(ctx, tx)
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -73,7 +73,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		return nil, status.Errorf(codes.Internal, "failed to insert user: %v", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := as.db.Commit(ctx, tx); err != nil {
 		log.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}

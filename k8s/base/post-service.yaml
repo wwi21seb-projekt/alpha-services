@@ -26,14 +26,23 @@ spec:
               value: postgres
             - name: POSTGRES_PORT
               value: "5432"
-            - name: POSTGRES_DB
-              value: mydatabase
-            - name: POSTGRES_USER
-              value: myuser
-            - name: POSTGRES_PASSWORD
-              value: mypassword
             - name: SCHEMA_NAME
               value: post_service
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service

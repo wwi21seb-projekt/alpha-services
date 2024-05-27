@@ -2,4 +2,5 @@ resources:
   - api-gateway.yaml
   - post-service.yaml
   - user-service.yaml
+  - mail-service.yaml
   - postgres.yaml
