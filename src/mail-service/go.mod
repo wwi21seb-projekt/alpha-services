@@ -7,7 +7,7 @@ require (
 	github.com/mailgun/mailgun-go/v4 v4.12.0
 	github.com/matcornic/hermes/v2 v2.1.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/wwi21seb-projekt/alpha-shared v0.9.1
+	github.com/wwi21seb-projekt/alpha-shared v0.10.0
 	google.golang.org/grpc v1.64.0
 )
 

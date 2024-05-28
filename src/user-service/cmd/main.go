@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
-	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net"
+
+	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/sirupsen/logrus"
@@ -78,7 +79,7 @@ func main() {
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
-	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer())
+	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(database))
 	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer())
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database, mailClient))
 

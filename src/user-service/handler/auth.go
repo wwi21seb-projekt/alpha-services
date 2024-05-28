@@ -10,10 +10,12 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
-	common "github.com/wwi21seb-projekt/alpha-shared/proto/common"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
+	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"golang.org/x/crypto/bcrypt"
@@ -127,6 +129,84 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		Email:    request.Email,
 	}, nil
 }
+
+func (as authenticationService) ResendActivationEmail(ctx context.Context, request *pb.ResendActivationEmailRequest) (*pbCommon.Empty, error) {
+	tx, err := as.db.Begin(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer as.db.Rollback(ctx, tx)
+
+	// Fetch the required user data
+	query, args, _ := psql.Select("user_id", "activated_at", "email").
+		From("users").
+		Where("username = ?", request.GetUsername()).
+		ToSql()
+
+	var userId uuid.UUID
+	var activatedAt *time.Time
+	var email string
+	log.Println("Querying database for user...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&userId, &activatedAt, &email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("User not found")
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+
+		log.Errorf("Error in tx.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
+	}
+
+	if activatedAt != nil {
+		log.Error("User is already activated")
+		return nil, status.Error(codes.FailedPrecondition, "user is already activated")
+	}
+
+	// Generate a random 6-digit number
+	tokenId := uuid.New()
+	activationCode := generateToken()
+	expires_at := time.Now().Add(24 * time.Hour)
+
+	// Update the token in the database
+	query, args, _ = psql.Insert("tokens").
+		Columns("token_id", "token", "expires_at", "type", "user_id").
+		Values(tokenId, activationCode, expires_at, Activation, userId).
+		Suffix("ON CONFLICT (user_id, type) DO UPDATE SET token = ?, expires_at = ?", activationCode, expires_at).
+		ToSql()
+
+	log.Println("Inserting activation token into database...")
+	_, err = tx.Exec(ctx, query, args...)
+	if err != nil {
+		log.Errorf("Error in tx.Exec: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to insert token: %v", err)
+	}
+
+	// Call mail service to send registration email
+	log.Println("Calling upstream mailClient.SendTokenMail...")
+	_, err = as.mailClient.SendTokenMail(ctx, &pbMail.TokenMailRequest{
+		Token: activationCode,
+		Type:  pbMail.TokenMailType_TOKENMAILTYPE_REGISTRATION,
+		User: &pbMail.UserInformation{
+			Username: request.GetUsername(),
+			Email:    email,
+		},
+	})
+
+	if err != nil {
+		log.Errorf("Error in upstream call mailClient.SendTokenMail: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to send token mail: %v", err)
+	}
+
+	if err := as.db.Commit(ctx, tx); err != nil {
+		log.Errorf("Error in tx.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return &pbCommon.Empty{}, nil
+}
+
 func (as authenticationService) ActivateUser(ctx context.Context, request *pb.ActivateUserRequest) (*pb.UserIdResponse, error) {
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
@@ -135,37 +215,61 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	}
 	defer as.db.Rollback(ctx, tx)
 
-	// The following query tries deleting the token and returning the user
-	// if the user exists and the token is valid, otherwise it returns an error
-	query, args, _ := psql.Delete("tokens").
-		Where("token = ?", request.GetToken()).
-		Where("type = ?", Activation).
-		Where("expires_at > NOW()").
-		Where("user_id IN (SELECT user_id FROM users WHERE username = ?)", request.GetUsername()).
-		Suffix("RETURNING user_id").
+	// Update the user's status to active and return the email
+	// for the confirmation email
+	activatedAt := time.Now()
+	query, args, _ := psql.Update("users").
+		Set("activated_at", activatedAt).
+		Where("username = ?", request.GetUsername()).
+		Suffix("RETURNING user_id, email", "already_activated").
+		Prefix("WITH already_activated AS (SELECT activated_at FROM users WHERE username = ?)", request.GetUsername()).
 		ToSql()
 
+	var email string
 	var userId uuid.UUID
-	err = tx.QueryRow(ctx, query, args...).Scan(&userId)
+	var alreadyActivated *time.Time
+	log.Println("Activating user in database...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&userId, &email, &alreadyActivated)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("User not found")
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+
 		log.Errorf("Error in tx.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to activate user: %v", err)
 	}
 
-	// Update the user's status to active and return the email
-	// for the confirmation email
-	activatedAt := time.Now()
-	query, args, _ = psql.Update("users").
-		Set("activated_at", activatedAt).
-		Where("user_id = ?", userId).
-		Suffix("RETURNING username, email").
+	if alreadyActivated != nil {
+		log.Error("User is already activated")
+		return nil, status.Error(codes.FailedPrecondition, "user is already activated")
+	}
+
+	// The following query tries deleting the token and returning the user
+	// if the user exists and the token is valid, otherwise it returns an error
+	query, args, _ = psql.Delete("tokens").
+		Where("token = ?", request.GetToken()).
+		Where("type = ?", Activation).
+		Where("user_id = ?)", userId).
+		Suffix("RETURNING expires_at").
 		ToSql()
 
-	var email string
-	err = tx.QueryRow(ctx, query, args...).Scan(&email)
+	var expiresAt time.Time
+	log.Println("Deleting token from database...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&expiresAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("Token not found")
+			return nil, status.Error(codes.NotFound, "token not found")
+		}
+
 		log.Errorf("Error in tx.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to activate user: %v", err)
+	}
+
+	if time.Now().After(expiresAt) {
+		log.Error("Token expired")
+		return nil, status.Error(codes.DeadlineExceeded, "token expired")
 	}
 
 	// Send confirmation email
@@ -194,7 +298,6 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 }
 
 func (as authenticationService) LoginUser(ctx context.Context, request *pb.LoginUserRequest) (*pb.UserIdResponse, error) {
-	// Acquire pool connection
 	conn, err := as.db.Pool.Acquire(ctx)
 	if err != nil {
 		log.Errorf("Error in db.Pool.Acquire: %v", err)
@@ -212,6 +315,11 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 	var activatedAt time.Time
 	log.Println("Querying database for user...")
 	if err := conn.QueryRow(ctx, query, args...).Scan(&userId, &hashedPassword, &activatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("User not found")
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+
 		log.Errorf("Error in conn.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
 	}
@@ -233,7 +341,7 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 	}, nil
 }
 
-func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.ChangePasswordRequest) (*common.Empty, error) {
+func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.ChangePasswordRequest) (*pbCommon.Empty, error) {
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
 		log.Errorf("Error in db.Begin: %v", err)
@@ -245,7 +353,7 @@ func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.GetNewPassword()), bcrypt.DefaultCost)
 	if err != nil {
 		log.Errorf("Error in bcrypt.GenerateFromPassword: %v", err)
-		return nil, status.Errorf(codes.Unknown, "failed to hash password: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to hash password: %v", err)
 	}
 
 	// Get userId from metadata
@@ -254,7 +362,8 @@ func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.
 		log.Error("Error in metadata.FromIncomingContext: metadata not found")
 		return nil, status.Error(codes.Internal, "metadata not found")
 	}
-	userId := md.Get("user_id")[0]
+	// Must be present, since the user is logged in
+	userId, _ := keys.GetMetadataValue(md, keys.SubjectKey)
 
 	// Update the user's password and return the old one to check
 	// if the old password is correct and rollback if it is not
@@ -284,7 +393,7 @@ func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &common.Empty{}, nil
+	return &pbCommon.Empty{}, nil
 }
 
 func generateToken() string {

@@ -20,7 +20,7 @@ func NewSubscriptionServer() pb.SubscriptionServiceServer {
 func (ss subscriptionService) ListSubscriptions(context.Context, *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
-func (ss subscriptionService) CreateSubscription(context.Context, *pb.CreateSubscriptionRequest) (*pb.Subscription, error) {
+func (ss subscriptionService) CreateSubscription(context.Context, *pb.CreateSubscriptionRequest) (*pb.CreateSubscriptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSubscription not implemented")
 }
 func (ss subscriptionService) DeleteSubscription(context.Context, *pb.DeleteSubscriptionRequest) (*pbCommon.Empty, error) {
