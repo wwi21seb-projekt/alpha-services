@@ -1,11 +1,18 @@
 package handler
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 type UserHdlr interface {
@@ -39,7 +46,6 @@ func NewUserHandler(authService pb.AuthenticationServiceClient, profileService p
 }
 
 func (uh *UserHandler) RegisterUser(c *gin.Context) {
-	// Fetch request from context
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RegistrationRequest)
 
 	user, err := uh.authService.RegisterUser(c, &pb.RegisterUserRequest{
@@ -49,15 +55,23 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		Email:    req.Email,
 	})
 	if err != nil {
-		if err.Error() == "username already exists" {
-			c.JSON(409, goerrors.UsernameTaken)
-			return
-		} else if err.Error() == "email already exists" {
-			c.JSON(409, goerrors.EmailTaken)
-			return
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.AlreadyExists {
+			if err.Error() == "username already exists" {
+				returnErr = goerrors.UsernameTaken
+			} else if err.Error() == "email already exists" {
+				returnErr = goerrors.EmailTaken
+			}
+		} else if code == codes.InvalidArgument {
+			// AuthService currently does not return this error, but will be added in the future
+			// so this is a placeholder for now
+			returnErr = goerrors.EmailUnreachable
 		}
 
-		c.JSON(500, goerrors.InternalServerError)
+		log.Printf("Error in upstream call uh.authService.RegisterUser: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
 
@@ -73,23 +87,123 @@ func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 }
 
 func (uh *UserHandler) ChangePassword(c *gin.Context) {
-	// to-do
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.ChangePasswordRequest)
+
+	// Write user id in metadata
+	userId, _ := keys.GetClaim(c, keys.SubjectKey)
+	ctx := metadata.NewOutgoingContext(c.Request.Context(), metadata.Pairs(string(keys.SubjectKey), userId))
+
+	_, err := uh.authService.UpdatePassword(ctx, &pb.ChangePasswordRequest{
+		OldPassword: req.OldPassword,
+		NewPassword: req.NewPassword,
+	})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.PermissionDenied {
+			returnErr = goerrors.InvalidCredentials
+		}
+
+		log.Printf("Error in upstream call uh.authService.UpdatePassword: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
+		return
+	}
+
+	c.JSON(204, nil)
 }
 
 func (uh *UserHandler) LoginUser(c *gin.Context) {
-	// to-do
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.LoginRequest)
+
+	userId, err := uh.authService.LoginUser(c, &pb.LoginUserRequest{
+		Username: req.Username,
+		Password: req.Password,
+	})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.FailedPrecondition {
+			returnErr = goerrors.UserNotActivated
+		} else if code == codes.PermissionDenied {
+			returnErr = goerrors.InvalidCredentials
+		} else if code == codes.NotFound {
+			returnErr = goerrors.UserNotFound
+		}
+
+		log.Printf("Error in upstream call uh.authService.LoginUser: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
+		return
+	}
+
+	// TO-DO: Generate JWT and send it back
+	c.JSON(200, userId)
 }
 
 func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	// to-do
+	c.JSON(http.StatusNotImplemented, nil)
 }
 
 func (uh *UserHandler) ActivateUser(c *gin.Context) {
-	// to-do
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.ActivationRequest)
+	username := c.Param("username")
+
+	log.Printf("Calling upstream service uh.authService.ActivateUser with username %s and token %s", username, req.Token)
+	userId, err := uh.authService.ActivateUser(c, &pb.ActivateUserRequest{
+		Username: username,
+		Token:    req.Token,
+	})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.NotFound {
+			if err.Error() == "user not found" {
+				returnErr = goerrors.UserNotFound
+			} else if err.Error() == "token not found" {
+				returnErr = goerrors.InvalidToken
+			}
+		} else if code == codes.DeadlineExceeded {
+			returnErr = goerrors.ActivationTokenExpired
+		} else if code == codes.FailedPrecondition {
+			returnErr = goerrors.UserAlreadyActivated
+		}
+
+		log.Printf("Error in upstream call uh.authService.ActivateUser: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
+		return
+	}
+
+	// TO-DO: Generate JWT and send it back
+	log.Printf("User %s activated", userId)
+	c.JSON(200, userId)
 }
 
 func (uh *UserHandler) ResendToken(c *gin.Context) {
-	// to-do
+	username := c.Param("username")
+
+	log.Printf("Calling upstream service uh.authService.ResendToken with username %s", username)
+	_, err := uh.authService.ResendActivationEmail(c, &pb.ResendActivationEmailRequest{
+		Username: username,
+	})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.NotFound {
+			returnErr = goerrors.UserNotFound
+		} else if code == codes.FailedPrecondition {
+			returnErr = goerrors.UserAlreadyActivated
+		}
+
+		log.Printf("Error in upstream call uh.authService.ResendToken: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
+		return
+	}
+
+	c.JSON(204, nil)
 }
 
 func (uh *UserHandler) GetUserFeed(c *gin.Context) {

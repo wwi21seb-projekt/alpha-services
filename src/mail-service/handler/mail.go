@@ -50,7 +50,7 @@ func (ms *mailService) SendConfirmationMail(ctx context.Context, request *pb.Con
 		Body: hermes.Body{
 			Name: request.GetUser().GetUsername(),
 			Intros: []string{
-				fmt.Sprintf("Welcome to %s! We're very excited to have you on board.", serviceName),
+				fmt.Sprintf("Welcome %s! Your account has been successfully activated.", request.GetUser().GetUsername()),
 				"Please note that the registration is completed by Server Alpha. If you have any questions, feel free to reach out to us at any time via team@mail.server-alpha.tech",
 			},
 			Outros: []string{
@@ -58,8 +58,9 @@ func (ms *mailService) SendConfirmationMail(ctx context.Context, request *pb.Con
 			},
 		},
 	}
-	subject := "Welcome to Server Alpha"
+	subject := fmt.Sprintf("Welcome to Server Alpha, %s", request.GetUser().GetUsername())
 
+	log.Infof("Sending confirmation mail to %s", request.GetUser().GetEmail())
 	if err := ms.sendMail(ctx, email, subject, request.GetUser().GetEmail()); err != nil {
 		log.Infof("Error in ms.SendMail: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to send confirmation mail: %v", err)
@@ -70,13 +71,20 @@ func (ms *mailService) SendConfirmationMail(ctx context.Context, request *pb.Con
 
 func (ms *mailService) SendTokenMail(ctx context.Context, request *pb.TokenMailRequest) (*pbCommon.Empty, error) {
 	var email hermes.Email
-	subject := "Registration at Server Alpha"
+	subject := ""
 
 	switch request.GetType() {
 	case pb.TokenMailType_TOKENMAILTYPE_REGISTRATION:
+		log.Infof("Sending registration mail to %s", request.GetUser().GetEmail())
+		subject = fmt.Sprintf("Welcome %s! Activate your account now!", request.GetUser().GetUsername())
 		email = generateRegistrationMail(request)
 	case pb.TokenMailType_TOKENMAILTYPE_PASSWORD_RESET:
+		log.Infof("Sending password reset mail to %s", request.GetUser().GetEmail())
+		subject = fmt.Sprintf("Password reset for %s", request.GetUser().GetUsername())
 		email = generatePasswordResetMail(request)
+	default:
+		log.Infof("Invalid token mail type: %v", request.GetType())
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid token mail type")
 	}
 
 	if err := ms.sendMail(ctx, email, subject, request.GetUser().GetEmail()); err != nil {
