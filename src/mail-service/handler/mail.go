@@ -16,7 +16,6 @@ import (
 
 var from = "Server Alpha <team@mail.server-alpha.tech>"
 var serviceName = "Team Ganz Weit Weg"
-var environment string
 
 type mailService struct {
 	mg *mailgun.MailgunImpl

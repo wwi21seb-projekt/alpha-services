@@ -24,7 +24,7 @@ func (ps userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateProfile not implemented")
 }
 
-func (ps userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRequest) (*pb.ListUsersResponse, error) {
+func (ps userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRequest) (*pb.SearchUsersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchProfiles not implemented")
 }
 

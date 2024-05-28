@@ -104,6 +104,8 @@ github.com/vanng822/go-premailer v1.21.0/go.mod h1:6Y3H2NzNmK3sFBNgR1ENdfV9hzG8h
 github.com/vanng822/r2router v0.0.0-20150523112421-1023140a4f30/go.mod h1:1BVq8p2jVr55Ost2PkZWDrG86PiJ/0lxqcXoAcGxvWU=
 github.com/wwi21seb-projekt/alpha-shared v0.9.0 h1:GKv+aLkNBtOkXANoecU5tlRnmgVVmEy88g5Vu2cREWg=
 github.com/wwi21seb-projekt/alpha-shared v0.9.0/go.mod h1:d0cXPsm8QrZxSfyu7tPj4b/mhOt0Nl0U37n3nj1t704=
+github.com/wwi21seb-projekt/alpha-shared v0.9.1 h1:GY61a4OHJyDk+5YPfieVufRHafdSCKpKTat8WYKBpWY=
+github.com/wwi21seb-projekt/alpha-shared v0.9.1/go.mod h1:d0cXPsm8QrZxSfyu7tPj4b/mhOt0Nl0U37n3nj1t704=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 golang.org/x/crypto v0.0.0-20181029175232-7e6ffbd03851/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
