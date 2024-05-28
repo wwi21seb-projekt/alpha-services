@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"google.golang.org/grpc/metadata"
 	"math/rand"
 	"strconv"
 	"time"
@@ -19,6 +18,7 @@ import (
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -94,12 +94,19 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		Values(tokenId, activationCode, expiresAt, "activation", userId).
 		ToSql()
 
+	log.Println("Inserting activation token into database...")
+	_, err = tx.Exec(ctx, query, args...)
+	if err != nil {
+		log.Errorf("Error in tx.Exec: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to insert token: %v", err)
+	}
+
 	// Call mail service to send registration email
 	log.Println("Calling upstream mailClient.SendTokenMail...")
 	_, err = as.mailClient.SendTokenMail(ctx, &pbMail.TokenMailRequest{
 		Token: activationCode,
 		Type:  pbMail.TokenMailType_TOKENMAILTYPE_REGISTRATION,
-		User: &pb.User{
+		User: &pbMail.UserInformation{
 			Username: request.Username,
 			Email:    request.Email,
 		},
@@ -107,14 +114,6 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	if err != nil {
 		log.Errorf("Error in upstream call mailClient.SendTokenMail: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to send token mail: %v", err)
-	}
-
-	log.Println("Inserting activation token into database...")
-	_, err = tx.Exec(ctx, query, args...)
-	if err != nil {
-		log.Errorf("Error in tx.Exec: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to insert token: %v", err)
-
 	}
 
 	if err := as.db.Commit(ctx, tx); err != nil {
@@ -128,7 +127,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		Email:    request.Email,
 	}, nil
 }
-func (as authenticationService) ActivateUser(ctx context.Context, request *pb.ActivateUserRequest) (*pb.User, error) {
+func (as authenticationService) ActivateUser(ctx context.Context, request *pb.ActivateUserRequest) (*pb.UserIdResponse, error) {
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
 		log.Errorf("Error in db.Begin: %v", err)
@@ -136,20 +135,13 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	}
 	defer as.db.Rollback(ctx, tx)
 
-	// Get username from metadata (will be placed in the request in the future)
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		log.Error("Error in metadata.FromIncomingContext: missing metadata")
-		return nil, status.Error(codes.FailedPrecondition, "missing metadata")
-	}
-	username := md.Get("username")[0]
-
 	// The following query tries deleting the token and returning the user
 	// if the user exists and the token is valid, otherwise it returns an error
 	query, args, _ := psql.Delete("tokens").
-		Where("token = ?", request.Token).
+		Where("token = ?", request.GetToken()).
+		Where("type = ?", Activation).
 		Where("expires_at > NOW()").
-		Where("user_id IN (SELECT user_id FROM users WHERE username = ?)", username).
+		Where("user_id IN (SELECT user_id FROM users WHERE username = ?)", request.GetUsername()).
 		Suffix("RETURNING user_id").
 		ToSql()
 
@@ -162,8 +154,9 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 
 	// Update the user's status to active and return the email
 	// for the confirmation email
+	activatedAt := time.Now()
 	query, args, _ = psql.Update("users").
-		Set("active", true).
+		Set("activated_at", activatedAt).
 		Where("user_id = ?", userId).
 		Suffix("RETURNING username, email").
 		ToSql()
@@ -178,8 +171,8 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	// Send confirmation email
 	log.Println("Calling upstream mailClient.SendMail...")
 	_, err = as.mailClient.SendConfirmationMail(ctx, &pbMail.ConfirmationMailRequest{
-		User: &pb.User{
-			Username: username,
+		User: &pbMail.UserInformation{
+			Username: request.GetUsername(),
 			Email:    email,
 		},
 	})
@@ -193,15 +186,105 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	// We actually don't need to return anything here, will be changed in the future
-	return nil, nil
+	// We only need to return the userID, so the gateway can create a jwt token
+	// for the user with the userID as the subject
+	return &pb.UserIdResponse{
+		UserId: userId.String(),
+	}, nil
 }
-func (as authenticationService) LoginUser(ctx context.Context, request *pb.LoginUserRequest) (*pb.User, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
+
+func (as authenticationService) LoginUser(ctx context.Context, request *pb.LoginUserRequest) (*pb.UserIdResponse, error) {
+	// Acquire pool connection
+	conn, err := as.db.Pool.Acquire(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Pool.Acquire: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	query, args, _ := psql.Select("user_id", "password", "activated_at").
+		From("users").
+		Where("username = ?", request.Username).
+		ToSql()
+
+	var userId uuid.UUID
+	var hashedPassword []byte
+	var activatedAt time.Time
+	log.Println("Querying database for user...")
+	if err := conn.QueryRow(ctx, query, args...).Scan(&userId, &hashedPassword, &activatedAt); err != nil {
+		log.Errorf("Error in conn.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
+	}
+
+	// Check if the user is activated
+	if activatedAt.IsZero() {
+		log.Error("User is not activated")
+		return nil, status.Error(codes.FailedPrecondition, "user is not activated")
+	}
+
+	// Compare the hashed password with the provided password
+	if err := bcrypt.CompareHashAndPassword(hashedPassword, []byte(request.Password)); err != nil {
+		log.Errorf("Error in bcrypt.CompareHashAndPassword: %v", err)
+		return nil, status.Error(codes.PermissionDenied, "invalid password")
+	}
+
+	return &pb.UserIdResponse{
+		UserId: userId.String(),
+	}, nil
 }
 
 func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.ChangePasswordRequest) (*common.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdatePassword not implemented")
+	tx, err := as.db.Begin(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer as.db.Rollback(ctx, tx)
+
+	// Hash the new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.GetNewPassword()), bcrypt.DefaultCost)
+	if err != nil {
+		log.Errorf("Error in bcrypt.GenerateFromPassword: %v", err)
+		return nil, status.Errorf(codes.Unknown, "failed to hash password: %v", err)
+	}
+
+	// Get userId from metadata
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		log.Error("Error in metadata.FromIncomingContext: metadata not found")
+		return nil, status.Error(codes.Internal, "metadata not found")
+	}
+	userId := md.Get("user_id")[0]
+
+	// Update the user's password and return the old one to check
+	// if the old password is correct and rollback if it is not
+	query, args, _ := psql.Update("users").
+		Set("password", hashedPassword).
+		Where("user_id = ?", userId).
+		// This CTE does the trick to get the old password, since it captures the state
+		// before the update and returns the old password
+		Prefix("WITH old_password AS (SELECT password FROM users WHERE user_id = ?)", userId).
+		Suffix("RETURNING old_password").
+		ToSql()
+
+	var oldPassword []byte
+	if err := tx.QueryRow(ctx, query, args...).Scan(&oldPassword); err != nil {
+		log.Errorf("Error in tx.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to update password: %v", err)
+	}
+
+	// Compare the hashed password with the provided old password
+	if err := bcrypt.CompareHashAndPassword(oldPassword, []byte(request.GetOldPassword())); err != nil {
+		log.Error("Old password is incorrect")
+		return nil, status.Error(codes.PermissionDenied, "old password is incorrect")
+	}
+
+	if err := as.db.Commit(ctx, tx); err != nil {
+		log.Errorf("Error in tx.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return &common.Empty{}, nil
 }
 
 func generateToken() string {
