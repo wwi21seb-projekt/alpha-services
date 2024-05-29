@@ -21,21 +21,21 @@ table "tokens" {
     null = false
     type = enum.token_type
   }
-  column "user_id" {
+  column "username" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
   primary_key {
     columns = [column.token_id]
   }
   foreign_key "users_fk" {
-    columns     = [column.user_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.username]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
   unique "user_token_type_uq" {
-    columns = [column.user_id, column.type]
+    columns = [column.username, column.type]
   }
 }
 table "comments" {
@@ -52,9 +52,9 @@ table "comments" {
     null = false
     type = timestamptz
   }
-  column "author_id" {
+  column "author_name" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
   column "post_id" {
     null = false
@@ -70,8 +70,8 @@ table "comments" {
     on_delete   = CASCADE
   }
   foreign_key "users_fk" {
-    columns     = [column.author_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.author_name]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
@@ -95,9 +95,9 @@ table "hashtags" {
 }
 table "likes" {
   schema = schema.post_service
-  column "user_id" {
+  column "username" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
   column "post_id" {
     null = false
@@ -108,7 +108,7 @@ table "likes" {
     type = timestamptz
   }
   primary_key {
-    columns = [column.user_id, column.post_id]
+    columns = [column.username, column.post_id]
   }
   foreign_key "posts_fk" {
     columns     = [column.post_id]
@@ -117,8 +117,8 @@ table "likes" {
     on_delete   = CASCADE
   }
   foreign_key "users_fk" {
-    columns     = [column.user_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.username]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
@@ -163,9 +163,9 @@ table "posts" {
     null = false
     type = timestamptz
   }
-  column "author_id" {
+  column "author_name" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
   column "longitude" {
     null = true
@@ -187,8 +187,8 @@ table "posts" {
     columns = [column.post_id]
   }
   foreign_key "users_fk" {
-    columns     = [column.author_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.author_name]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
@@ -203,39 +203,35 @@ table "subscriptions" {
     null = false
     type = timestamptz
   }
-  column "subscriber_id" {
+  column "subscriber_name" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
-  column "subscribee_id" {
+  column "subscribee_name" {
     null = false
-    type = uuid
+    type = character_varying(25)
   }
   primary_key {
     columns = [column.subscription_id]
   }
   foreign_key "subscribee_fk" {
-    columns     = [column.subscribee_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.subscribee_name]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
   foreign_key "subscriber_fk" {
-    columns     = [column.subscriber_id]
-    ref_columns = [table.users.column.user_id]
+    columns     = [column.subscriber_name]
+    ref_columns = [table.users.column.username]
     on_update   = CASCADE
     on_delete   = CASCADE
   }
   unique "subscriptions_uq" {
-    columns = [column.subscriber_id, column.subscribee_id]
+    columns = [column.subscriber_name, column.subscribee_name]
   }
 }
 table "users" {
   schema = schema.user_service
-  column "user_id" {
-    null = false
-    type = uuid
-  }
   column "username" {
     null = false
     type = character_varying(25)
@@ -273,9 +269,6 @@ table "users" {
     type = timestamptz
   }
   primary_key {
-    columns = [column.user_id]
-  }
-  unique "username_uq" {
     columns = [column.username]
   }
   unique "email_uq" {

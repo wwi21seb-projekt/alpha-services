@@ -26,44 +26,6 @@ func NewUserServer(database *db.DB) pb.UserServiceServer {
 	}
 }
 
-func (ps userService) GetAuthor(ctx context.Context, request *pb.GetUserRequest) (*pb.User, error) {
-	conn, err := ps.db.Pool.Acquire(ctx)
-	if err != nil {
-		log.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
-	}
-	defer conn.Release()
-
-	queryBuilder := psql.Select().
-		Columns("username", "nickname", "proile_picture_url").
-		From("users")
-
-	switch request.UserRequest.(type) {
-	case *pb.GetUserRequest_Username:
-		queryBuilder = queryBuilder.Where("username = ?", request.GetUsername())
-	case *pb.GetUserRequest_UserId:
-		queryBuilder = queryBuilder.Where("user_id = ?", request.GetUserId())
-	}
-
-	query, args, _ := queryBuilder.ToSql()
-
-	log.Info("Querying user data")
-	response := &pb.User{}
-	if err = conn.QueryRow(ctx, query, args...).Scan(
-		&response.Username, &response.Nickname, &response.ProfilePictureUrl,
-	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			log.Infof("User not found")
-			return nil, status.Errorf(codes.NotFound, "User not found")
-		}
-
-		log.Errorf("Error in conn.QueryRow: %v", err)
-		return nil, status.Errorf(codes.Internal, "Error in conn.QueryRow: %v", err)
-	}
-
-	return response, nil
-}
-
 func (ps userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (*pb.GetUserResponse, error) {
 	conn, err := ps.db.Pool.Acquire(ctx)
 	if err != nil {
@@ -73,36 +35,28 @@ func (ps userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	defer conn.Release()
 
 	// Get authenticated user from metadata
-	userId := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
-	queryBuilder := psql.Select().
-		Columns("username", "nickname", "status", "proile_picture_url").
+	query, args, _ := psql.Select().
+		Columns("u.nickname", "u.status", "u.profile_picture_url").
 		Column("s1.subscription_id AS subscription_id").
 		Column("COUNT(s2.subscription_id) AS following_count").
 		Column("COUNT(s3.subscription_id) AS follower_count").
 		Column("COUNT(p.post_id) AS post_count").
 		From("users u").
-		LeftJoin("subscriptions s1 ON s1.subscribee_id = u.user_id AND s1.subscriber_id = ?", userId).
-		LeftJoin("subscriptions s2 ON s2.subscriber_id = u.user_id").
-		LeftJoin("subscriptions s3 ON s3.subscribee_id = u.user_id").
-		LeftJoin("posts p ON p.author_id = u.user_id")
-
-	switch request.UserRequest.(type) {
-	case *pb.GetUserRequest_Username:
-		queryBuilder = queryBuilder.Where("u.username = ?", request.GetUsername())
-	case *pb.GetUserRequest_UserId:
-		queryBuilder = queryBuilder.Where("u.user_id = ?", request.GetUserId())
-	}
-
-	query, args, _ := queryBuilder.
-		GroupBy("u.user_id", "u.username", "u.nickname", "u.email", "u.status", "u.profile_picture_url", "s1.subscription_id").
+		LeftJoin("subscriptions s1 ON s1.subscribee_name = u.username AND s1.subscriber_name = ?", username).
+		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username").
+		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
+		LeftJoin("posts p ON p.author_name = u.username").
+		Where("u.username = ?", request.GetUsername()).
+		GroupBy("u.nickname", "u.status", "u.profile_picture_url", "s1.subscription_id").
 		ToSql()
 
 	log.Info("Querying user data")
 	response := &pb.GetUserResponse{}
 	if err = conn.QueryRow(ctx, query, args...).Scan(
-		&response.Username, &response.Nickname, &response.Status, &response.ProfilePictureUrl,
-		&response.SubscriptionId, &response.FollowingCount, &response.FollowerCount, &response.PostCount,
+		&response.Nickname, &response.Status, &response.ProfilePictureUrl, &response.SubscriptionId,
+		&response.FollowingCount, &response.FollowerCount, &response.PostCount,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Infof("User not found")
@@ -125,14 +79,13 @@ func (ps userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 	defer ps.db.Rollback(ctx, tx)
 
 	// Get authenticated user from metadata
-	userId := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
-	queryBuilder := psql.Update("users").
+	query, args, _ := psql.Update("users").
 		Set("nickname", request.GetNickname()).
 		Set("status", request.GetStatus()).
-		Where("user_id = ?", userId)
-
-	query, args, _ := queryBuilder.ToSql()
+		Where("username = ?", username).
+		ToSql()
 
 	log.Info("Updating user data")
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
@@ -195,7 +148,7 @@ func (ps userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 	}
 
 	return &pb.SearchUsersResponse{
-		Profiles: users,
+		Users: users,
 		Pagination: &pbCommon.Pagination{
 			Records: int32(records),
 			Offset:  request.GetPagination().GetOffset(),
@@ -214,7 +167,7 @@ func (ps userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	queryBuilder, queryArgs, _ := psql.Select().
 		Columns("username", "nickname", "profile_picture_url").
 		From("users").
-		Where("user_id IN (?)", request.GetUserIds()).
+		Where("user_id IN (?)", request.GetUsernames()).
 		ToSql()
 
 	log.Info("Querying user data")
@@ -231,7 +184,7 @@ func (ps userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	}
 
 	return &pb.ListUsersResponse{
-		Profiles: users,
+		Users: users,
 	}, nil
 }
 

@@ -12,8 +12,8 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/sirupsen/logrus v1.9.3
 	github.com/truemail-rb/truemail-go v1.1.3
-	github.com/wwi21seb-projekt/alpha-shared v0.10.2
-	github.com/wwi21seb-projekt/errors-go v0.4.0
+	github.com/wwi21seb-projekt/alpha-shared v0.11.2
+	github.com/wwi21seb-projekt/errors-go v0.5.0
 	google.golang.org/grpc v1.64.0
 )
 
