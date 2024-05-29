@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/wwi21seb-projekt/alpha-shared v0.8.1
+	github.com/wwi21seb-projekt/alpha-shared v0.11.0
 	google.golang.org/grpc v1.64.0
 )
 

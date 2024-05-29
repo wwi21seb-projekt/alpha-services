@@ -55,16 +55,16 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		Email:    req.Email,
 	})
 	if err != nil {
-		code := status.Code(err)
+		rpcStatus := status.Convert(err)
 		returnErr := goerrors.InternalServerError
 
-		if code == codes.AlreadyExists {
-			if err.Error() == "username already exists" {
+		if rpcStatus.Code() == codes.AlreadyExists {
+			if rpcStatus.Message() == "username already exists" {
 				returnErr = goerrors.UsernameTaken
-			} else if err.Error() == "email already exists" {
+			} else if rpcStatus.Message() == "email already exists" {
 				returnErr = goerrors.EmailTaken
 			}
-		} else if code == codes.InvalidArgument {
+		} else if rpcStatus.Code() == codes.InvalidArgument {
 			// AuthService currently does not return this error, but will be added in the future
 			// so this is a placeholder for now
 			returnErr = goerrors.EmailUnreachable
@@ -156,18 +156,18 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 		Token:    req.Token,
 	})
 	if err != nil {
-		code := status.Code(err)
+		rpcStatus := status.Convert(err)
 		returnErr := goerrors.InternalServerError
 
-		if code == codes.NotFound {
-			if err.Error() == "user not found" {
+		if rpcStatus.Code() == codes.NotFound {
+			if rpcStatus.Message() == "user not found" {
 				returnErr = goerrors.UserNotFound
-			} else if err.Error() == "token not found" {
+			} else if rpcStatus.Message() == "token not found" {
 				returnErr = goerrors.InvalidToken
 			}
-		} else if code == codes.DeadlineExceeded {
+		} else if rpcStatus.Code() == codes.DeadlineExceeded {
 			returnErr = goerrors.ActivationTokenExpired
-		} else if code == codes.FailedPrecondition {
+		} else if rpcStatus.Code() == codes.FailedPrecondition {
 			returnErr = goerrors.UserAlreadyActivated
 		}
 
