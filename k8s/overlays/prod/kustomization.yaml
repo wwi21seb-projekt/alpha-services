@@ -1,7 +1,24 @@
 resources:
   - ../../base
+  - traefik.yaml
 
 secretGenerator:
   - name: alpha-secrets
     envs:
       - .env.prod
+
+namespace: prod
+
+images:
+  - name: api-gateway-image
+    newName: 930c/api-gateway
+    newTag: latest
+  - name: post-service-image
+    newName: 930c/post-service
+    newTag: latest
+  - name: user-service-image
+    newName: 930c/user-service
+    newTag: latest
+  - name: mail-service-image
+    newName: 930c/mail-service
+    newTag: latest

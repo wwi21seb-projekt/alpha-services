@@ -1,0 +1,35 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: external-sec-headers
+  namespace: prod
+spec:
+  headers:
+    frameDeny: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+    customFrameOptionsValue: "SAMEORIGIN"
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    forceSTSHeader: true
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: api-gateway
+  namespace: prod
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`test.c930.net`)
+      kind: Rule
+      services:
+        - name: api-gateway
+          port: 80
+      middlewares:
+        - name: external-sec-headers
+          namespace: prod
+  tls:
+    certResolver: default
