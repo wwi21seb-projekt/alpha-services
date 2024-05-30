@@ -33,14 +33,14 @@ func main() {
 	// Set up a connection to the gRPC post server
 	postConn, err := grpc.NewClient(cfg.PostServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server of PostService: %v", err)
+		log.Fatalf("Failed to connect to gRPC server of post-service: %v", err)
 	}
 	defer postConn.Close()
 
 	// Set up a connection to the gRPC user server
 	userConn, err := grpc.NewClient(cfg.UserServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to gRPC server of UserService: %v", err)
+		log.Fatalf("Failed to connect to gRPC server of user-service: %v", err)
 	}
 	defer userConn.Close()
 
