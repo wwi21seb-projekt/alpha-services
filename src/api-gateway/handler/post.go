@@ -7,6 +7,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helpers"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"net/http"
 )
@@ -44,7 +45,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	}
 
 	// Create a context with the userId from the JWT claims
-	ctx := context.WithValue(context.Background(), "userId", claims["sub"].(string))
+	ctx := context.WithValue(context.Background(), keys.SubjectKey, claims[string(keys.SubjectKey)].(string))
 
 	// Call CreatePost method on postService
 	rsp, err := h.postService.CreatePost(ctx, req)
