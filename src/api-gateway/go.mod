@@ -3,7 +3,6 @@ module github.com/wwi21seb-projekt/alpha-services/src/api-gateway
 go 1.22.3
 
 require (
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-contrib/graceful v1.0.2
 	github.com/gin-gonic/gin v1.10.0
