@@ -15,7 +15,6 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/truemail-rb/truemail-go"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
@@ -188,7 +187,7 @@ func postValidation(fl validator.FieldLevel) bool {
 // It ensures that the longitude, latitude, and accuracy fields contain valid values.
 func locationValidation(fl validator.FieldLevel) bool {
 	// Get the location struct from the field
-	location := fl.Field().Interface().(*pbPost.Location)
+	location := fl.Field().Interface().(*schema.Location)
 
 	// If location is empty, return true since it is not required
 	if location == nil {

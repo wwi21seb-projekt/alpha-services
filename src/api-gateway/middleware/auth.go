@@ -4,53 +4,49 @@ import (
 	"net/http"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
-var jwtSecret = []byte("your_secret_key")
 var unauthorizedError = &schema.ErrorDTO{Error: goerrors.Unauthorized}
+var GRPCMetadataKey = "grpc-metadata" // to be added to shared keys
 
-func SetClaimsMiddleware() gin.HandlerFunc {
+func SetClaimsMiddleware(jwtManager manager.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-
-		if authHeader == "" {
-			c.Next() // No token, continue
-			return
-		}
-
-		// Bearer token check
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		authorizationHeader := c.GetHeader("Authorization")
+		if authorizationHeader == "" {
+			log.Error("Authorization header is missing")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
-		tokenString := parts[1]
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
-		})
-
-		if err != nil || !token.Valid {
+		authorizationHeaderParts := strings.Split(authorizationHeader, " ")
+		if len(authorizationHeaderParts) != 2 {
+			log.Error("Authorization header is invalid")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
+		tokenString := authorizationHeaderParts[1]
+		username, err := jwtManager.Verify(tokenString)
+		if err != nil {
+			log.Errorf("Error in jwtManager.Verify: %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
-		// Store the claims in the context
-		c.Set("claims", claims)
-		c.Set("token", tokenString)
-
+		// Set the username and token in the context
+		c.Set(string(keys.SubjectKey), username)
+		c.Set(string(keys.TokenKey), tokenString)
+		// Create initial gRPC metadata with the username
+		ctx := metadata.AppendToOutgoingContext(c, string(keys.SubjectKey), username)
+		c.Set(string(GRPCMetadataKey), ctx)
 		c.Next()
 	}
 
