@@ -1,5 +1,4 @@
 name: Continuous Integration
-run-name: CI Checks [PR-${{ github.event.pull_request.number }}]
 
 on:
   pull_request:
@@ -7,12 +6,19 @@ on:
   push:
     branches: ["main"]
 
+env:
+  REGISTRY: ghcr.io
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [api-gateway, post-service, user-service, mail-service]
+    permissions:
+      contents: read
+      packages: write  # Grant write permissions to packages
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -59,3 +65,31 @@ jobs:
         run: |
           cd src/${{ matrix.service }}
           go test -v ./...
+
+      - name: Login to GitHub Container Registry
+        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Docker metadata
+        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository}}/${{ matrix.service }}
+          tags: |
+            ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}
+            ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.number, github.sha) || github.sha }}
+
+      - name: Build and push Docker image
+        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          file: ./src/${{ matrix.service }}/Dockerfile
