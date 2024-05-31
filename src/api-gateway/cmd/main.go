@@ -3,15 +3,17 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+
 	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -50,9 +52,12 @@ func main() {
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
 
+	// Create JWT manager
+	jwtManager := manager.NewJWTManager()
+
 	// Create handler instances
 	postHandler := handler.NewPostHandler(postClient)
-	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient)
+	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -63,7 +68,7 @@ func main() {
 	setupCommonMiddleware(r)
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
-	authorizedRouter.Use(middleware.SetClaimsMiddleware())
+	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
 	setupRoutes(unauthorizedRouter, postHandler, userHandler)
 	setupAuthRoutes(authorizedRouter, postHandler, userHandler)
 

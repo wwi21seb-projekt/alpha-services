@@ -80,7 +80,7 @@ func main() {
 
 	// Register user services
 	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(database))
-	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer())
+	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(database))
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database, mailClient))
 
 	// Start server
