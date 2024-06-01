@@ -20,47 +20,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Detect changed directories
-        id: detect-changed-dirs
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            api-gateway:
-              - 'src/api-gateway/**'
-            mail-service:
-              - 'src/mail-service/**'
-            notification-service:
-              - 'src/notification-service/**'
-            post-service:
-              - 'src/post-service/**'
-            user-service:
-              - 'src/user-service/**'
-
-      - name: Set matrix
+      - name: Build matrix based on changed directories
         id: set-matrix
-        run: |
-          MATRIX="{\"include\":["
-          if [ "${{ steps.detect-changed-dirs.outputs.api-gateway }}" == "true" ]; then
-            MATRIX="$MATRIX{\"service\":\"api-gateway\"},"
-          fi
-          if [ "${{ steps.detect-changed-dirs.outputs.mail-service }}" == "true" ]; then
-            MATRIX="$MATRIX{\"service\":\"mail-service\"},"
-          fi
-          if [ "${{ steps.detect-changed-dirs.outputs.notification-service }}" == "true" ]; then
-            MATRIX="$MATRIX{\"service\":\"notification-service\"},"
-          fi
-          if [ "${{ steps.detect-changed-dirs.outputs.post-service }}" == "true" ]; then
-            MATRIX="$MATRIX{\"service\":\"post-service\"},"
-          fi
-          if [ "${{ steps.detect-changed-dirs.outputs.user-service }}" == "true" ]; then
-            MATRIX="$MATRIX{\"service\":\"user-service\"},"
-          fi
-          MATRIX="${MATRIX%,}]}"  # Remove trailing comma and close JSON
-          echo "Matrix: $MATRIX"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/build-matrix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   analyze:
-    name: Analyze (${{ matrix.service }}) ${{ matrix.language }}
+    name: Analyze (${{ matrix.service }}) for ${{ github.event.pull_request.number || github.sha }}
     needs: setup-matrix
     # Runner size impacts CodeQL analysis time. To learn more, please see:
     #   - https://gh.io/recommended-hardware-resources-for-running-codeql

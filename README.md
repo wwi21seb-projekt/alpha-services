@@ -30,11 +30,10 @@ Every service uses shared libraries for common functionality, such as protos, da
 1. Clone the repository with the GitHub CLI or via `git clone`.
 2. Start a local Kubernetes cluster with `kind create cluster`, make sure the Docker daemon is running.
 3. Run `skaffold dev` in the root directory to start the services and database.
-4. Login to Atlas with `atlas login`, you need to have an account for this.
-5. Change to the `db` directory and run `atlas migrate apply --env=local` to apply the newest schema migrations.
-6. The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`.
-7. To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
-8. Optionally, you can run `kind delete cluster` to delete the local Kubernetes cluster.
+4. Change to the `db` directory and run `atlas migrate apply --env=local` to apply the newest schema migrations.
+5. The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`.
+6. To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
+7. Optionally, you can run `kind delete cluster` to delete the local Kubernetes cluster.
 
 ## Contributing
 
