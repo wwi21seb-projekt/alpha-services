@@ -8,6 +8,9 @@ outputs:
   matrix:
     description: "The matrix to be used in the workflow"
     value: ${{ steps.set-matrix.outputs.matrix }}
+  result:
+    description: "The result of the action"
+    value: ${{ steps.set-matrix.outputs.result }}
 runs:
   using: "composite"
   steps:
@@ -36,20 +39,28 @@ runs:
       id: set-matrix
       run: |
         MATRIX="{\"include\":["
+        RESULT="false"
+
         if [ "${{ steps.detect-changed-dirs.outputs.api-gateway }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"api-gateway\"},"
+          RESULT="true"
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.mail-service }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"mail-service\"},"
+          RESULT="true"
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.notification-service }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"notification-service\"},"
+          RESULT="true"
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.post-service }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"post-service\"},"
+          RESULT="true"
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.user-service }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"user-service\"},"
+          RESULT="true"
         fi
         MATRIX="${MATRIX%,}]}"  # Remove trailing comma and close JSON
         echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+        echo "result=$RESULT" >> $GITHUB_OUTPUT
