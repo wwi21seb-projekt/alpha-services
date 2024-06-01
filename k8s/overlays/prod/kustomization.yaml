@@ -2,9 +2,6 @@ resources:
   - ../../base
   - traefik.yaml
 
-secretGenerator:
-  - name: alpha-secrets
-
 namespace: prod
 
 images:
