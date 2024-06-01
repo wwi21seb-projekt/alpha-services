@@ -1,6 +1,6 @@
 name: "CodeQL"
 # Run name should be CodeQL for PR <pr-title> (if it exists) or CodeQL for <workflow-name> (if it doesn't exist)
-run-name: "CodeQL for ${{ github.event.pull_request.number || github.sha }}"
+run-name: "CodeQL for ${{ github.event_name == 'pull_request' && format('PR-{0}', github.event.number) || 'main' }}"
 
 on:
   push:
@@ -15,6 +15,7 @@ jobs:
     name: Setup Matrix
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      result: ${{ steps.set-matrix.outputs.result }}
     runs-on: "ubuntu-latest"
     steps:
       - name: Checkout repository
@@ -27,6 +28,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   analyze:
+    if: ${{ needs.setup-matrix.outputs.result != 'false' }}
     name: Analyze (${{ matrix.service }}) for ${{ github.event.pull_request.number || github.sha }}
     needs: setup-matrix
     # Runner size impacts CodeQL analysis time. To learn more, please see:

@@ -1,5 +1,5 @@
 name: Continuous Integration
-run-name: CI for ${{ github.event_name == 'pull_request' && format('PR-%d', github.event.number) || 'main' }}
+run-name: CI for ${{ github.event_name == 'pull_request' && format('PR-{0}', github.event.number) || 'main' }}
 
 on:
   pull_request:
@@ -15,6 +15,7 @@ jobs:
     name: Setup Matrix
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      result: ${{ steps.set-matrix.outputs.result }}
     runs-on: "ubuntu-latest"
     steps:
       - name: Checkout repository
@@ -27,6 +28,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   verify:
+    if: ${{ needs.setup-matrix.outputs.result != 'false' }}
     name: Verify (${{ matrix.service }}) for ${{ github.event_name == 'pull_request' && github.event.number || 'main' }}
     needs: setup-matrix
     runs-on: "ubuntu-latest"
