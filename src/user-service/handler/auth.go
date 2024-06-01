@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
@@ -82,6 +83,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 				return nil, status.Error(codes.AlreadyExists, "email already exists")
 			}
 		}
+
 		log.Errorf("Error in tx.Exec: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to insert user: %v", err)
 	}
@@ -291,7 +293,7 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 		ToSql()
 
 	var hashedPassword []byte
-	var activatedAt time.Time
+	var activatedAt pgtype.Timestamptz
 	log.Println("Querying database for user...")
 	if err := conn.QueryRow(ctx, query, args...).Scan(&hashedPassword, &activatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -304,7 +306,7 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 	}
 
 	// Check if the user is activated
-	if activatedAt.IsZero() {
+	if !activatedAt.Valid {
 		log.Error("User is not activated")
 		return nil, status.Error(codes.FailedPrecondition, "user is not activated")
 	}
@@ -315,7 +317,7 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 		return nil, status.Error(codes.PermissionDenied, "invalid password")
 	}
 
-	return nil, nil
+	return &pbCommon.Empty{}, nil
 }
 
 func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.ChangePasswordRequest) (*pbCommon.Empty, error) {

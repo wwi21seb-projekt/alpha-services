@@ -3,6 +3,12 @@ enum "token_type" {
   values = ["activation", "password_reset"]
 }
 
+// You need to be logged in to the Atla CLI to run diff.
+extension "fuzzystrmatch" {
+  schema = schema.user_service
+  comment = "Fuzzy string matching functions, especially levenshtein" 
+}
+
 table "tokens" {
   schema = schema.user_service
   column "token_id" {

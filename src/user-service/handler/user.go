@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
@@ -88,14 +89,16 @@ func (ps userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 		ToSql()
 
 	log.Info("Updating user data")
+	log.Infof("Query: %s", query)
+	log.Infof("Args: %v", args)
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
 		log.Errorf("Error in tx.Exec: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		log.Errorf("Error in tx.Commit: %v", err)
-		return nil, status.Errorf(codes.Internal, "Error in tx.Commit: %v", err)
+	if err = ps.db.Commit(ctx, tx); err != nil {
+		log.Errorf("Error in ps.db.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error in ps.db.Commit: %v", err)
 	}
 
 	return &pb.UpdateUserResponse{
@@ -114,9 +117,9 @@ func (ps userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 
 	dataQuery, dataArgs, _ := psql.Select().
 		Columns("username", "nickname", "profile_picture_url").
-		Column("levenstein(username, ?) AS distance", request.GetQuery()).
+		Column("levenshtein(username, ?) AS distance", request.GetQuery()).
 		From("users").
-		Where("levenstein(u.username, ?) <= 5", request.GetQuery()).
+		Where("levenshtein(username, ?) <= 5", request.GetQuery()).
 		OrderBy("distance").
 		Limit(uint64(request.GetPagination().GetLimit())).
 		Offset(uint64(request.GetPagination().GetOffset())).
@@ -124,25 +127,46 @@ func (ps userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 
 	countQuery, countArgs, _ := psql.Select("COUNT(*)").
 		From("users").
-		Where("levenstein(username, ?) <= 5", request.GetQuery()).
+		Where("levenshtein(username, ?) <= 5", request.GetQuery()).
 		ToSql()
 
-	log.Info("Querying user data")
-	rows, err := conn.Query(ctx, dataQuery, dataArgs...)
+	// Start batch request
+	batch := &pgx.Batch{}
+	batch.Queue(dataQuery, dataArgs...)
+	batch.Queue(countQuery, countArgs...)
+	log.Info("Starting batch request for user data")
+	br := conn.SendBatch(ctx, batch)
+
+	// Get data from batch request
+	rows, err := br.Query()
 	if err != nil {
 		log.Errorf("Error in conn.Query: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in conn.Query: %v", err)
 	}
 
-	users, err := scanUsers(rows)
-	if err != nil {
-		log.Errorf("Error in scanUsers: %v", err)
-		return nil, err
+	users := make([]*pb.User, 0)
+	levenshteinDistance := 0
+	for rows.Next() {
+		user := &pb.User{}
+		var nickname, profilePictureUrl = pgtype.Text{}, pgtype.Text{}
+
+		if err = rows.Scan(&user.Username, &nickname, &profilePictureUrl, &levenshteinDistance); err != nil {
+			log.Errorf("Error in rows.Scan: %v", err)
+			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
+		}
+		if nickname.Valid {
+			user.Nickname = nickname.String
+		}
+		if profilePictureUrl.Valid {
+			user.ProfilePictureUrl = profilePictureUrl.String
+		}
+
+		users = append(users, user)
 	}
 
 	// Get total count
 	records := 0
-	if err = conn.QueryRow(ctx, countQuery, countArgs...).Scan(&records); err != nil {
+	if err = br.QueryRow().Scan(&records); err != nil {
 		log.Errorf("Error in conn.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in conn.QueryRow: %v", err)
 	}
@@ -192,8 +216,15 @@ func scanUsers(rows pgx.Rows) ([]*pb.User, error) {
 	var users []*pb.User
 	for rows.Next() {
 		user := &pb.User{}
-		if err := rows.Scan(&user.Username, &user.Nickname, &user.ProfilePictureUrl); err != nil {
+		var nickname, profilePictureUrl = pgtype.Text{}, pgtype.Text{}
+		if err := rows.Scan(&user.Username, &nickname, &profilePictureUrl); err != nil {
 			return nil, err
+		}
+		if nickname.Valid {
+			user.Nickname = nickname.String
+		}
+		if profilePictureUrl.Valid {
+			user.ProfilePictureUrl = profilePictureUrl.String
 		}
 		users = append(users, user)
 	}

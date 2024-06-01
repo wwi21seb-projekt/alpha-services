@@ -25,6 +25,16 @@ spec:
               value: "user-service:50052"
             - name: PORT
               value: "8080"
+            - name: JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: JWT_PRIVATE_KEY
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: JWT_PUBLIC_KEY
 ---
 apiVersion: v1
 kind: Service

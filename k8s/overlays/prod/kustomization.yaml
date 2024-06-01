@@ -4,8 +4,6 @@ resources:
 
 secretGenerator:
   - name: alpha-secrets
-    envs:
-      - .env.prod
 
 namespace: prod
 
