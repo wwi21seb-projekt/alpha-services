@@ -1,0 +1,110 @@
+name: "CodeQL"
+# Run name should be CodeQL for PR <pr-title> (if it exists) or CodeQL for <workflow-name> (if it doesn't exist)
+run-name: "CodeQL for ${{ github.event.pull_request.number || github.sha }}"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "19 20 * * 6"
+
+jobs:
+  setup-matrix:
+    name: Setup Matrix
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed directories
+        id: detect-changed-dirs
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api-gateway:
+              - 'src/api-gateway/**'
+            mail-service:
+              - 'src/mail-service/**'
+            notification-service:
+              - 'src/notification-service/**'
+            post-service:
+              - 'src/post-service/**'
+            user-service:
+              - 'src/user-service/**'
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          MATRIX="{\"include\":["
+          if [ "${{ steps.detect-changed-dirs.outputs.api-gateway }}" == "true" ]; then
+            MATRIX="$MATRIX{\"service\":\"api-gateway\"},"
+          fi
+          if [ "${{ steps.detect-changed-dirs.outputs.mail-service }}" == "true" ]; then
+            MATRIX="$MATRIX{\"service\":\"mail-service\"},"
+          fi
+          if [ "${{ steps.detect-changed-dirs.outputs.notification-service }}" == "true" ]; then
+            MATRIX="$MATRIX{\"service\":\"notification-service\"},"
+          fi
+          if [ "${{ steps.detect-changed-dirs.outputs.post-service }}" == "true" ]; then
+            MATRIX="$MATRIX{\"service\":\"post-service\"},"
+          fi
+          if [ "${{ steps.detect-changed-dirs.outputs.user-service }}" == "true" ]; then
+            MATRIX="$MATRIX{\"service\":\"user-service\"},"
+          fi
+          MATRIX="${MATRIX%,}]}"  # Remove trailing comma and close JSON
+          echo "Matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  analyze:
+    name: Analyze (${{ matrix.service }}) ${{ matrix.language }}
+    needs: setup-matrix
+    # Runner size impacts CodeQL analysis time. To learn more, please see:
+    #   - https://gh.io/recommended-hardware-resources-for-running-codeql
+    #   - https://gh.io/supported-runners-and-hardware-resources
+    #   - https://gh.io/using-larger-runners (GitHub.com only)
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    permissions:
+      security-events: write
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: src/${{ matrix.service }}/go.mod
+          cache-dependency-path: src/${{ matrix.service }}/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          build-mode: manual
+          # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
+          queries: security-extended,security-and-quality
+
+      - name: Download dependencies
+        run: |
+          cd src/${{ matrix.service }}
+          go mod download
+          go mod tidy
+
+      - name: Compile code
+        run: |
+          cd src/${{ matrix.service }}
+          go build ./cmd/main.go
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
