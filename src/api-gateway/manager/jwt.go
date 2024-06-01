@@ -106,7 +106,7 @@ func verifyToken(token string, shouldBeRefreshToken bool, publicKey ed25519.Publ
 	parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 		// Validate the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
 		return publicKey, nil
@@ -118,11 +118,11 @@ func verifyToken(token string, shouldBeRefreshToken bool, publicKey ed25519.Publ
 
 	// Check if the token is valid
 	if !parsedToken.Valid {
-		return "", fmt.Errorf("Received an invalid token")
+		return "", fmt.Errorf("received an invalid token")
 	}
 	if !shouldBeRefreshToken && claims.IsRefreshToken {
 		// We don't accept refresh tokens for normal authentication
-		return "", fmt.Errorf("Received a refresh token when a normal token was expected")
+		return "", fmt.Errorf("received a refresh token when a normal token was expected")
 	}
 	// Return the subject of the token
 	return claims.Subject, nil
