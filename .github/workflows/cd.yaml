@@ -1,0 +1,35 @@
+name: Continuous Delivery
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -k k8s/overlays/prod
+
+      - name: Rollout Deployment Restart
+        run: |
+          kubectl rollout restart deployment -n prod
+          
+

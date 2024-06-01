@@ -11,14 +11,14 @@ namespace: prod
 
 images:
   - name: api-gateway-image
-    newName: 930c/api-gateway
+    newName: ghcr.io/wwi21seb-projekt/alpha-services/api-gateway
     newTag: latest
   - name: post-service-image
-    newName: 930c/post-service
+    newName: ghcr.io/wwi21seb-projekt/alpha-services/post-service
     newTag: latest
   - name: user-service-image
-    newName: 930c/user-service
+    newName: ghcr.io/wwi21seb-projekt/alpha-services/user-service
     newTag: latest
   - name: mail-service-image
-    newName: 930c/mail-service
+    newName: ghcr.io/wwi21seb-projekt/alpha-services/mail-service
     newTag: latest
