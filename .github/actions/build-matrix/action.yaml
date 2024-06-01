@@ -1,0 +1,55 @@
+name: "Build Matrix"
+description: "A custom action to detect changes in directories and set the matrix output."
+inputs:
+  github-token:
+    description: "GitHub token"
+    required: true
+outputs:
+  matrix:
+    description: "The matrix to be used in the workflow"
+    value: ${{ steps.set-matrix.outputs.matrix }}
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Detect changed directories
+      id: detect-changed-dirs
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          api-gateway:
+            - 'src/api-gateway/**'
+          mail-service:
+            - 'src/mail-service/**'
+          notification-service:
+            - 'src/notification-service/**'
+          post-service:
+            - 'src/post-service/**'
+          user-service:
+            - 'src/user-service/**'
+        token: ${{ inputs.github-token }}
+
+    - name: Set matrix
+      shell: bash
+      id: set-matrix
+      run: |
+        MATRIX="{\"include\":["
+        if [ "${{ steps.detect-changed-dirs.outputs.api-gateway }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"api-gateway\"},"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.mail-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"mail-service\"},"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.notification-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"notification-service\"},"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.post-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"post-service\"},"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.user-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"user-service\"},"
+        fi
+        MATRIX="${MATRIX%,}]}"  # Remove trailing comma and close JSON
+        echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
