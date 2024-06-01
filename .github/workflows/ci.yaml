@@ -10,14 +10,31 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  setup-matrix:
+    name: Setup Matrix
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build matrix based on changed directories
+        id: set-matrix
+        uses: ./.github/actions/build-matrix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   verify:
-    runs-on: ubuntu-latest
+    name: Verify (${{ matrix.service }}) for ${{ github.event.pull_request.number || github.sha }}
+    needs: setup-matrix
+    runs-on: "ubuntu-latest"
     strategy:
-      matrix:
-        service: [api-gateway, post-service, user-service, mail-service]
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix )}}
     permissions:
       contents: read
-      packages: write  # Grant write permissions to packages
+      packages: write # Grant write permissions to packages
       actions: read
 
     steps:
@@ -26,48 +43,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Filter changes
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            ${{ matrix.service }}:
-              - 'src/${{ matrix.service }}/**'
-
-      - name: Set up Go
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
+      - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.3'
-          check-latest: true
-          cache-dependency-path: "src/${{ matrix.service }}/go.sum"
+          go-version-file: src/${{ matrix.service }}/go.mod
+          cache-dependency-path: src/${{ matrix.service }}/go.sum
 
       - name: Install Staticcheck
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         run: |
           cd src/${{ matrix.service }}
           go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Build project and verify dependencies
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         run: |
           cd src/${{ matrix.service }}
-          go build -v ./... && go mod verify
+          go build -v ./cmd/main.go && go mod verify
 
       - name: Verify Code Quality
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         run: |
           cd src/${{ matrix.service }}
           go vet ./... && staticcheck ./...
 
       - name: Run Tests
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         run: |
           cd src/${{ matrix.service }}
           go test -v ./...
 
       - name: Login to GitHub Container Registry
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -75,17 +77,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Docker metadata
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository}}/${{ matrix.service }}
-          tags: |
-            ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}
-            ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.number, github.sha) || github.sha }}
+          tags: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}
+          # ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.number, github.sha) || github.sha }}
 
       - name: Build and push Docker image
-        if: ${{ steps.filter.outputs[ matrix.service ] == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./src/${{ matrix.service }}

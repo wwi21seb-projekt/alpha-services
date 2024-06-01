@@ -429,6 +429,7 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	}
 
 	// Convert subscriptions to schema.Subscription
+	log.Printf("Converting %d subscriptions to schema.UserSubscription", len(subscriptions.Subscriptions))
 	for i, sub := range subscriptions.Subscriptions {
 		response.Subscriptions[i] = *helper.TransformUserSubscription(sub)
 	}
