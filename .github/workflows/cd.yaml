@@ -1,13 +1,15 @@
 name: Continuous Delivery
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    types: completed
+    branches: main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
@@ -27,5 +29,3 @@ jobs:
       - name: Rollout Deployment Restart
         run: |
           kubectl rollout restart deployment -n prod
-          
-
