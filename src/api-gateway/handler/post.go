@@ -2,14 +2,15 @@ package handler
 
 import (
 	"context"
-	"github.com/dgrijalva/jwt-go"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helpers"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	"net/http"
 )
 
 type PostHdlr interface {
@@ -41,7 +42,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 
 	req := &pbPost.CreatePostRequest{
 		Content:  createPostRequest.Content,
-		Location: helpers.LocationToProto(&createPostRequest.Location),
+		Location: helper.LocationToProto(&createPostRequest.Location),
 	}
 
 	// Create a context with the userId from the JWT claims

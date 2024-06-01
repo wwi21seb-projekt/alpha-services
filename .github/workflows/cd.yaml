@@ -27,6 +27,12 @@ jobs:
       - name: Deploy to Kubernetes
         run: |
           kubectl apply -k k8s/overlays/prod
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_NAME: ${{ env.POSTGRES_NAME }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
 
       - name: Rollout Deployment Restart
         run: |

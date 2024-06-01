@@ -1,4 +1,4 @@
-package helpers
+package helper
 
 import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
@@ -51,5 +51,19 @@ func AuthorToProto(author *schema.Author) *pbUser.User {
 		Username:          author.Username,
 		Nickname:          author.Nickname,
 		ProfilePictureUrl: author.ProfilePictureUrl,
+	}
+}
+
+func TransformUserSubscription(subscription *pbUser.Subscription) *schema.UserSubscription {
+	if subscription == nil {
+		return nil
+	}
+
+	return &schema.UserSubscription{
+		FollowerId:        subscription.FollowerSubscriptionId,
+		FollowingId:       subscription.FollowedSubscriptionId,
+		Username:          subscription.Username,
+		Nickname:          subscription.Nickname,
+		ProfilePictureUrl: subscription.ProfilePictureUrl,
 	}
 }
