@@ -189,6 +189,12 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 	}
 
 	tokenPair, err := uh.jwtManager.Generate(req.Username)
+	if err != nil {
+		log.Printf("Error in jwtManager.Generate: %v", err)
+		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
+		return
+	}
+
 	c.JSON(http.StatusOK, tokenPair)
 }
 
