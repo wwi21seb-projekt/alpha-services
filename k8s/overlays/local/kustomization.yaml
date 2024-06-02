@@ -6,5 +6,5 @@ secretGenerator:
     envs:
       - .env.local
     files:
-      - JWT_PRIVATE_KEY=private.ed25519.key
-      - JWT_PUBLIC_KEY=public.ed25519.key
+      - JWT_PRIVATE_KEY=private.ed25519.key # skipcq: SCT-A000
+      - JWT_PUBLIC_KEY=public.ed25519.key # skipcq: SCT-A000
