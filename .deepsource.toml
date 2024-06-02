@@ -1,0 +1,26 @@
+version = 1
+
+[[analyzers]]
+name = "secrets"
+
+[[analyzers]]
+name = "kube-linter"
+type = "community"
+
+[[analyzers]]
+name = "docker"
+
+  [analyzers.meta]
+  dockerfile_paths = [
+    "src/api-gateway/Dockerfile",
+    "src/user-service/Dockerfile",
+    "src/post-service/Dockerfile",
+    "src/notification-service/Dockerfile",
+    "src/mail-service/Dockerfile"
+  ]
+
+[[analyzers]]
+name = "go"
+
+  [analyzers.meta]
+  import_root = "github.com/wwi21seb-projekt/alpha-services"
