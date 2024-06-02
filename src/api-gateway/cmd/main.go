@@ -20,6 +20,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
@@ -56,12 +57,21 @@ func main() {
 	}
 	defer chatConn.Close()
 
+	// Set up a connection to the gRPC notification server
+	notificationConn, err := grpc.NewClient(cfg.NotificationServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to connect to the notification-service gRPC server: %v", err)
+	}
+	defer notificationConn.Close()
+
 	// Create client stubs
-	postClient := pbPost.NewPostServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
 	chatClient := pbChat.NewChatServiceClient(chatConn)
+	postClient := pbPost.NewPostServiceClient(postConn)
+	notificationClient := pbNotification.NewNotificationServiceClient(notificationConn)
+	pushSubscriptionClient := pbNotification.NewPushServiceClient(notificationConn)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager()
@@ -73,6 +83,7 @@ func main() {
 	postHandler := handler.NewPostHandler(postClient)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
+	notificationHandler := handler.NewNotificationHandler(notificationClient, pushSubscriptionClient, userClient, subscriptionClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -85,7 +96,7 @@ func main() {
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
 	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
-	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler)
+	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -138,7 +149,7 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, notificationHandler handler.NotificationHdlr) {
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
@@ -162,4 +173,10 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	authRouter.GET("/chats", chatHandler.GetChats)
 	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
 	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
+
+	// Set notification routes
+	authRouter.GET("/notifications", notificationHandler.GetNotifications)
+	authRouter.DELETE("/notifications/:notificationId", notificationHandler.DeleteNotification)
+	authRouter.GET("/push/vapid", notificationHandler.GetPublicKey)
+	authRouter.POST("/push/register", notificationHandler.CreatePushSubscription)
 }

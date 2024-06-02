@@ -15,6 +15,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
 )
@@ -71,16 +72,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to mail service: %v", err)
 	}
+	notificationConn, err := grpc.NewClient(cfg.NotificationServiceURL, dialOpts...)
+	if err != nil {
+		log.Fatalf("Failed to connect to notification service: %v", err)
+	}
 
 	// Create client stubs
 	mailClient := pbMail.NewMailServiceClient(mailConn)
+	notificationClient := pbNotification.NewNotificationServiceClient(notificationConn)
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
 	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(database))
-	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(database))
+	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(database, notificationClient))
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database, mailClient))
 
 	// Start server

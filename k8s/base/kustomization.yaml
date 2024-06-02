@@ -5,3 +5,4 @@ resources:
   - user-service.yaml
   - mail-service.yaml
   - postgres.yaml
+  - notification-service.yaml
