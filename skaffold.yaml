@@ -24,6 +24,10 @@ build:
       context: src/mail-service
       docker:
         dockerfile: Dockerfile
+    - image: notification-service-image
+      context: src/notification-service
+      docker:
+        dockerfile: Dockerfile   
   tagPolicy:
     sha256: {}
   local:

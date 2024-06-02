@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: post-service
+  name: notification-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: post-service
+      app: notification-service
   template:
     metadata:
       labels:
-        app: post-service
+        app: notification-service
     spec:
       containers:
-        - name: post-service
-          image: post-service-image
+        - name: notification-service
+          image: notification-service-image
           ports:
-            - containerPort: 50051
+            - containerPort: 50054
           env:
             - name: PORT
-              value: "50051"
-            - name: USER_ADDR
+              value: "50054"
+            - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT
               value: "5432"
             - name: SCHEMA_NAME
-              value: post_service
+              value: notification_service
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -43,15 +43,25 @@ spec:
                 secretKeyRef:
                   name: alpha-secrets
                   key: POSTGRES_PASSWORD
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: VAPID_PUBLIC_KEY
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: VAPID_PRIVATE_KEY
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: post-service
+  name: notification-service
 spec:
   selector:
-    app: post-service
+    app: notification-service
   ports:
     - protocol: TCP
-      port: 50051
-      targetPort: 50051
+      port: 50054
+      targetPort: 50054

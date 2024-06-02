@@ -15,7 +15,6 @@ spec:
       containers:
         - name: api-gateway
           image: api-gateway-image
-          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
@@ -25,6 +24,8 @@ spec:
               value: "user-service:50052"
             - name: CHAT_SERVICE_URL
               value: "chat-service:50055"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "notification-service:50054"
             - name: PORT
               value: "8080"
             - name: JWT_PRIVATE_KEY

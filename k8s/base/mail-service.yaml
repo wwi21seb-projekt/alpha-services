@@ -15,7 +15,6 @@ spec:
       containers:
         - name: mail-service
           image: mail-service-image
-          imagePullPolicy: Always
           ports:
             - containerPort: 50053
           env:

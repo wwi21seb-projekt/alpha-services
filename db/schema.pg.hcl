@@ -2,6 +2,14 @@ enum "token_type" {
   schema = schema.user_service
   values = ["activation", "password_reset"]
 }
+enum "notification_type" {
+  schema = schema.notification_service
+  values = ["follow", "repost"]
+}
+enum "subscription_type" {
+  schema = schema.notification_service
+  values = ["expo", "web"]
+}
 
 // You need to be logged in to the Atla CLI to run diff.
 extension "fuzzystrmatch" {
@@ -370,6 +378,89 @@ table "messages" {
   }
 }
 
+
+table "push_subscriptions" {
+  schema = schema.notification_service
+  column "subscription_id" {
+    null = false
+    type = uuid
+  }
+  column "username" {
+    null = false
+    type = character_varying(25)
+  }
+  column "type" {
+    null = false
+    type = enum.subscription_type
+  }
+  column "token" {
+    null = true
+    type = character_varying(64)
+  }
+  column "endpoint" {
+    null = true
+    type = character_varying(256)
+  }
+  column "expiration_time" {
+    null = true
+    type = timestamptz
+  }
+  column "p256dh" {
+    null = true
+    type = character_varying(256)
+  }
+  column "auth" {
+    null = true
+    type = character_varying(256)
+  }
+  primary_key {
+    columns = [column.subscription_id]
+  }
+  foreign_key "username_fk" {
+  columns     = [column.username]
+  ref_columns = [table.users.column.username]
+  on_update   = CASCADE
+  on_delete   = CASCADE
+  }
+}
+table "notifications"{
+  schema = schema.notification_service
+  column "notification_id" {
+    null = false
+    type = uuid
+  }
+  column "recipient_username" {
+    null = false
+    type = character_varying(25)
+  }
+  column "notification_type" {
+    null = false
+    type = enum.notification_type
+  }
+  column "sender_username" {
+    null = false
+    type = character_varying(25)
+  }
+  column "timestamp" {
+    null = false
+    type = timestamptz
+  }
+  primary_key {
+    columns = [column.notification_id]
+  }
+  foreign_key "recipient_fk" {
+    columns     = [column.recipient_username]
+    ref_columns = [table.users.column.username]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+  foreign_key "sender_fk" {
+    columns     = [column.sender_username]
+    ref_columns = [table.users.column.username]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+}
 schema "user_service" {
   comment = "User service schema"
 }
@@ -378,4 +469,7 @@ schema "post_service" {
 }
 schema "chat_service" {
   comment = "Chat service schema"
+}
+schema "notification_service" {
+  comment = "Notification service schema"
 }

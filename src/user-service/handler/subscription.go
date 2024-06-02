@@ -14,6 +14,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -21,13 +22,15 @@ import (
 )
 
 type subscriptionService struct {
-	db *db.DB
+	db                 *db.DB
+	notificationClient pbNotification.NotificationServiceClient
 	pb.UnimplementedSubscriptionServiceServer
 }
 
-func NewSubscriptionServer(database *db.DB) pb.SubscriptionServiceServer {
+func NewSubscriptionServer(database *db.DB, notificiationClient pbNotification.NotificationServiceClient) pb.SubscriptionServiceServer {
 	return &subscriptionService{
-		db: database,
+		db:                 database,
+		notificationClient: notificiationClient,
 	}
 }
 
@@ -186,6 +189,16 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	if err = ss.db.Commit(ctx, tx); err != nil {
 		log.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
+	}
+
+	// Send a notification to the user that they have been subscribed to
+	sendNotificationRequest := pbNotification.SendNotificationRequest{
+		NotificationType: "follow",
+		Sender:           request.GetFollowedUsername(),
+	}
+
+	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {
+		log.Errorf("Error in ss.notificationClient.SendNotification: %v", err)
 	}
 
 	return &pb.CreateSubscriptionResponse{
