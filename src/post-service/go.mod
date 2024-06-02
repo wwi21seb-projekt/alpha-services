@@ -26,4 +26,4 @@ require (
 	google.golang.org/protobuf v1.34.1 // indirect
 )
 
-replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20240515191416-fc5f0ca64291
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20240528184218-531527333157
