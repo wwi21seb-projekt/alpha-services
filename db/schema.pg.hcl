@@ -44,6 +44,7 @@ table "tokens" {
     columns = [column.username, column.type]
   }
 }
+
 table "comments" {
   schema = schema.post_service
   column "comment_id" {
@@ -82,6 +83,7 @@ table "comments" {
     on_delete   = CASCADE
   }
 }
+
 table "hashtags" {
   schema = schema.post_service
   column "hashtag_id" {
@@ -99,6 +101,7 @@ table "hashtags" {
     columns = [column.content]
   }
 }
+
 table "likes" {
   schema = schema.post_service
   column "username" {
@@ -129,6 +132,7 @@ table "likes" {
     on_delete   = CASCADE
   }
 }
+
 table "many_posts_has_many_hashtags" {
   schema = schema.post_service
   column "post_id_posts" {
@@ -155,6 +159,7 @@ table "many_posts_has_many_hashtags" {
     on_delete   = CASCADE
   }
 }
+
 table "posts" {
   schema = schema.post_service
   column "post_id" {
@@ -199,6 +204,7 @@ table "posts" {
     on_delete   = CASCADE
   }
 }
+
 table "subscriptions" {
   schema = schema.user_service
   column "subscription_id" {
@@ -236,6 +242,7 @@ table "subscriptions" {
     columns = [column.subscriber_name, column.subscribee_name]
   }
 }
+
 table "users" {
   schema = schema.user_service
   column "username" {
@@ -281,9 +288,94 @@ table "users" {
     columns = [column.email]
   }
 }
+
+table "chats" {
+  schema = schema.chat_service
+  column "chat_id" {
+    null = false
+    type = uuid
+  }
+  column "created_at" {
+    null = false
+    type = timestamptz
+  }
+  column "user1_name" {
+    null = false
+    type = character_varying(25)
+  }
+  column "user2_name" {
+    null = false
+    type = character_varying(25)
+  }
+  primary_key {
+    columns = [column.chat_id]
+  }
+  foreign_key "user1_fk" {
+    columns     = [column.user1_name]
+    ref_columns = [table.users.column.username]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+  foreign_key "user2_fk" {
+    columns     = [column.user2_name]
+    ref_columns = [table.users.column.username]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+  check  {
+    expr = "user1_name < user2_name"
+  }
+  // Ensure that two users can only have one chat
+  unique "users_uq" {
+    columns = [column.user1_name, column.user2_name]
+  }
+}
+
+table "messages" {
+  schema = schema.chat_service
+  column "message_id" {
+    null = false
+    type = uuid
+  }
+  column "content" {
+    null = false
+    type = character_varying(256)
+  }
+  column "created_at" {
+    null = false
+    type = timestamptz
+  }
+  column "chat_id" {
+    null = false
+    type = uuid
+  }
+  column "sender_name" {
+    null = false
+    type = character_varying(25)
+  }
+  primary_key {
+    columns = [column.message_id]
+  }
+  foreign_key "chats_fk" {
+    columns     = [column.chat_id]
+    ref_columns = [table.chats.column.chat_id]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+  foreign_key "users_fk" {
+    columns     = [column.sender_name]
+    ref_columns = [table.users.column.username]
+    on_update   = CASCADE
+    on_delete   = CASCADE
+  }
+}
+
 schema "user_service" {
   comment = "User service schema"
 }
 schema "post_service" {
   comment = "Post service schema"
+}
+schema "chat_service" {
+  comment = "Chat service schema"
 }
