@@ -11,11 +11,12 @@ import (
 )
 
 type Client struct {
-	Hub      *Hub
-	Username string
-	Conn     *websocket.Conn // Websocket Connection to Client
-	Stream   pb.ChatService_ChatStreamClient
-	Send     chan []byte
+	Hub        *Hub                            // Chat Hub
+	Username   string                          // Username of the client
+	Conn       *websocket.Conn                 // Websocket Connection to Client
+	Stream     pb.ChatService_ChatStreamClient // gRPC Stream to Chat Service
+	Send       chan []byte                     // Channel to send messages to client
+	Disconnect chan bool                       // Channel to signal client disconnect
 }
 
 const (
@@ -34,6 +35,16 @@ var (
 	space   = []byte{' '}
 )
 
+func NewClient(hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamClient, username string) *Client {
+	return &Client{
+		Hub:      hub,
+		Conn:     conn,
+		Stream:   stream,
+		Username: username,
+		Send:     make(chan []byte, 256),
+	}
+}
+
 // readPump pumps messages from the websocket connection to the hub.
 //
 // The application runs readPump in a per-connection goroutine. The application
@@ -41,23 +52,44 @@ var (
 // reads from this goroutine.
 func (c *Client) ReadPump() {
 	defer func() {
-		c.Hub.Unregister <- c
-		c.Conn.Close()
+		c.Disconnect <- true
 	}()
 	c.Conn.SetReadLimit(maxMessageSize)
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error { c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := c.Conn.ReadMessage()
+		log.Infof("Received chat mesage from client: %s", c.Username)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
-			break
+			return
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.Hub.broadcast <- message
+		if err := c.sendMessageToChatService(message); err != nil {
+			log.Errorf("Failed to send message to chat service: %v", err)
+			return
+		}
 	}
+}
+
+// sendMessageToChatService sends a message from the client to the chat service via gRPC.
+func (c *Client) sendMessageToChatService(message []byte) error {
+	// Prepare a message to be sent via gRPC
+	grpcMessage := &pb.ChatMessage{
+		Username:  c.Username,
+		Message:   string(message),
+		CreatedAt: time.Now().String(),
+	}
+
+	// Send the message to the chat service via gRPC
+	err := c.Stream.Send(grpcMessage)
+	if err != nil {
+		log.Errorf("Failed to send message to chat service: %v", err)
+		return err
+	}
+	return nil
 }
 
 // writePump pumps messages from the hub to the websocket connection.
@@ -69,7 +101,7 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.Conn.Close()
+		c.Disconnect <- true
 	}()
 	for {
 		select {
@@ -112,6 +144,10 @@ func (c *Client) WritePump() {
 }
 
 func (c *Client) GrpcReceivePump() {
+	defer func() {
+		c.Disconnect <- true
+	}()
+
 	for {
 		msg, err := c.Stream.Recv()
 		if err != nil {
@@ -133,14 +169,7 @@ func (c *Client) GrpcReceivePump() {
 		select {
 		case c.Send <- wsMessageBytes:
 		default:
-			close(c.Send)
-			c.Hub.Unregister <- c
-			c.Conn.Close()
 			return
 		}
 	}
-
-	// Clean up all resources and close channels
-	c.Hub.Unregister <- c
-	c.Conn.Close()
 }
