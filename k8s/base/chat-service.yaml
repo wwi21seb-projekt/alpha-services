@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: post-service
+  name: chat-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: post-service
+      app: chat-service
   template:
     metadata:
       labels:
-        app: post-service
+        app: chat-service
     spec:
       containers:
-        - name: post-service
-          image: post-service-image
+        - name: chat-service
+          image: chat-service-image
           ports:
-            - containerPort: 50051
+            - containerPort: 50055
           env:
             - name: PORT
-              value: "50051"
-            - name: USER_ADDR
+              value: "50055"
+            - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT
               value: "5432"
             - name: SCHEMA_NAME
-              value: post_service
+              value: chat_service
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -47,11 +47,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: post-service
+  name: chat-service
 spec:
   selector:
-    app: post-service
+    app: chat-service
   ports:
     - protocol: TCP
-      port: 50051
-      targetPort: 50051
+      port: 50055
+      targetPort: 50055

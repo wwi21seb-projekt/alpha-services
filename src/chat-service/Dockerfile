@@ -20,7 +20,7 @@ RUN make tidy
 
 # Skaffold passes in debug-oriented compiler flags
 ARG SKAFFOLD_GO_GCFLAGS
-RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/mail-service cmd/main.go
+RUN go build -gcflags="${SKAFFOLD_GO_GCFLAGS}" -o /go/src/serveralpha/chat-service cmd/main.go
 
 # Deployment container
 FROM scratch
@@ -32,6 +32,6 @@ ENV GOTRACEBACK=single
 
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /bin/grpc_health_probe /bin/
-COPY --from=builder /go/src/serveralpha/mail-service /serveralpha/mail-service
+COPY --from=builder /go/src/serveralpha/chat-service /serveralpha/chat-service
 
-ENTRYPOINT ["/serveralpha/mail-service"]
+ENTRYPOINT ["/serveralpha/chat-service"]
