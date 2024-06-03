@@ -6,21 +6,20 @@ import (
 	"log"
 	"net"
 
-	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/sirupsen/logrus"
-	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/chat-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
-	name    = "user-service"
+	name    = "chat-service"
 	version = "0.1.0"
 )
 
@@ -31,7 +30,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize logger
+	// Initizalize logger
 	logger := logrus.New()
 
 	opts := []logging.Option{
@@ -67,21 +66,17 @@ func main() {
 	// Create client connections
 	var dialOpts []grpc.DialOption
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	mailConn, err := grpc.NewClient(cfg.MailServiceURL, dialOpts...)
+	userConn, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
 	if err != nil {
 		log.Fatalf("Failed to connect to mail service: %v", err)
 	}
 
 	// Create client stubs
-	mailClient := pbMail.NewMailServiceClient(mailConn)
+	userClient := pbUser.NewUserServiceClient(userConn)
 
-	// Register health service
+	// Register services
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
-
-	// Register user services
-	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(database))
-	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(database))
-	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(database, mailClient))
+	pb.RegisterChatServiceServer(grpcServer, handler.NewChatService(database, userClient))
 
 	// Start server
 	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)

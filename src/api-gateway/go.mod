@@ -11,7 +11,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/sirupsen/logrus v1.9.3
 	github.com/truemail-rb/truemail-go v1.1.3
-	github.com/wwi21seb-projekt/alpha-shared v0.11.2
+	github.com/wwi21seb-projekt/alpha-shared v0.14.2-0.20240602234540-ff4782ed5a45
 	github.com/wwi21seb-projekt/errors-go v0.5.0
 	google.golang.org/grpc v1.64.0
 )
@@ -31,6 +31,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
+	github.com/gorilla/websocket v1.5.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

@@ -1,4 +1,4 @@
-APP_NAME := notification-service
+APP_NAME := chat-service
 IMAGE_NAME := $(APP_NAME)
 TAG := latest
 

@@ -22,7 +22,7 @@ Every service uses shared libraries for common functionality, such as protos, da
 - [Kubectl and Kind](https://kubernetes.io/docs/tasks/tools/)
 - [Skaffold](https://skaffold.dev/docs/install/)
 - [Go](https://golang.org/doc/install)
-- [Protoc](https://grpc.io/docs/protoc-installation/)
+- [Protoc](https://grpc.io/docs/protoc-installation/) (only if you work on the API in `alpha-shared`)
 - [Atlas](https://atlasgo.io/getting-started)
 
 ### Setup

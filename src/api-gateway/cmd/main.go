@@ -13,10 +13,12 @@ import (
 	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
+	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
@@ -46,18 +48,30 @@ func main() {
 	}
 	defer userConn.Close()
 
+	// Set up a connection to the gRPC chat server
+	chatConn, err := grpc.NewClient("chat-service:50055", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
+	}
+	defer chatConn.Close()
+
 	// Create client stubs
 	postClient := pbPost.NewPostServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
+	chatClient := pbChat.NewChatServiceClient(chatConn)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager()
 
+	// Create chat hub
+	hub := ws.NewHub()
+
 	// Create handler instances
 	postHandler := handler.NewPostHandler(postClient)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
+	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -70,12 +84,19 @@ func main() {
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
 	setupRoutes(unauthorizedRouter, postHandler, userHandler)
-	setupAuthRoutes(authorizedRouter, postHandler, userHandler)
+	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Run chat hub in a separate goroutine
+	go func() {
+		defer hub.Close()
+		hub.Run()
+	}()
+
+	// Run the server
 	log.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("Server error: %v", err)
@@ -109,7 +130,7 @@ func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userH
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
@@ -128,4 +149,11 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, 
 	authRouter.GET("/posts/:postId/comments", postHandler.GetComments)
 	authRouter.POST("/posts/:postId/likes", postHandler.CreateLike)
 	authRouter.DELETE("/posts/:postId/likes", postHandler.DeleteLike)
+
+	// Set chat routes
+	authRouter.GET("/chat", chatHandler.Chat)
+	authRouter.GET("/chats", chatHandler.GetChats)
+	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
+	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
+
 }

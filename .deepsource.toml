@@ -21,4 +21,10 @@ name = "go"
 
   [analyzers.meta]
   import_root = "github.com/wwi21seb-projekt/alpha-services"
-  import_paths = ["github.com/wwi21seb-projekt/alpha-services/src/api-gateway", "github.com/wwi21seb-projekt/alpha-services/src/user-service", "github.com/wwi21seb-projekt/alpha-services/src/post-service", "github.com/wwi21seb-projekt/alpha-services/src/notification-service", "github.com/wwi21seb-projekt/alpha-services/src/mail-service"]
+  import_paths = [
+    "github.com/wwi21seb-projekt/alpha-services/src/api-gateway", 
+    "github.com/wwi21seb-projekt/alpha-services/src/user-service", 
+    "github.com/wwi21seb-projekt/alpha-services/src/post-service", 
+    "github.com/wwi21seb-projekt/alpha-services/src/notification-service", 
+    "github.com/wwi21seb-projekt/alpha-services/src/mail-service"
+  ]
