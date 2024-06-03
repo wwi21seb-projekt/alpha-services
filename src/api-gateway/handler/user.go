@@ -75,7 +75,9 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.authService.RegisterUser: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -95,7 +97,9 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	})
 	if err != nil {
 		log.Printf("Error in upstream call uh.profileService.SearchUsers: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
+		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+			Error: goerrors.InternalServerError,
+		})
 		return
 	}
 
@@ -157,7 +161,9 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.authService.UpdatePassword: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -184,7 +190,9 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.authService.LoginUser: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -204,14 +212,18 @@ func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	_, err := uh.jwtManager.Verify(req.RefreshToken)
 	if err != nil {
 		log.Printf("Error in jwtManager.Verify: %v", err)
-		c.JSON(goerrors.InvalidToken.HttpStatus, goerrors.InvalidToken)
+		c.JSON(goerrors.InvalidToken.HttpStatus, &schema.ErrorDTO{
+			Error: goerrors.InvalidToken,
+		})
 		return
 	}
 
 	tokenPair, err := uh.jwtManager.Refresh(req.RefreshToken)
 	if err != nil {
 		log.Printf("Error in jwtManager.Refresh: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
+		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+			Error: goerrors.InternalServerError,
+		})
 		return
 	}
 	c.JSON(http.StatusOK, tokenPair)
@@ -243,14 +255,18 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.authService.ActivateUser: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
 	tokenPair, err := uh.jwtManager.Generate(username)
 	if err != nil {
 		log.Printf("Error in jwtManager.Generate: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
+		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+			Error: goerrors.InternalServerError,
+		})
 		return
 	}
 
@@ -276,7 +292,9 @@ func (uh *UserHandler) ResendToken(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.authService.ResendToken: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -305,7 +323,9 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.profileService.GetUser: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -345,7 +365,9 @@ func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.subscriptionService.CreateSubscription: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -379,7 +401,9 @@ func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.subscriptionService.DeleteSubscription: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
@@ -415,7 +439,9 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 		}
 
 		log.Printf("Error in upstream call uh.subscriptionService.GetSubscriptions: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 

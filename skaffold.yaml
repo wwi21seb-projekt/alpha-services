@@ -8,6 +8,10 @@ build:
       context: src/api-gateway
       docker:
         dockerfile: Dockerfile
+    - image: chat-service-image
+      context: src/chat-service
+      docker:
+        dockerfile: Dockerfile
     - image: post-service-image
       context: src/post-service
       docker:
