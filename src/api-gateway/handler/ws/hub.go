@@ -1,6 +1,8 @@
 package ws
 
 import (
+	"sync"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -9,20 +11,20 @@ import (
 type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
-	// Inbound messages from the clients.
-	broadcast chan []byte
 	// Register requests from the clients.
 	Register chan *Client
 	// Unregister requests from clients.
 	Unregister chan *Client
+	// Mutex to protect access to clients
+	clientsMu sync.Mutex
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan []byte),
+		clients:    make(map[*Client]bool),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		clientsMu:  sync.Mutex{},
 	}
 }
 
@@ -33,27 +35,23 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.Register:
 			log.Info("Registering client")
+			h.clientsMu.Lock()
 			h.clients[client] = true
+			h.clientsMu.Unlock()
 		case client := <-h.Unregister:
 			log.Infof("Unregistering client %v", client.Username)
 
+			h.clientsMu.Lock()
 			if _, ok := h.clients[client]; ok {
 				// Clean up open connections and channels
 				close(client.Send)
+				close(client.Disconnect)
 				delete(h.clients, client)
 				client.Conn.Close()
 				client.Stream.CloseSend()
-				log.Info("Client unregistered")
+				log.Infof("Client %s unregistered", client.Username)
 			}
-		case message := <-h.broadcast:
-			for client := range h.clients {
-				select {
-				case client.Send <- message:
-				default:
-					close(client.Send)
-					delete(h.clients, client)
-				}
-			}
+			h.clientsMu.Unlock()
 		}
 	}
 }
@@ -61,16 +59,16 @@ func (h *Hub) Run() {
 func (h *Hub) Close() {
 	log.Info("Closing chat hub...")
 
-	close(h.broadcast)
+	// Close the Register channel to prevent new clients from connecting
+	// Keep the Unregister channel open for now to allow clients to disconnect
 	close(h.Register)
-	close(h.Unregister)
 
 	// Close all client connections
 	log.Info("Closing all open client connections...")
+	h.clientsMu.Lock()
 	for client := range h.clients {
-		close(client.Send)
-		delete(h.clients, client)
-		client.Conn.Close()
-		client.Stream.CloseSend()
+		h.Unregister <- client
 	}
+	close(h.Unregister)
+	h.clientsMu.Unlock()
 }

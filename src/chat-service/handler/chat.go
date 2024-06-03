@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -28,6 +29,8 @@ var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 type chatService struct {
 	db         *db.DB
 	userClient pbUser.UserServiceClient
+	streams    map[string]*chatStream
+	mu         sync.RWMutex
 	pb.UnimplementedChatServiceServer
 }
 
@@ -35,7 +38,22 @@ func NewChatService(db *db.DB, userClient pbUser.UserServiceClient) pb.ChatServi
 	return &chatService{
 		db:         db,
 		userClient: userClient,
+		streams:    make(map[string]*chatStream),
 	}
+}
+
+// chatStream is a struct that holds all the connections for a chat
+// it's used in the streamMap and accessed by the chatId
+type chatStream struct {
+	connections []*openConnection
+}
+
+// openConnection is a struct that holds the connection to the client
+// it contains metadata about the connection and the connection itself
+type openConnection struct {
+	stream   pb.ChatService_ChatStreamServer
+	active   bool
+	username string
 }
 
 // CreateChat implements serveralpha.ChatServiceServer.
@@ -142,8 +160,9 @@ func (c *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.
 		ToSql()
 
 	countQuery, countArgs, _ := psql.Select("COUNT(*)").
-		From("messages").
-		Where("chat_id = ?", req.ChatId).
+		From("messages m").
+		Join("chats c ON m.chat_id = c.chat_id").
+		Where("c.chat_id = ? AND (c.user1_name = ? OR c.user2_name = ?)", req.ChatId, username, username).
 		ToSql()
 
 	batch := pgx.Batch{}
@@ -277,10 +296,176 @@ func (c *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.L
 
 // PrepareChatStream implements serveralpha.ChatServiceServer.
 func (c *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareChatStreamRequest) (*pbCommon.Empty, error) {
-	panic("unimplemented")
+	conn, err := c.db.Pool.Acquire(ctx)
+	if err != nil {
+		log.Errorf("Error in c.db.Pool.Acquire: %v", err)
+		return nil, err
+	}
+	defer conn.Release()
+
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	// Check if the chat exists and the user is part of it
+	query, args, _ := psql.Select("COUNT(*)").
+		From("chats").
+		Where("chat_id = ? AND (user1_name = ? OR user2_name = ?)", req.GetChatId(), username, username).
+		ToSql()
+
+	log.Info("Trying to prepare chat stream...")
+	count := 0
+	if err := conn.QueryRow(ctx, query, args...).Scan(&count); err != nil {
+		log.Errorf("Error in conn.QueryRow: %v", err)
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+
+	// Check if chat was found
+	if count == 0 {
+		log.Error("Chat not found")
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+
+	// Create a new chat stream if it doesn't exist
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.streams[req.GetChatId()]; !ok {
+		c.streams[req.GetChatId()] = &chatStream{}
+	}
+	openConn := &openConnection{
+		stream:   nil,
+		active:   false,
+		username: username,
+	}
+
+	c.streams[req.GetChatId()].connections = append(c.streams[req.GetChatId()].connections, openConn)
+
+	return &pbCommon.Empty{}, nil
 }
 
 // ChatStream implements serveralpha.ChatServiceServer.
-func (c *chatService) ChatStream(pb.ChatService_ChatStreamServer) error {
-	panic("unimplemented")
+func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
+	ctx := stream.Context()
+	log.Info("Received request for chat stream")
+
+	// Get the metadata from the context
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+	chatId := metadata.ValueFromIncomingContext(ctx, "chatId")[0]
+
+	// Check if the chat stream is prepared
+	c.mu.Lock()
+	chatStream, ok := c.streams[chatId]
+	c.mu.Unlock()
+	if !ok {
+		return status.Error(codes.FailedPrecondition, "chat stream not prepared")
+	}
+
+	// Find the connection in the stream
+	var conn *openConnection
+	for _, c := range chatStream.connections {
+		if c.username == username {
+			conn = c
+			break
+		}
+	}
+
+	if conn == nil {
+		return status.Error(codes.NotFound, "user not found in chat")
+	}
+
+	// Set the connection and mark it as active
+	conn.stream = stream
+	conn.active = true
+	log.Infof("Chat stream prepared for user %s", username)
+
+	// Run handler routine concurrently
+	go c.handleMessages(ctx, chatId, conn)
+
+	// Wait for the stream to close
+	<-ctx.Done()
+	log.Info("Chat stream closed")
+
+	// Delete client from state
+	c.mu.Lock()
+	for i, currentConn := range c.streams[chatId].connections {
+		if currentConn == conn {
+			c.streams[chatId].connections = append(c.streams[chatId].connections[:i], c.streams[chatId].connections[i+1:]...)
+			break
+		}
+	}
+	if len(c.streams[chatId].connections) == 0 {
+		delete(c.streams, chatId)
+	}
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *chatService) handleMessages(ctx context.Context, chatId string, conn *openConnection) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// Receive message from the client
+			message, err := conn.stream.Recv()
+			if err != nil {
+				log.Errorf("Failed to receive message from client: %v", err)
+				return
+			}
+
+			// Check if the message is valid
+			if message.GetUsername() != conn.username {
+				log.Error("Invalid message: username does not match")
+				return
+			}
+
+			// Insert the message into the database
+			tx, err := c.db.Begin(ctx)
+			if err != nil {
+				log.Errorf("Failed to start transaction: %v", err)
+				return
+			}
+			defer c.db.Rollback(ctx, tx)
+
+			if err := c.insertMessage(ctx, tx, chatId, message.GetUsername(), message.GetMessage()); err != nil {
+				log.Errorf("Failed to insert message: %v", err)
+				return
+			}
+
+			if err := c.db.Commit(ctx, tx); err != nil {
+				log.Errorf("Failed to commit transaction: %v", err)
+				return
+			}
+
+			// Send the message to all other connections
+			c.mu.RLock()
+			error := false
+			for _, c := range c.streams[chatId].connections {
+				if c.active && c.username != conn.username {
+					if err := c.stream.Send(message); err != nil {
+						log.Errorf("Failed to send message to client: %v", err)
+						error = true
+						break
+					}
+				}
+			}
+			c.mu.RUnlock()
+
+			if error {
+				return
+			}
+		}
+	}
+}
+
+func (c *chatService) insertMessage(ctx context.Context, tx pgx.Tx, chatId, username, message string) error {
+	messageId := uuid.New()
+	createdAt := time.Now()
+
+	query, args, _ := psql.Insert("messages").
+		Columns("chat_id", "message_id", "sender_name", "content", "created_at").
+		Values(chatId, messageId, username, message, createdAt).
+		ToSql()
+
+	_, err := tx.Exec(ctx, query, args...)
+	return err
 }

@@ -16,6 +16,7 @@ import (
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -49,6 +50,8 @@ func NewChatHandler(jwtManager manager.JWTManager, chatClient pb.ChatServiceClie
 
 // Chat implements ChatHdlr.
 func (ch *ChatHandler) Chat(c *gin.Context) {
+	log.Info("Chat endpoint called, checking authorization...")
+
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
 		log.Error("No authorization header provided")
@@ -70,6 +73,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 
 	chatId := c.Query("chatId")
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+	log.Info("Preparing chat stream...")
 
 	if _, err = ch.chatServiceClient.PrepareChatStream(ctx, &pb.PrepareChatStreamRequest{
 		ChatId: chatId,
@@ -90,7 +94,20 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		return
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, "chatId", chatId)
+	log.Info("Creating chat stream...")
+	stream, err := ch.chatServiceClient.ChatStream(ctx)
+	if err != nil {
+		log.Error("Failed to create chat stream: ", err)
+		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
+			Error: goerrors.InternalServerError,
+		})
+		return
+	}
+	defer stream.CloseSend()
+
 	// Upgrade to websocket
+	log.Info("Upgrading to websocket...")
 	conn, err := ch.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error("Failed to upgrade to websocket: ", err)
@@ -101,17 +118,20 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	client := &ws.Client{
-		Hub:      ch.hub,
-		Username: username,
-		Conn:     conn,
-		Send:     make(chan []byte, 256),
-	}
+	// Register client in hub
+	client := ws.NewClient(ch.hub, conn, stream, username)
 	ch.hub.Register <- client
+	log.Info("Client registered, starting pumps...")
 
 	go client.WritePump()
 	go client.ReadPump()
 	go client.GrpcReceivePump()
+
+	log.Info("Pumps started, waiting for client to disconnect...")
+	<-client.Disconnect
+
+	log.Info("Client disconnected, unregistering...")
+	ch.hub.Unregister <- client
 }
 
 // CreateChat implements ChatHdlr.
