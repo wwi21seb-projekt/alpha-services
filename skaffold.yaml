@@ -25,6 +25,8 @@ build:
   local:
     useBuildkit: true
     concurrency: 4
+deploy:
+  kubeContext: kind-kind
 manifests:
   kustomize:
     paths:

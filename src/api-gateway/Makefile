@@ -14,7 +14,7 @@ tidy:
 
 .PHONY: build
 build:
-	@go build -o ./bin/$(APP_NAME) ./cmd/api-gateway
+	@go build -o ./bin/$(APP_NAME) ./cmd
 
 .PHONY: test
 test:

@@ -2,11 +2,17 @@ package handler
 
 import (
 	"context"
-	"regexp"
-
-	"github.com/Masterminds/squirrel"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	log "github.com/sirupsen/logrus"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"regexp"
+	"strings"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 
 	"time"
 
@@ -17,6 +23,8 @@ import (
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
 var hashtagRegex = regexp.MustCompile(`#\w+`)
 
 type postService struct {
@@ -24,6 +32,7 @@ type postService struct {
 	profileClient pbUser.UserServiceClient
 	subscription  pbUser.SubscriptionServiceClient
 	pb.UnimplementedPostServiceServer
+	pb.UnimplementedFeedServiceServer
 }
 
 func NewPostServiceServer(db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
@@ -35,13 +44,25 @@ func NewPostServiceServer(db *db.DB, profileClient pbUser.UserServiceClient, sub
 }
 
 func (ps *postService) SearchPosts(ctx context.Context, empty *pb.SearchPostsRequest) (*pb.SearchPostsResponse, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.SearchPostsResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	conn, err := ps.db.Pool.Acquire(ctx)
+	if err != nil {
+		log.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	/*// Get the username from metadata
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	dataQuery, dataArgs, _ := psql.Select().
+		Columns("p.post_id", "p.author_id", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+		From("posts p").*/
+	return nil, nil
 }
 
 func (ps *postService) GetPost(ctx context.Context, request *pb.GetPostRequest) (*pb.Post, error) {
@@ -49,48 +70,99 @@ func (ps *postService) GetPost(ctx context.Context, request *pb.GetPostRequest) 
 }
 
 func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.Post, error) {
-	panic("implement me")
+	// Fetch the username of the authenticated user
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	newCTX := metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
+
+	// Get Author Profile from User-Service
+	user, err := ps.profileClient.GetUser(newCTX, &pbUser.GetUserRequest{Username: authenticatedUsername})
+	if err != nil {
+		log.Errorf("Error in profileClient.GetUser: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to get author profile: %v", err)
+	}
+
+	author := &pbUser.User{
+		Username:          user.Username,
+		Nickname:          user.Nickname,
+		ProfilePictureUrl: user.ProfilePictureUrl,
+	}
+
+	post := &pb.Post{
+		PostId:       uuid.New().String(),
+		CreationDate: time.Now().Format(time.RFC3339),
+		Author:       author,
+		Content:      request.Content,
+		Location:     request.Location,
+		Liked:        0,
+		Likes:        0,
+	}
+
+	log.Debugf("Creating post: %v", post)
+
+	// Start transaction
+	tx, err := ps.db.Begin(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer ps.db.Rollback(ctx, tx)
+
+	// if request.RepostedPostID != nil {
+	//
+	// }
+
+	err = ps.insertPost(ctx, tx, post)
+	if err != nil {
+		log.Errorf("Error in insertPost: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to insert post: %v", err)
+	}
+
+	err = ps.insertHashtags(ctx, tx, post)
+	if err != nil {
+		log.Errorf("Error in insertHashtags: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to insert hashtags: %v", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		log.Errorf("Error in tx.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return post, nil
 }
 
 func (ps *postService) DeletePost(ctx context.Context, empty *pb.GetPostRequest) (*pbCommon.Empty, error) {
 	panic("implement me")
 }
 
-func (ps *postService) insertPost(ctx context.Context, tx pgx.Tx, postId uuid.UUID, userId, content string, createdAt time.Time, location *pb.Location) error {
-	// Start building the query
-	query := squirrel.Insert("alpha_schema.posts").
-		Columns("post_id", "author_id", "content", "created_at").
-		Values(postId, userId, content, createdAt)
+func (ps *postService) insertPost(ctx context.Context, tx pgx.Tx, post *pb.Post) error {
+	query := psql.Insert("posts").
+		Columns("post_id", "author_name", "content", "created_at",
+			"longitude", "latitude", "accuracy").
+		Values(post.PostId, post.Author.Username, post.Content, post.CreationDate,
+			post.Location.Longitude, post.Location.Latitude, post.Location.Accuracy)
 
-	// If location is provided, add location data to the query
-	if location != nil {
-		query = query.Columns("longitude", "latitude", "accuracy").
-			Values(location.Longitude, location.Latitude, location.Accuracy)
-	}
+	queryString, args, _ := query.ToSql()
+	_, err := tx.Exec(ctx, queryString, args...)
 
-	// Finalize and execute the query
-	queryString, args, err := query.ToSql()
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec(ctx, queryString, args...)
 	return err
 }
 
-func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, postId uuid.UUID, hashtags []string) error {
+func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *pb.Post) error {
+	hashtags := hashtagRegex.FindAllString(post.Content, -1)
 	for _, hashtag := range hashtags {
 		hashtagId := uuid.New()
 
-		queryString := `INSERT INTO alpha_schema.hashtags (hashtag_id, content) VALUES($1, $2) 
-					ON CONFLICT (content) DO UPDATE SET content=alpha_schema.hashtags.content 
+		queryString := `INSERT INTO hashtags (hashtag_id, content) VALUES($1, $2) 
+					ON CONFLICT (content) DO UPDATE SET content=hashtags.content 
 					RETURNING hashtag_id`
-		if err := tx.QueryRow(ctx, queryString, hashtagId, hashtag).Scan(&hashtagId); err != nil {
+		if err := tx.QueryRow(ctx, queryString, hashtagId, strings.ToLower(hashtag)).Scan(&hashtagId); err != nil {
 			return err
 		}
 
-		queryString = "INSERT INTO alpha_schema.many_posts_has_many_hashtags (post_id_posts, hashtag_id_hashtags) VALUES($1, $2)"
-		if _, err := tx.Exec(ctx, queryString, postId, hashtagId); err != nil {
+		queryString = "INSERT INTO many_posts_has_many_hashtags (post_id_posts, hashtag_id_hashtags) VALUES($1, $2)"
+		if _, err := tx.Exec(ctx, queryString, post.PostId, hashtagId); err != nil {
 			return err
 		}
 	}

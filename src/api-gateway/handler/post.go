@@ -2,14 +2,16 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
@@ -26,27 +28,28 @@ type PostHdlr interface {
 
 type PostHandler struct {
 	postService pbPost.PostServiceClient
+	feedService pbPost.FeedServiceClient
+	jwtManager  manager.JWTManager
 }
 
-func NewPostHandler(client pbPost.PostServiceClient) PostHdlr {
+func NewPostHandler(client pbPost.PostServiceClient, feedService pbPost.FeedServiceClient, jwtManager manager.JWTManager) PostHdlr {
 	return &PostHandler{
 		postService: client,
+		feedService: feedService,
+		jwtManager:  jwtManager,
 	}
 }
 
 func (h *PostHandler) CreatePost(c *gin.Context) {
-	// Get JWT claims from context
-	claims := c.MustGet("claims").(jwt.MapClaims)
 	// Parse request body to get post data
 	createPostRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*schema.CreatePostRequest)
+	// Get outgoing context from metadata
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	req := &pbPost.CreatePostRequest{
 		Content:  createPostRequest.Content,
 		Location: helper.LocationToProto(&createPostRequest.Location),
 	}
-
-	// Create a context with the userId from the JWT claims
-	ctx := context.WithValue(context.Background(), keys.SubjectKey, claims[string(keys.SubjectKey)].(string))
 
 	// Call CreatePost method on postService
 	rsp, err := h.postService.CreatePost(ctx, req)
@@ -68,6 +71,62 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 }
 
 func (h *PostHandler) GetFeed(c *gin.Context) {
+	publicFeedWanted := h.isPublicFeedWanted(c)
+
+	lastPostID := c.Query("postId")
+	limit, err := strconv.Atoi(c.Query("limit"))
+	if err != nil {
+		limit = 10
+	}
+
+	var resp *pbPost.SearchPostsResponse
+
+	if publicFeedWanted {
+		resp, err = h.feedService.GetGlobalFeed(c, &pbPost.GetFeedRequest{
+			LastPostId: lastPostID,
+			Limit:      int32(limit),
+		})
+	} else {
+		resp, err = h.feedService.GetPersonalFeed(c, &pbPost.GetFeedRequest{
+			LastPostId: lastPostID,
+			Limit:      int32(limit),
+		})
+	}
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
+	authHeader := c.GetHeader("Authorization")
+	feedType := c.Query("feedType")
+
+	if authHeader == "" || feedType == "global" {
+		return true
+	}
+
+	if !strings.HasPrefix(authHeader, "Bearer ") || len(authHeader) <= len("Bearer ") {
+		err := errors.New("invalid authorization header")
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return false
+	}
+
+	jwtToken := authHeader[len("Bearer "):]
+	_, err := h.jwtManager.Verify(jwtToken)
+	if err != nil {
+		err := errors.New("invalid authorization header")
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return false
+	}
+
+	return false
+}
+
+func (h *PostHandler) GetUserFeed(c *gin.Context) {
 	// to-do
 }
 

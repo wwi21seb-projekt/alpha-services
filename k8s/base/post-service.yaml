@@ -15,13 +15,12 @@ spec:
       containers:
         - name: post-service
           image: post-service-image
-          imagePullPolicy: Always
           ports:
             - containerPort: 50051
           env:
             - name: PORT
               value: "50051"
-            - name: USER_ADDR
+            - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
               value: postgres

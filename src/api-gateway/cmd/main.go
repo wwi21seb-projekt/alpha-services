@@ -48,6 +48,7 @@ func main() {
 
 	// Create client stubs
 	postClient := pbPost.NewPostServiceClient(postConn)
+	feedClient := pbPost.NewFeedServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
@@ -56,7 +57,7 @@ func main() {
 	jwtManager := manager.NewJWTManager()
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(postClient)
+	postHandler := handler.NewPostHandler(postClient, feedClient, jwtManager)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
 
 	// Expose HTTP endpoint with graceful shutdown
