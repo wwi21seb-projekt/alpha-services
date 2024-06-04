@@ -32,8 +32,6 @@ github.com/go-playground/locales v0.14.1 h1:EWaQ/wswjilfKLTECiXz7Rh+3BjFhfDFKv/o
 github.com/go-playground/locales v0.14.1/go.mod h1:hxrqLVvrK65+Rwrd5Fc6F2O76J/NuW9t0sjnWqG1slY=
 github.com/go-playground/universal-translator v0.18.1 h1:Bcnm0ZwsGyWbCzImXv+pAJnYK9S473LQFuzCbDbfSFY=
 github.com/go-playground/universal-translator v0.18.1/go.mod h1:xekY+UJKNuX9WP91TpwSH2VMlDf28Uj24BCp08ZFTUY=
-github.com/go-playground/validator/v10 v10.20.0 h1:K9ISHbSaI0lyB2eWMPJo+kOS/FBExVwjEviJTixqxL8=
-github.com/go-playground/validator/v10 v10.20.0/go.mod h1:dbuPbCMFw/DrkbEynArYaCwl3amGuJotoKCe95atGMM=
 github.com/go-playground/validator/v10 v10.21.0 h1:4fZA11ovvtkdgaeev9RGWPgc1uj3H8W+rNYyH/ySBb0=
 github.com/go-playground/validator/v10 v10.21.0/go.mod h1:dbuPbCMFw/DrkbEynArYaCwl3amGuJotoKCe95atGMM=
 github.com/goccy/go-json v0.10.3 h1:KZ5WoDbxAIgm2HNbYckL0se1fHD6rz5j4ywS6ebzDqA=
@@ -101,10 +99,8 @@ github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.2.12 h1:9LC83zGrHhuUA9l16C9AHXAqEV/2wBQ4nkvumAE65EE=
 github.com/ugorji/go/codec v1.2.12/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
-github.com/wwi21seb-projekt/alpha-shared v0.11.2 h1:6DDiUgJJRxxYbSltqQnvDhWSGFuUYE/hmAxh/aT1ROY=
-github.com/wwi21seb-projekt/alpha-shared v0.11.2/go.mod h1:4hthFaUHYxVjfQ3oekwjaKHZr/TWfRcT5VyD6legDmY=
-github.com/wwi21seb-projekt/alpha-shared v0.14.2-0.20240602234540-ff4782ed5a45 h1:3m6D+Os/z+dOgenxyTfWQ5j0hZi2lbdlH3ek96P3HY8=
-github.com/wwi21seb-projekt/alpha-shared v0.14.2-0.20240602234540-ff4782ed5a45/go.mod h1:4hthFaUHYxVjfQ3oekwjaKHZr/TWfRcT5VyD6legDmY=
+github.com/wwi21seb-projekt/alpha-shared v0.15.0 h1:rhsM9nH+KsOy+kMukWJM0dAeugaclcQhFlnsZySzUzo=
+github.com/wwi21seb-projekt/alpha-shared v0.15.0/go.mod h1:4hthFaUHYxVjfQ3oekwjaKHZr/TWfRcT5VyD6legDmY=
 github.com/wwi21seb-projekt/errors-go v0.5.0 h1:GiPDZQU6swKlLIhavUiXOeiNGTEaw614ap3KTpxniPo=
 github.com/wwi21seb-projekt/errors-go v0.5.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
 golang.org/x/arch v0.0.0-20210923205945-b76863e36670/go.mod h1:5om86z9Hs0C8fWVUuoMHwpExlXzs5Tkyp9hOrfG7pp8=
