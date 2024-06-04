@@ -356,7 +356,7 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 
 	// Get the metadata from the context
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-	chatId := metadata.ValueFromIncomingContext(ctx, "chatId")[0]
+	chatId := metadata.ValueFromIncomingContext(ctx, string(keys.ChatIDKey))[0]
 
 	// Check if the chat stream is prepared
 	c.mu.Lock()
