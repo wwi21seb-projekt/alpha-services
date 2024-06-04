@@ -25,6 +25,15 @@ Every service uses shared libraries for common functionality, such as protos, da
 - [Protoc](https://grpc.io/docs/protoc-installation/) (only if you work on the API in `alpha-shared`)
 - [Atlas](https://atlasgo.io/getting-started)
 
+You need to have a `.env.local` file in the `k8s/overlays/local` directory with the following content:
+
+```env
+MAILGUN_API_KEY=getItFromLuca
+POSTGRES_PASSWORD=mypassword
+POSTGRES_USER=myuser
+POSTGRES_NAME=mydatabase
+```
+
 ### Setup
 
 1. Clone the repository with the GitHub CLI or via `git clone`.
