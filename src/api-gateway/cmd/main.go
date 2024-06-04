@@ -49,7 +49,7 @@ func main() {
 	defer userConn.Close()
 
 	// Set up a connection to the gRPC chat server
-	chatConn, err := grpc.NewClient("chat-service:50055", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	chatConn, err := grpc.NewClient(cfg.ChatServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
 	}

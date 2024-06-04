@@ -53,7 +53,7 @@ func NewChatHandler(jwtManager manager.JWTManager, chatClient pb.ChatServiceClie
 
 // Chat implements ChatHdlr.
 func (ch *ChatHandler) Chat(c *gin.Context) {
-	log.Info("Chat endpoint called, checking authorization...")
+	log.Info("ChatHandler: Chat endpoint called, checking authorization...")
 
 	// We use this as a workaround to handle auth, since browsers still
 	// don't support custom headers in websocket connections. Since the
@@ -86,7 +86,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 
 	chatId := c.Query("chatId")
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(string(keys.SubjectKey), username))
-	log.Info("Preparing chat stream...")
+	log.Info("ChatHandler: Preparing chat stream...")
 
 	if _, err = ch.chatServiceClient.PrepareChatStream(ctx, &pb.PrepareChatStreamRequest{
 		ChatId: chatId,
@@ -115,7 +115,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	ctx = metadata.AppendToOutgoingContext(ctx, "chatId", chatId)
-	log.Info("Creating chat stream...")
+	log.Info("ChatHandler: Creating chat stream...")
 	stream, err := ch.chatServiceClient.ChatStream(ctx)
 	if err != nil {
 		status := status.Convert(err)
@@ -140,7 +140,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	ch.upgrader.Subprotocols = []string{token}
 
 	// Upgrade to websocket
-	log.Info("Upgrading to websocket...")
+	log.Info("ChatHandler: Upgrading to websocket...")
 	conn, err := ch.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error("Failed to upgrade to websocket: ", err)
@@ -154,20 +154,23 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	// Register client in hub
 	client := ws.NewClient(ch.hub, conn, stream, username)
 	ch.hub.Register <- client
-	log.Info("Client registered, starting pumps...")
+	log.Info("ChatHandler: Client registered, starting pumps...")
+	// We wrap the pumps in a WaitGroup to ensure that we wait for all pumps to finish
+	// before returning from this function. This is necessary to ensure that we don't
+	// close the connection before all pumps have finished their cleanup.
 	var wg sync.WaitGroup
 	wg.Add(3)
 
 	go client.WritePump(&wg)
 	go client.ReadPump(&wg)
 	go client.GrpcReceivePump(&wg)
-	log.Info("Pumps started, waiting for client to disconnect...")
+	log.Info("ChatHandler: Pumps started, waiting for client to disconnect...")
 
 	<-client.Disconnect
 	log.Info("ChatHandler: Client disconnected, cleaning up...")
 	ch.hub.Unregister <- client
 
-	// Wait for all pumps to finish their cleanup before returning
+	// Wait for all pumps to finish and then return
 	wg.Wait()
 	log.Info("ChatHandler: Client cleanup finished")
 }

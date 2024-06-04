@@ -15,6 +15,7 @@ spec:
       containers:
         - name: api-gateway
           image: api-gateway-image
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
@@ -22,6 +23,8 @@ spec:
               value: "post-service:50051"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
+            - name: CHAT_SERVICE_URL
+              value: "chat-service:50055"
             - name: PORT
               value: "8080"
             - name: JWT_PRIVATE_KEY
