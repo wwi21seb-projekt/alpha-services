@@ -154,7 +154,7 @@ func (c *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.
 		From("messages m").
 		Join("chats c ON m.chat_id = c.chat_id").
 		Where("c.chat_id = ? AND (c.user1_name = ? OR c.user2_name = ?)", req.ChatId, username, username).
-		OrderBy("m.created_at").
+		OrderBy("m.created_at DESC").
 		Offset(uint64(req.Pagination.Offset)).
 		Limit(uint64(req.Pagination.Limit)).
 		ToSql()
@@ -315,7 +315,7 @@ func (c *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareChat
 	count := 0
 	if err := conn.QueryRow(ctx, query, args...).Scan(&count); err != nil {
 		log.Errorf("Error in conn.QueryRow: %v", err)
-		return nil, status.Error(codes.NotFound, "chat not found")
+		return nil, status.Error(codes.Internal, "chat not found")
 	}
 
 	// Check if chat was found
@@ -329,6 +329,14 @@ func (c *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareChat
 	defer c.mu.Unlock()
 	if _, ok := c.streams[req.GetChatId()]; !ok {
 		c.streams[req.GetChatId()] = &chatStream{}
+	} else {
+		// If the chat stream already exists, check if the user is already connected
+		for _, c := range c.streams[req.GetChatId()].connections {
+			if c.username == username {
+				// Return error, since we don't want multiple connections for the same user
+				return nil, status.Error(codes.AlreadyExists, "user already connected to chat")
+			}
+		}
 	}
 	openConn := &openConnection{
 		stream:   nil,
@@ -355,6 +363,7 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 	chatStream, ok := c.streams[chatId]
 	c.mu.Unlock()
 	if !ok {
+		log.Error("Chat stream not prepared")
 		return status.Error(codes.FailedPrecondition, "chat stream not prepared")
 	}
 
@@ -368,26 +377,28 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 	}
 
 	if conn == nil {
-		return status.Error(codes.NotFound, "user not found in chat")
+		log.Error("User not found in chat, prepare chat stream first")
+		return status.Error(codes.FailedPrecondition, "user not found in chat")
 	}
 
 	// Set the connection and mark it as active
 	conn.stream = stream
 	conn.active = true
-	log.Infof("Chat stream prepared for user %s", username)
+	log.Infof("Chat stream enabled for user %s", username)
 
 	// Run handler routine concurrently
-	go c.handleMessages(ctx, chatId, conn)
+	routineCtx, cancel := context.WithCancel(ctx)
+	go c.handleMessages(routineCtx, cancel, chatId, conn)
 
 	// Wait for the stream to close
-	<-ctx.Done()
-	log.Info("Chat stream closed")
+	<-routineCtx.Done()
+	log.Info("Chat stream closed, deleting connection from internal state")
 
 	// Delete client from state
 	c.mu.Lock()
 	for i, currentConn := range c.streams[chatId].connections {
 		if currentConn == conn {
-			c.streams[chatId].connections = append(c.streams[chatId].connections[:i], c.streams[chatId].connections[i+1:]...)
+			c.streams[chatId].connections = removeFromSlice(c.streams[chatId].connections, i)
 			break
 		}
 	}
@@ -395,11 +406,15 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 		delete(c.streams, chatId)
 	}
 	c.mu.Unlock()
+	log.Info("Connection deleted from internal state")
 
 	return nil
 }
 
-func (c *chatService) handleMessages(ctx context.Context, chatId string, conn *openConnection) {
+func (c *chatService) handleMessages(ctx context.Context, cancel context.CancelFunc, chatId string, conn *openConnection) {
+	defer cancel()
+	log.Infof("Starting message handler for user %s", conn.username)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -468,4 +483,9 @@ func (c *chatService) insertMessage(ctx context.Context, tx pgx.Tx, chatId, user
 
 	_, err := tx.Exec(ctx, query, args...)
 	return err
+}
+
+func removeFromSlice(slice []*openConnection, i int) []*openConnection {
+	slice[i] = slice[len(slice)-1]
+	return slice[:len(slice)-1]
 }

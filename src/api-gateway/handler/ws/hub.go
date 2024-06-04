@@ -34,22 +34,19 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.Register:
-			log.Info("Registering client")
+			log.Info("Chat hub: Registering client...")
 			h.clientsMu.Lock()
 			h.clients[client] = true
 			h.clientsMu.Unlock()
 		case client := <-h.Unregister:
-			log.Infof("Unregistering client %v", client.Username)
+			log.Infof("Chat hub: Unregistering client %v", client.username)
 
 			h.clientsMu.Lock()
 			if _, ok := h.clients[client]; ok {
 				// Clean up open connections and channels
-				close(client.Send)
-				close(client.Disconnect)
+				client.Close()
 				delete(h.clients, client)
-				client.Conn.Close()
-				client.Stream.CloseSend()
-				log.Infof("Client %s unregistered", client.Username)
+				log.Infof("Chat hub: Client %s unregistered", client.username)
 			}
 			h.clientsMu.Unlock()
 		}
@@ -64,11 +61,12 @@ func (h *Hub) Close() {
 	close(h.Register)
 
 	// Close all client connections
-	log.Info("Closing all open client connections...")
+	log.Info("Closing all open client connections from hub...")
 	h.clientsMu.Lock()
 	for client := range h.clients {
 		h.Unregister <- client
 	}
 	close(h.Unregister)
 	h.clientsMu.Unlock()
+	log.Info("All open client connections closed")
 }
