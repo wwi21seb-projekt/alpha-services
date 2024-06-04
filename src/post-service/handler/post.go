@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	"google.golang.org/grpc/codes"
@@ -56,17 +58,157 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 	}
 	defer conn.Release()
 
-	/*// Get the username from metadata
-	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+	baseQueryBuilder := psql.Select().
+		From("posts p")
 
-	dataQuery, dataArgs, _ := psql.Select().
-		Columns("p.post_id", "p.author_id", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
-		From("posts p").*/
+	if request.Author != "" {
+		baseQueryBuilder = baseQueryBuilder.Where(sq.Eq{"p.author_name": request.Author})
+	}
+
+	if request.Hashtag != "" {
+		baseQueryBuilder = baseQueryBuilder.Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
+			Where(sq.Eq{"h.hashtag_id_hashtags": request.Hashtag})
+	}
+
+	if request.LikedBy != "" {
+		baseQueryBuilder = baseQueryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
+			Where(sq.Eq{"l.username": request.LikedBy})
+	}
+
+	if request.CommentedBy != "" {
+		baseQueryBuilder = baseQueryBuilder.LeftJoin("comments c ON p.post_id = c.post_id").
+			Where(sq.Eq{"c.author_name": request.CommentedBy})
+	}
+
+	if request.Pagination.LastPostId != "" {
+		baseQueryBuilder = baseQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", request.Pagination.LastPostId)
+	}
+
+	// Create the count query
+	countQueryBuilder := baseQueryBuilder.
+		Columns("COUNT(*)")
+
+	countQueryString, countArgs, err := countQueryBuilder.ToSql()
+	if err != nil {
+		log.Errorf("countQueryBuilder.ToSql() failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to build count query: %v", err)
+	}
+
+	var totalRecords int
+	err = conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords)
+	if err != nil {
+		log.Errorf("conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords) failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to execute count query: %v", err)
+	}
+
+	dataQueryBuilder := baseQueryBuilder.
+		Columns("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+		OrderBy("p.created_at DESC").
+		Limit(uint64(request.Pagination.Limit))
+
+	dataQueryString, dataArgs, err := dataQueryBuilder.ToSql()
+	if err != nil {
+		log.Errorf("baseQueryBuilder.ToSql() failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to build query: %v", err)
+	}
+
+	log.Infof("dataQueryString: %v", dataQueryString)
+	log.Infof("dataArgs: %v", dataArgs)
+
+	log.Infof("countQueryString: %v", countQueryString)
+	log.Infof("countArgs: %v", countArgs)
+
+	rows, err := conn.Query(ctx, dataQueryString, dataArgs...)
+	if err != nil {
+		log.Errorf("conn.Query(ctx, dataQueryString, dataArgs...) failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to query data: %v", err)
+	}
+
+	var posts []*pb.Post
+	for rows.Next() {
+		post := &pb.Post{}
+		var createdAt time.Time
+		var longitude, latitude pgtype.Float8
+		var accuracy pgtype.Int4
+		var repostId pgtype.Text
+		if err = rows.Scan(&post.PostId, &post.Author.Username, &post.Content, &createdAt, &longitude, &latitude, &accuracy, &repostId); err != nil {
+			log.Errorf("rows.Scan failed: %v", err)
+			return nil, status.Errorf(codes.Internal, "Failed to scan row: %v", err)
+		}
+
+		if repostId.Valid {
+			post.Repost, _, err = ps.retrievePost(ctx, &pb.GetPostRequest{PostId: repostId.String}, conn)
+			if err != nil {
+				log.Errorf("ps.GetPost failed: %v", err)
+				return nil, status.Errorf(codes.Internal, "Failed to get repost: %v", err)
+			}
+		}
+
+		posts = append(posts, post)
+	}
+
 	return nil, nil
 }
 
 func (ps *postService) GetPost(ctx context.Context, request *pb.GetPostRequest) (*pb.Post, error) {
-	panic("implement me")
+	conn, err := ps.db.Pool.Acquire(ctx)
+	if err != nil {
+		log.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	post, repostId, err := ps.retrievePost(ctx, request, conn)
+	if err != nil {
+		log.Errorf("ps.retrievePost failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to retrieve post: %v", err)
+	}
+
+	// Get the repost (one level) if it exists
+	if repostId.Valid {
+		post.Repost, _, err = ps.retrievePost(ctx, &pb.GetPostRequest{PostId: repostId.String}, conn)
+		if err != nil {
+			log.Errorf("ps.GetPost failed: %v", err)
+			return nil, status.Errorf(codes.Internal, "Failed to get repost: %v", err)
+		}
+	}
+
+	return post, nil
+}
+
+func (ps *postService) retrievePost(ctx context.Context, request *pb.GetPostRequest, conn *pgxpool.Conn) (*pb.Post, pgtype.Text, error) {
+	query := psql.Select("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+		From("posts p").
+		Where(sq.Eq{"p.post_id": request.PostId})
+
+	queryString, args, err := query.ToSql()
+	if err != nil {
+		log.Errorf("query.ToSql() failed: %v", err)
+		return nil, pgtype.Text{}, status.Errorf(codes.Internal, "Failed to build query: %v", err)
+	}
+
+	row := conn.QueryRow(ctx, queryString, args...)
+
+	post := &pb.Post{}
+	var createdAt time.Time
+	var longitude, latitude pgtype.Float8
+	var accuracy pgtype.Int4
+	var repostId pgtype.Text
+	if err = row.Scan(&post.PostId, &post.Author.Username, &post.Content, &createdAt, &longitude, &latitude, &accuracy, &repostId); err != nil {
+		log.Errorf("row.Scan failed: %v", err)
+		return nil, pgtype.Text{}, status.Errorf(codes.Internal, "Failed to scan row: %v", err)
+	}
+	return post, repostId, nil
+}
+
+func getPostQuery(request *pb.GetPostRequest) sq.SelectBuilder {
+	query := psql.Select("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+		From("posts p").
+		Where(sq.Eq{"p.post_id": request.PostId})
+
+	query = query.Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts")
+
+	return query
 }
 
 func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.Post, error) {
@@ -167,4 +309,17 @@ func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *pb.P
 		}
 	}
 	return nil
+}
+
+func (ps *postService) GetGlobalFeed(ctx context.Context, request *pb.GetFeedRequest) (*pb.SearchPostsResponse, error) {
+	conn, err := ps.db.Pool.Acquire(ctx)
+	if err != nil {
+		log.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
+		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	// baseQueryBuilder := psql.Select().
+	// 	Columns("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+	return nil, nil
 }

@@ -101,6 +101,8 @@ github.com/ugorji/go/codec v1.2.12 h1:9LC83zGrHhuUA9l16C9AHXAqEV/2wBQ4nkvumAE65E
 github.com/ugorji/go/codec v1.2.12/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
 github.com/wwi21seb-projekt/alpha-shared v0.11.2 h1:6DDiUgJJRxxYbSltqQnvDhWSGFuUYE/hmAxh/aT1ROY=
 github.com/wwi21seb-projekt/alpha-shared v0.11.2/go.mod h1:4hthFaUHYxVjfQ3oekwjaKHZr/TWfRcT5VyD6legDmY=
+github.com/wwi21seb-projekt/alpha-shared v0.14.2 h1:Pbn1eVHRqp4h+5bXQwyt5nHyXa6lAepEy6w93CVHp1Q=
+github.com/wwi21seb-projekt/alpha-shared v0.14.2/go.mod h1:4hthFaUHYxVjfQ3oekwjaKHZr/TWfRcT5VyD6legDmY=
 github.com/wwi21seb-projekt/errors-go v0.5.0 h1:GiPDZQU6swKlLIhavUiXOeiNGTEaw614ap3KTpxniPo=
 github.com/wwi21seb-projekt/errors-go v0.5.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
 golang.org/x/arch v0.0.0-20210923205945-b76863e36670/go.mod h1:5om86z9Hs0C8fWVUuoMHwpExlXzs5Tkyp9hOrfG7pp8=

@@ -24,6 +24,7 @@ type PostHdlr interface {
 	GetComments(c *gin.Context)   // GET /posts/:postId/comments
 	CreateLike(c *gin.Context)    // POST /posts/:postId/likes
 	DeleteLike(c *gin.Context)    // DELETE /posts/:postId/likes
+	GetUserFeed(c *gin.Context)   // GET /users/:username/feed
 }
 
 type PostHandler struct {
@@ -127,7 +128,34 @@ func (h *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 }
 
 func (h *PostHandler) GetUserFeed(c *gin.Context) {
-	// to-do
+	user := c.Param("username")
+	lastPostId := c.Query("postId")
+	limit, err := strconv.Atoi(c.Query("limit"))
+	if err != nil {
+		limit = 10
+	}
+
+	if user == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
+		return
+	}
+
+	resp, err := h.postService.ListPosts(c, &pbPost.ListPostsRequest{
+		Author:      user,
+		LikedBy:     user,
+		CommentedBy: user,
+		Pagination: &pbPost.PostPagination{
+			LastPostId: lastPostId,
+			Limit:      int32(limit),
+		},
+	})
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *PostHandler) CreateComment(c *gin.Context) {
