@@ -83,7 +83,7 @@ func main() {
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
-	setupRoutes(unauthorizedRouter, postHandler, userHandler)
+	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
 	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler)
 
 	// Create a context that listens for termination signals
@@ -91,17 +91,16 @@ func main() {
 	defer stop()
 
 	// Run chat hub in a separate goroutine
-	go func() {
-		defer hub.Close()
-		hub.Run()
-	}()
+	go hub.Run()
 
-	// Run the server
+	// Run the gin server
 	log.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatalf("Server error: %v", err)
+		log.Errorf("Server error: %v", err)
 	}
 
+	// Close the chat hub
+	hub.Close()
 	log.Info("Server stopped gracefully")
 }
 
@@ -111,14 +110,14 @@ func setupCommonMiddleware(r *graceful.Graceful) {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "PATCH", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Accept, Authorization", contentTypeHeader},
+		AllowHeaders:  []string{"Accept, Authorization", contentTypeHeader, "Sec-WebSocket-Protocol"},
 		ExposeHeaders: []string{"Content-Length", contentTypeHeader, "X-Correlation-ID"},
 		MaxAge:        12 * time.Hour,
 	}))
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
 
@@ -128,6 +127,11 @@ func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userH
 	apiRouter.POST("users/refresh", middleware.ValidateAndSanitizeStruct(&schema.RefreshTokenRequest{}), userHandler.RefreshToken)
 	apiRouter.POST("/users/:username/activate", middleware.ValidateAndSanitizeStruct(&schema.ActivationRequest{}), userHandler.ActivateUser)
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
+
+	// Chat routes
+	// In theory this is an authorized endpoint as well, but our middleware does not support
+	// the workaround we use here, hence we declare it as unauthorized and handle it in the method.
+	apiRouter.GET("/chat", chatHandler.Chat)
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
@@ -151,7 +155,6 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	authRouter.DELETE("/posts/:postId/likes", postHandler.DeleteLike)
 
 	// Set chat routes
-	authRouter.GET("/chat", chatHandler.Chat)
 	authRouter.GET("/chats", chatHandler.GetChats)
 	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
 	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
