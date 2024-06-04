@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"bytes"
 	"sync"
 	"time"
 
@@ -36,11 +35,7 @@ const (
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
-)
-
-var (
-	newline = []byte{'\n'}
+	maxMessageSize = 256
 )
 
 func NewClient(hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamClient, username string) *Client {
@@ -77,9 +72,7 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 			log.Errorf("Failed to read message from client: %v", err)
 			return
 		}
-		// Trim any leading or trailing whitespace from the message and
-		// send it to the chat service via the open gRPC stream.
-		message = bytes.TrimSpace(message)
+		// Send it to the chat service via the open gRPC stream.
 		if err := c.sendMessageToChatService(message); err != nil {
 			log.Errorf("Failed to send message to chat service: %v", err)
 			return
@@ -146,13 +139,6 @@ func (c *Client) WritePump(wg *sync.WaitGroup) {
 				return
 			}
 			w.Write(message)
-
-			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write(newline)
-				w.Write(<-c.send)
-			}
 
 			if err := w.Close(); err != nil {
 				return

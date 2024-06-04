@@ -1,6 +1,9 @@
 resources:
   - ../../base
 
+patchesStrategicMerge:
+  - "local-patch.yaml"
+
 secretGenerator:
   - name: alpha-secrets
     envs:

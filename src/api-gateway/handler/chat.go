@@ -114,7 +114,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		return
 	}
 
-	ctx = metadata.AppendToOutgoingContext(ctx, "chatId", chatId)
+	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.ChatIDKey), chatId)
 	log.Info("ChatHandler: Creating chat stream...")
 	stream, err := ch.chatServiceClient.ChatStream(ctx)
 	if err != nil {
@@ -144,8 +144,8 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	conn, err := ch.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error("Failed to upgrade to websocket: ", err)
-		c.JSON(http.StatusUnauthorized, schema.ErrorDTO{
-			Error: goerrors.Unauthorized,
+		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
+			Error: goerrors.InternalServerError,
 		})
 		return
 	}
