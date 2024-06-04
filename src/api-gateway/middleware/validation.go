@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -144,6 +145,7 @@ func usernameValidation(fl validator.FieldLevel) bool {
 	pattern := `^[a-zA-Z0-9.\-_]+$`
 	match, err := regexp.MatchString(pattern, username)
 	if err != nil {
+		log.Debugf("Error matching username pattern: %v", err)
 		return false
 	}
 
@@ -173,6 +175,8 @@ func passwordValidation(fl validator.FieldLevel) bool {
 		}
 	}
 
+	log.Debugf("Password validation: upperLetter=%v, lowerLetter=%v, number=%v, specialChar=%v", upperLetter, lowerLetter, number, specialChar)
+
 	return upperLetter && lowerLetter && number && specialChar
 }
 
@@ -187,12 +191,14 @@ func postValidation(fl validator.FieldLevel) bool {
 // It ensures that the longitude, latitude, and accuracy fields contain valid values.
 func locationValidation(fl validator.FieldLevel) bool {
 	// Get the location struct from the field
-	location := fl.Field().Interface().(*schema.Location)
+	location := fl.Field().Interface().(schema.Location)
+
+	log.Printf("Location: %v", location)
 
 	// If location is empty, return true since it is not required
-	if location == nil {
+	/*if location == nil {
 		return true
-	}
+	}*/
 	// Check if the longitude is valid
 	if location.Longitude < -180 || location.Longitude > 180 {
 		return false

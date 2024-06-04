@@ -57,6 +57,7 @@ func main() {
 
 	// Create client stubs
 	postClient := pbPost.NewPostServiceClient(postConn)
+	feedClient := pbPost.NewFeedServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
@@ -69,7 +70,7 @@ func main() {
 	hub := ws.NewHub()
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(postClient)
+	postHandler := handler.NewPostHandler(postClient, feedClient, jwtManager)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
 

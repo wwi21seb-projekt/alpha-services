@@ -44,22 +44,25 @@ func (ps userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		Column("s1.subscription_id AS subscription_id").
 		Column("COUNT(s2.subscription_id) AS following_count").
 		Column("COUNT(s3.subscription_id) AS follower_count").
-		Column("COUNT(p.post_id) AS post_count").
 		From("users u").
 		LeftJoin("subscriptions s1 ON s1.subscribee_name = u.username AND s1.subscriber_name = ?", username).
 		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username").
 		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
-		LeftJoin("posts p ON p.author_name = u.username").
 		Where("u.username = ?", request.GetUsername()).
 		GroupBy("u.nickname", "u.status", "u.profile_picture_url", "s1.subscription_id").
 		ToSql()
 
 	log.Info("Querying user data")
-	response := &pb.GetUserResponse{}
-	if err = conn.QueryRow(ctx, query, args...).Scan(
-		&response.Nickname, &response.Status, &response.ProfilePictureUrl, &response.SubscriptionId,
-		&response.FollowingCount, &response.FollowerCount, &response.PostCount,
-	); err != nil {
+
+	var nickname, userStatus, profilePictureUrl, subscriptionId pgtype.Text
+	var followingCount, followerCount pgtype.Int4
+	// if err = conn.QueryRow(ctx, query, args...).Scan(
+	// 	&response.Nickname, &response.Status, &response.ProfilePictureUrl, &response.SubscriptionId,
+	// 	&response.FollowingCount, &response.FollowerCount,
+
+	err = conn.QueryRow(ctx, query, args...).Scan(
+		&nickname, &userStatus, &profilePictureUrl, &subscriptionId, &followingCount, &followerCount)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Infof("User not found")
 			return nil, status.Errorf(codes.NotFound, "User not found")
@@ -67,6 +70,17 @@ func (ps userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 
 		log.Errorf("Error in conn.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in conn.QueryRow: %v", err)
+	}
+
+	response := &pb.GetUserResponse{
+		Username:          request.Username,
+		Nickname:          nickname.String,
+		Status:            userStatus.String,
+		ProfilePictureUrl: profilePictureUrl.String,
+		SubscriptionId:    subscriptionId.String,
+		FollowingCount:    followingCount.Int32,
+		FollowerCount:     followerCount.Int32,
+		PostCount:         -1,
 	}
 
 	return response, nil
