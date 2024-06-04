@@ -141,7 +141,7 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
 	authRouter.PATCH("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangePasswordRequest{}), userHandler.ChangePassword)
 	authRouter.GET("/users/:username", userHandler.GetUser)
-	authRouter.GET("/users/:username/feed", userHandler.GetUserFeed)
+	authRouter.GET("/users/:username/feed", postHandler.GetUserFeed)
 	authRouter.POST("/subscriptions", middleware.ValidateAndSanitizeStruct(&schema.SubscriptionRequest{}), userHandler.CreateSubscription)
 	authRouter.DELETE("/subscriptions/:subscriptionId", userHandler.DeleteSubscription)
 	authRouter.GET("/subscriptions/:username", userHandler.GetSubscriptions)
