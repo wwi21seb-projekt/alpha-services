@@ -31,7 +31,7 @@ type TokenTypeEnum string
 
 const (
 	Activation TokenTypeEnum = "activation"
-	Password   TokenTypeEnum = "password"
+	Password   TokenTypeEnum = "password_reset"
 )
 
 type authenticationService struct {
@@ -411,9 +411,148 @@ func (as authenticationService) setNewRegistrationTokenAndSendMail(ctx context.C
 	return nil
 }
 
+func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.Context, tx pgx.Tx, username, email string) error {
+	// Generate a random 6-digit number
+	activationCode := generateToken()
+	tokenId := uuid.New()
+	expiresAt := time.Now().Add(24 * time.Hour)
+	query, args, _ := psql.Insert("tokens").
+		Columns("token_id", "token", "expires_at", "type", "username").
+		Values(tokenId, activationCode, expiresAt, "password_reset", username).
+		Suffix("ON CONFLICT (username, type) DO UPDATE SET token = ?, expires_at = ?", activationCode, expiresAt).
+		ToSql()
+
+	log.Println("Inserting reset password token into database...")
+	_, err := tx.Exec(ctx, query, args...)
+	if err != nil {
+		log.Errorf("Error in tx.Exec: %v", err)
+		return status.Errorf(codes.Internal, "failed to insert token: %v", err)
+	}
+
+	// Call mail service to send registration email
+	log.Println("Calling upstream mailClient.SendTokenMail...")
+	_, err = as.mailClient.SendTokenMail(ctx, &pbMail.TokenMailRequest{
+		Token: activationCode,
+		Type:  pbMail.TokenMailType_TOKENMAILTYPE_PASSWORD_RESET,
+		User: &pbMail.UserInformation{
+			Username: username,
+			Email:    email,
+		},
+	})
+	if err != nil {
+		log.Errorf("Error in upstream call mailClient.SendTokenMail: %v", err)
+		return status.Errorf(codes.Internal, "failed to send token mail: %v", err)
+	}
+
+	return nil
+}
+
 func generateToken() string {
 	rand.NewSource(time.Now().UnixNano())
 
 	// Generate a random 6-digit number
 	return strconv.Itoa(rand.Intn(900000) + 100000)
+}
+
+func (as authenticationService) ResetPassword(ctx context.Context, request *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
+	tx, err := as.db.Begin(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer as.db.Rollback(ctx, tx)
+
+	// Fetch the required user data
+	query, args, _ := psql.Select("email").
+		From("users").
+		Where("username = ?", request.GetUsername()).
+		ToSql()
+
+	var email string
+	log.Println("Querying database for user...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("User not found")
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+
+		log.Errorf("Error in tx.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
+	}
+
+	// Set a new activation token and send the email
+	if err := as.setNewPasswordResetTokenAndSendMail(ctx, tx, request.GetUsername(), email); err != nil {
+		log.Errorf("Error in as.setNewRegistrationTokenAndSendMail: %v", err)
+		return nil, err
+	}
+
+	if err := as.db.Commit(ctx, tx); err != nil {
+		log.Errorf("Error in tx.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return &pb.ResetPasswordResponse{Email: email}, nil
+}
+
+func (as authenticationService) SetPassword(ctx context.Context, request *pb.SetPasswordRequest) (*pbCommon.Empty, error) {
+	tx, err := as.db.Begin(ctx)
+	if err != nil {
+		log.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer as.db.Rollback(ctx, tx)
+
+	// Check if the token is valid and not expired
+	query, args, _ := psql.Delete("tokens").
+		Where("token = ? AND type = ? AND username = ?", request.GetToken(), Password, request.GetUsername()).
+		Suffix("RETURNING expires_at").
+		ToSql()
+	log.Printf("Query: %s", query)
+	log.Printf("Args: %v", args)
+
+	var expiresAt time.Time
+	log.Println("Checking token in database...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&expiresAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("Token not found")
+			return nil, status.Error(codes.NotFound, "token not found")
+		}
+
+		log.Errorf("Error in tx.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to verify token: %v", err)
+	}
+
+	if time.Now().After(expiresAt) {
+		log.Error("Token expired")
+		return nil, status.Error(codes.DeadlineExceeded, "token expired")
+	}
+
+	// Hash the new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.GetNewPassword()), bcrypt.DefaultCost)
+	if err != nil {
+		log.Errorf("Error in bcrypt.GenerateFromPassword: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to hash password: %v", err)
+	}
+
+	// Update the user's password
+	query, args, _ = psql.Update("users").
+		Set("password", hashedPassword).
+		Where("username = ?", request.GetUsername()).
+		ToSql()
+
+	log.Println("Updating password in database...")
+	_, err = tx.Exec(ctx, query, args...)
+	if err != nil {
+		log.Errorf("Error in tx.Exec: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to update password: %v", err)
+	}
+
+	if err := as.db.Commit(ctx, tx); err != nil {
+		log.Errorf("Error in tx.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return &pbCommon.Empty{}, nil
 }

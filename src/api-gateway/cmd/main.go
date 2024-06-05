@@ -107,6 +107,8 @@ func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userH
 	apiRouter.POST("users/refresh", middleware.ValidateAndSanitizeStruct(&schema.RefreshTokenRequest{}), userHandler.RefreshToken)
 	apiRouter.POST("/users/:username/activate", middleware.ValidateAndSanitizeStruct(&schema.ActivationRequest{}), userHandler.ActivateUser)
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
+	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
+	apiRouter.PATCH("/users/:username/set-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
