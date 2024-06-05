@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
+	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
 type Client struct {
@@ -37,7 +38,11 @@ const (
 	pongWait = 60 * time.Second
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
-	// Maximum message size allowed from peer.
+	// We only accept messages with 256 bytes of content, but we allow for
+	// some overhead in our readLimit, so we can return a meaningful error
+	// message to the client, instead of just closing the connection.
+	readLimit = 4096
+	// Maximum message size that we handle in the chat service
 	maxMessageSize = 256
 )
 
@@ -66,7 +71,7 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 		log.Infof("ReadPump: Stopping read pump for client %s", c.username)
 	}()
 	log.Infof("ReadPump: Starting read pump for client %s", c.username)
-	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadLimit(readLimit)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
@@ -76,6 +81,20 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 			log.Errorf("Failed to read message from client: %v", err)
 			return
 		}
+
+		// Check if the message exceeds the maximum message size or is empty
+		if len(message) == 0 || len(message) > maxMessageSize {
+			log.Errorf("Message exceeds maximum message size or is empty")
+			errorMessage := schema.ErrorDTO{Error: goerrors.BadRequest}
+			errorMessageBytes, err := errorMessage.MarshalJSON()
+			if err != nil {
+				log.Errorf("Failed to marshal error message: %v", err)
+				return
+			}
+			c.send <- errorMessageBytes
+			continue
+		}
+
 		// Send it to the chat service via the open gRPC stream.
 		if err := c.sendMessageToChatService(message); err != nil {
 			log.Errorf("Failed to send message to chat service: %v", err)
@@ -127,7 +146,8 @@ func (c *Client) WritePump(wg *sync.WaitGroup) {
 	log.Infof("WritePump: Starting write pump for client %s", c.username)
 	for {
 		select {
-		// We receive messages from the gRPC stream and write them to the websocket connection
+		// We receive two types of messages on the send channel: actual messages to be sent to the client
+		// and errors that we want to send to the client. We handle both cases here.
 		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
@@ -138,11 +158,6 @@ func (c *Client) WritePump(wg *sync.WaitGroup) {
 
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				return
-			}
-
-			wsMesage := schema.Message{}
-			if err := wsMesage.UnmarshalJSON(message); err != nil {
 				return
 			}
 			w.Write(message)

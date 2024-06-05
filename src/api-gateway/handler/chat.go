@@ -100,14 +100,6 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		if code == codes.NotFound {
 			log.Warn("Chat not found")
 			returnErr = goerrors.ChatNotFound
-		} else if code == codes.AlreadyExists {
-			log.Warn("User is already connected to this chat")
-			returnErr = &goerrors.CustomError{
-				HttpStatus: http.StatusTeapot,
-				Title:      "AlreadyConnected",
-				Code:       "ERR-999",
-				Message:    "User is already connected to this chat",
-			}
 		}
 
 		log.Error("Error in ch.chatServiceClient.PrepareChatStream: ", err)
