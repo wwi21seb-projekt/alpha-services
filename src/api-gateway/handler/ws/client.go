@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/microcosm-cc/bluemonday"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
@@ -25,6 +26,8 @@ type Client struct {
 	Disconnect chan bool
 	// This ensures that the disconnect channel is only closed once
 	once sync.Once
+	// Sanitizer for HTML content in messages
+	policy *bluemonday.Policy
 }
 
 const (
@@ -47,6 +50,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamC
 		send:       make(chan []byte, 256),
 		Disconnect: make(chan bool),
 		once:       sync.Once{},
+		policy:     bluemonday.UGCPolicy(),
 	}
 }
 
@@ -88,6 +92,9 @@ func (c *Client) sendMessageToChatService(message []byte) error {
 		log.Errorf("Failed to unmarshal message: %v", err)
 		return err
 	}
+
+	// Sanitize the message content
+	unmarshalledMessage.Content = c.policy.Sanitize(unmarshalledMessage.Content)
 
 	grpcMessage := &pb.ChatMessage{
 		Username:  c.username,

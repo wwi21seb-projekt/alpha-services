@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
@@ -132,6 +133,9 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	// In theory this is an authorized endpoint as well, but our middleware does not support
 	// the workaround we use here, hence we declare it as unauthorized and handle it in the method.
 	apiRouter.GET("/chat", chatHandler.Chat)
+
+	// Metrics route
+	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
@@ -158,5 +162,4 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	authRouter.GET("/chats", chatHandler.GetChats)
 	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
 	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
-
 }
