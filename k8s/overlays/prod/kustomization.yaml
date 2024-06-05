@@ -17,3 +17,6 @@ images:
   - name: mail-service-image
     newName: ghcr.io/wwi21seb-projekt/alpha-services/mail-service
     newTag: latest
+  - name: chat-service-image
+    newName: ghcr.io/wwi21seb-projekt/alpha-services/chat-service
+    newTag: latest
