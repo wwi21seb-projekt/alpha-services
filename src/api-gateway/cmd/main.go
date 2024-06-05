@@ -138,6 +138,8 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 
 	// Metrics route
 	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
+	apiRouter.PATCH("/users/:username/reset-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
