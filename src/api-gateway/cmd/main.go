@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/graceful"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.com/gin-contrib/graceful"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
@@ -138,8 +137,6 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 
 	// Metrics route
 	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
-	apiRouter.PATCH("/users/:username/reset-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
 }
 
 func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {

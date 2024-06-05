@@ -51,8 +51,16 @@ type chatStream struct {
 // openConnection is a struct that holds the connection to the client
 // it contains metadata about the connection and the connection itself
 type openConnection struct {
-	stream   pb.ChatService_ChatStreamServer
-	active   bool
+	// streams is a list of all the streams that are connected to the chat
+	// from the same user. we allow multiple connections from the same user
+	// to allow the user to connect from multiple devices. but we need to
+	// save all the references to the streams to be able to send messages
+	// to all of them
+	streams []pb.ChatService_ChatStreamServer
+	// active is used to determine if the connection is active or not. it's used to
+	// determine if the connection was prepared but not yet connected
+	active bool
+	// username is the username of the user that is connected to the chat
 	username string
 }
 
@@ -329,19 +337,20 @@ func (c *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareChat
 	defer c.mu.Unlock()
 	if _, ok := c.streams[req.GetChatId()]; !ok {
 		c.streams[req.GetChatId()] = &chatStream{}
-	} else {
-		// If the chat stream already exists, check if the user is already connected
-		for _, c := range c.streams[req.GetChatId()].connections {
-			if c.username == username {
-				// Return error, since we don't want multiple connections for the same user
-				return nil, status.Error(codes.AlreadyExists, "user already connected to chat")
-			}
+	}
+
+	// Check if we already have a connection for the user in the chat, if yes
+	// we can return early, since the connection is already prepared
+	for _, conn := range c.streams[req.GetChatId()].connections {
+		if conn.username == username {
+			return &pbCommon.Empty{}, nil
 		}
 	}
+
 	openConn := &openConnection{
-		stream:   nil,
-		active:   false,
 		username: username,
+		streams:  nil,
+		active:   false,
 	}
 
 	c.streams[req.GetChatId()].connections = append(c.streams[req.GetChatId()].connections, openConn)
@@ -382,27 +391,41 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 	}
 
 	// Set the connection and mark it as active
-	conn.stream = stream
+	conn.streams = append(conn.streams, stream)
 	conn.active = true
 	log.Infof("Chat stream enabled for user %s", username)
 
 	// Run handler routine concurrently
 	routineCtx, cancel := context.WithCancel(ctx)
-	go c.handleMessages(routineCtx, cancel, chatId, conn)
+	go c.handleMessages(routineCtx, cancel, chatId, conn, stream)
 
 	// Wait for the stream to close
 	<-routineCtx.Done()
 	log.Info("Chat stream closed, deleting connection from internal state")
 
-	// Delete client from state
+	// Delete current connection from the internal client state. If there are no more connections
+	// for the chat, delete the chat from the internal state as well
 	c.mu.Lock()
 	for i, currentConn := range c.streams[chatId].connections {
+		// Check for the correct connection in the state
 		if currentConn == conn {
-			c.streams[chatId].connections = removeFromSlice(c.streams[chatId].connections, i)
-			break
+			for j, currentStream := range conn.streams {
+				// We also need to check for the correct stream in the pool of streams for the connection
+				if currentStream == stream {
+					log.Infof("Deleting connection %d from chat %s", i, chatId)
+					conn.streams = removeSingleStream(conn.streams, j)
+					break
+				}
+			}
+
+			if len(conn.streams) == 0 {
+				log.Infof("No more streams for user %s in chat %s, deleting connection", username, chatId)
+				c.streams[chatId].connections = removeSingleConnection(c.streams[chatId].connections, i)
+			}
 		}
 	}
 	if len(c.streams[chatId].connections) == 0 {
+		log.Infof("No more connections for chat %s, deleting chat", chatId)
 		delete(c.streams, chatId)
 	}
 	c.mu.Unlock()
@@ -411,7 +434,7 @@ func (c *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
 	return nil
 }
 
-func (c *chatService) handleMessages(ctx context.Context, cancel context.CancelFunc, chatId string, conn *openConnection) {
+func (c *chatService) handleMessages(ctx context.Context, cancel context.CancelFunc, chatId string, conn *openConnection, stream pb.ChatService_ChatStreamServer) {
 	defer cancel()
 	log.Infof("Starting message handler for user %s", conn.username)
 
@@ -421,7 +444,7 @@ func (c *chatService) handleMessages(ctx context.Context, cancel context.CancelF
 			return
 		default:
 			// Receive message from the client
-			message, err := conn.stream.Recv()
+			message, err := stream.Recv()
 			if err != nil {
 				log.Errorf("Failed to receive message from client: %v", err)
 				return
@@ -451,15 +474,19 @@ func (c *chatService) handleMessages(ctx context.Context, cancel context.CancelF
 				return
 			}
 
-			// Send the message to all other connections
+			// Send the message to all open connections from the chat. This
+			// also includes the sender, so the client knows that the message
+			// was sent successfully.
 			c.mu.RLock()
 			error := false
 			for _, c := range c.streams[chatId].connections {
-				if c.active && c.username != conn.username {
-					if err := c.stream.Send(message); err != nil {
-						log.Errorf("Failed to send message to client: %v", err)
-						error = true
-						break
+				if c.active {
+					for _, stream := range c.streams {
+						if err := stream.Send(message); err != nil {
+							log.Errorf("Failed to send message to client: %v", err)
+							error = true
+							break
+						}
 					}
 				}
 			}
@@ -485,7 +512,12 @@ func (c *chatService) insertMessage(ctx context.Context, tx pgx.Tx, chatId, user
 	return err
 }
 
-func removeFromSlice(slice []*openConnection, i int) []*openConnection {
+func removeSingleConnection(slice []*openConnection, i int) []*openConnection {
+	slice[i] = slice[len(slice)-1]
+	return slice[:len(slice)-1]
+}
+
+func removeSingleStream(slice []pb.ChatService_ChatStreamServer, i int) []pb.ChatService_ChatStreamServer {
 	slice[i] = slice[len(slice)-1]
 	return slice[:len(slice)-1]
 }
