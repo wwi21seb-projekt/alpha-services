@@ -28,16 +28,18 @@ type PostHdlr interface {
 }
 
 type PostHandler struct {
-	postService pbPost.PostServiceClient
-	feedService pbPost.FeedServiceClient
-	jwtManager  manager.JWTManager
+	postService        pbPost.PostServiceClient
+	feedService        pbPost.FeedServiceClient
+	jwtManager         manager.JWTManager
+	interactionService pbPost.InteractionServiceClient
 }
 
-func NewPostHandler(client pbPost.PostServiceClient, feedService pbPost.FeedServiceClient, jwtManager manager.JWTManager) PostHdlr {
+func NewPostHandler(client pbPost.PostServiceClient, feedService pbPost.FeedServiceClient, jwtManager manager.JWTManager, interactionService pbPost.InteractionServiceClient) PostHdlr {
 	return &PostHandler{
-		postService: client,
-		feedService: feedService,
-		jwtManager:  jwtManager,
+		postService:        client,
+		feedService:        feedService,
+		jwtManager:         jwtManager,
+		interactionService: interactionService,
 	}
 }
 
@@ -140,6 +142,9 @@ func (h *PostHandler) GetUserFeed(c *gin.Context) {
 		return
 	}
 
+	// Save the username to context
+	c.Set("username", user)
+
 	resp, err := h.postService.ListPosts(c, &pbPost.ListPostsRequest{
 		Author:      user,
 		LikedBy:     user,
@@ -167,9 +172,25 @@ func (h *PostHandler) GetComments(c *gin.Context) {
 }
 
 func (h *PostHandler) CreateLike(c *gin.Context) {
-	// to-do
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	_, err := h.interactionService.LikePost(ctx, &pbPost.LikePostRequest{PostId: c.Param("postId")})
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
 }
 
 func (h *PostHandler) DeleteLike(c *gin.Context) {
-	// to-do
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	_, err := h.interactionService.UnlikePost(ctx, &pbPost.UnlikePostRequest{PostId: c.Param("postId")})
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
 }

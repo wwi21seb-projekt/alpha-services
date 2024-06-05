@@ -6,9 +6,11 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0
+	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/wwi21seb-projekt/alpha-shared v0.14.1
+	github.com/wwi21seb-projekt/alpha-shared v0.15.1-0.20240604234813-45a9725d6ed3
+	github.com/wwi21seb-projekt/errors-go v0.5.0
 	google.golang.org/grpc v1.64.0
 )
 
