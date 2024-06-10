@@ -9,6 +9,7 @@ require (
 	github.com/go-playground/validator/v10 v10.21.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/microcosm-cc/bluemonday v1.0.26
+	github.com/prometheus/client_golang v1.19.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/truemail-rb/truemail-go v1.1.3
 	github.com/wwi21seb-projekt/alpha-shared v0.18.0
@@ -19,7 +20,7 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/prometheus/client_golang v1.19.1 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
@@ -43,7 +44,6 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.58 // indirect

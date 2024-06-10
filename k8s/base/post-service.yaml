@@ -15,6 +15,7 @@ spec:
       containers:
         - name: post-service
           image: post-service-image
+          imagePullPolicy: Always
           ports:
             - containerPort: 50051
           env:
