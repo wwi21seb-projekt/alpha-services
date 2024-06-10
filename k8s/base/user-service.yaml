@@ -53,6 +53,13 @@ spec:
   selector:
     app: user-service
   ports:
+    # gRPC server
     - protocol: TCP
+      name: grpc
       port: 50052
       targetPort: 50052
+    # metrics server
+    - protocol: TCP
+      name: metrics
+      port: 2112
+      targetPort: 2112
