@@ -83,7 +83,7 @@ func main() {
 	postHandler := handler.NewPostHandler(postClient)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
-	notificationHandler := handler.NewNotificationHandler(notificationClient, pushSubscriptionClient, userClient, subscriptionClient)
+	notificationHandler := handler.NewNotificationHandler(notificationClient, pushSubscriptionClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
