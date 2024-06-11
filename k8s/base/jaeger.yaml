@@ -10,3 +10,17 @@ spec:
       limits:
         cpu: 100m
         memory: 128Mi
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: jaeger-operator-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: jaeger-operator
+    namespace: observability
+roleRef:
+  kind: Role
+  name: jaeger-operator
+  apiGroup: rbac.authorization.k8s.io

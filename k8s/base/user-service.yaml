@@ -24,7 +24,7 @@ spec:
             - name: MAIL_SERVICE_URL
               value: "mail-service:50053"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otc-container:4317"
+              value: "http://otel-collector:4317"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT
@@ -65,3 +65,16 @@ spec:
       name: metrics
       port: 2112
       targetPort: 2112
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: user-service
+  labels:
+    team: team-alpha
+spec:
+  selector:
+    matchLabels:
+      app: user-service
+  endpoints:
+    - port: web

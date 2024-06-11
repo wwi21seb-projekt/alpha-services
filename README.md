@@ -54,7 +54,8 @@ git clone <ssh or https link>
 3. Setup ingress-nginx with `kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/release-1.10/deploy/static/provider/kind/deploy.yaml`
 4. Create a separate namespace for the observability tools with `kubectl create namespace observability`.
 5. Install the jaeger operator with `kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.57.0/jaeger-operator.yaml -n observability`
-6. Install the prometheus operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/v0.102.0/download/opentelemetry-operator.yaml`
+6. Install the prometheus operator with `kubectl create -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.74.0/bundle.yaml`
+7. Install the otel operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.102.0/opentelemetry-operator.yaml`
 
 #### Running the services
 

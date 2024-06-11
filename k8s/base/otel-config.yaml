@@ -19,9 +19,9 @@ spec:
 
     exporters:
       otlp/jaeger:
-        endpoint: "http://jaeger.observability.svc.cluster.local:4317"
+        endpoint: "jaeger-collector.observability.svc.cluster.local:4317"
       otlp/prometheus:
-        endpoint: "http://prometheus:8889"
+        endpoint: "prometheus:8889"
       debug: {}
 
     service:

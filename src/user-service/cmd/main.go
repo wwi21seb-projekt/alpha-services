@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
@@ -97,8 +98,19 @@ func InitTelemetry(ctx context.Context) (func(context.Context) error, error) {
 
 func main() {
 	// Initialize logger
-	logger := zap.Must(zap.NewProduction()).Sugar()
-	defer logger.Sync()
+	var logger *zap.SugaredLogger
+	if os.Getenv("ENVIRONMENT") == "production" {
+		logger = zap.Must(zap.NewProduction()).Sugar()
+	} else {
+		logger = zap.Must(zap.NewDevelopment()).Sugar()
+
+	}
+	defer func(logger *zap.SugaredLogger) {
+		err := logger.Sync()
+		if err != nil {
+			logger.Fatal("Failed to sync logger", zap.Error(err))
+		}
+	}(logger)
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -164,7 +176,16 @@ func main() {
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-	// Create server
+	// Init telemetry and create server
+	shutdown, err := InitTelemetry(context.Background())
+	if err != nil {
+		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			logger.Fatal("Failed to shutdown telemetry", zap.Error(err))
+		}
+	}()
 	otelgrpc.NewServerHandler()
 
 	var serverOpts []grpc.ServerOption
