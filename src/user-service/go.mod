@@ -10,7 +10,7 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/wwi21seb-projekt/alpha-shared v0.11.2
+	github.com/wwi21seb-projekt/alpha-shared v0.18.1-0.20240611135637-c7e53e02b2cd
 	go.opentelemetry.io/otel/trace v1.27.0
 	golang.org/x/crypto v0.23.0
 	google.golang.org/grpc v1.64.0

@@ -19,9 +19,13 @@ spec:
 
     exporters:
       otlp/jaeger:
-        endpoint: "jaeger-collector.observability.svc.cluster.local:4317"
+        endpoint: "jaeger-collector.observability:4317"
+        tls:
+          insecure: true
       otlp/prometheus:
         endpoint: "prometheus:8889"
+        tls:
+          insecure: true
       debug: {}
 
     service:
