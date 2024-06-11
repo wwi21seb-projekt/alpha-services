@@ -79,7 +79,7 @@ func InitTelemetry(ctx context.Context) (func(context.Context) error, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	// Create prometheus exporter
-	metricExp, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithInsecure())
+	metricExp, err := otlpmetricgrpc.New(ctx)
 	if err != nil {
 		return nil, err
 	}

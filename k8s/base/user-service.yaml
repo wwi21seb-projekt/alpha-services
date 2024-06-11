@@ -23,6 +23,8 @@ spec:
               value: "50052"
             - name: MAIL_SERVICE_URL
               value: "mail-service:50053"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otc-container:4317"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT

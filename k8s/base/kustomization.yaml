@@ -5,3 +5,6 @@ resources:
   - user-service.yaml
   - mail-service.yaml
   - postgres.yaml
+  - jaeger.yaml
+  - rolebindings.yaml
+  - otel-config.yaml

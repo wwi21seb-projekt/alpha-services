@@ -19,6 +19,7 @@ import (
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -26,6 +27,7 @@ import (
 )
 
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+var tracer = otel.GetTracerProvider().Tracer("user-service")
 
 type TokenTypeEnum string
 
@@ -280,6 +282,9 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 }
 
 func (as authenticationService) LoginUser(ctx context.Context, request *pb.LoginUserRequest) (*pbCommon.Empty, error) {
+	ctx, span := tracer.Start(ctx, "LoginUser")
+	defer span.End()
+
 	conn, err := as.db.Pool.Acquire(ctx)
 	if err != nil {
 		log.Errorf("Error in db.Pool.Acquire: %v", err)
