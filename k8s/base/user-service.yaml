@@ -21,10 +21,12 @@ spec:
           env:
             - name: PORT
               value: "50052"
-            - name: MAIL_SERVICE_URL
-              value: "mail-service:50053"
+            - name: ENVIRONMENT
+              value: "production"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4317"
+            - name: MAIL_SERVICE_URL
+              value: "mail-service:50053"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT

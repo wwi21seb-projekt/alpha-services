@@ -21,6 +21,10 @@ spec:
           env:
             - name: PORT
               value: "50055"
+            - name: ENVIRONMENT
+              value: "production"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
@@ -54,5 +58,24 @@ spec:
     app: chat-service
   ports:
     - protocol: TCP
+      name: grpc
       port: 50055
       targetPort: 50055
+    # metrics server
+    - protocol: TCP
+      name: metrics
+      port: 2112
+      targetPort: 2112
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: chat-service
+  labels:
+    team: team-alpha
+spec:
+  selector:
+    matchLabels:
+      app: chat-service
+  endpoints:
+    - port: web

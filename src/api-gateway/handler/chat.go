@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
@@ -18,6 +17,9 @@ import (
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -31,13 +33,15 @@ type ChatHdlr interface {
 }
 
 type ChatHandler struct {
+	logger            *zap.SugaredLogger
+	tracer            trace.Tracer
 	jwtManager        manager.JWTManager
 	upgrader          websocket.Upgrader
 	chatServiceClient pb.ChatServiceClient
 	hub               *ws.Hub
 }
 
-func NewChatHandler(jwtManager manager.JWTManager, chatClient pb.ChatServiceClient, hub *ws.Hub) ChatHdlr {
+func NewChatHandler(logger *zap.SugaredLogger, jwtManager manager.JWTManager, chatClient pb.ChatServiceClient, hub *ws.Hub) ChatHdlr {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -47,6 +51,8 @@ func NewChatHandler(jwtManager manager.JWTManager, chatClient pb.ChatServiceClie
 	}
 
 	return &ChatHandler{
+		logger:            logger,
+		tracer:            otel.GetTracerProvider().Tracer("chat-handler"),
 		jwtManager:        jwtManager,
 		chatServiceClient: chatClient,
 		upgrader:          upgrader,
@@ -56,7 +62,8 @@ func NewChatHandler(jwtManager manager.JWTManager, chatClient pb.ChatServiceClie
 
 // Chat implements ChatHdlr.
 func (ch *ChatHandler) Chat(c *gin.Context) {
-	log.Info("ChatHandler: Chat endpoint called, checking authorization...")
+	ch.logger.Info("ChatHandler: Chat endpoint called, checking authorization...")
+	_, checkAuthSpan := ch.tracer.Start(c.Request.Context(), "CheckAuthorization")
 
 	// We use this as a workaround to handle auth, since browsers still
 	// don't support custom headers in websocket connections. Since the
@@ -71,7 +78,9 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	if token == "" {
-		log.Error("No authorization header provided")
+		checkAuthSpan.AddEvent("No authorization header provided")
+		checkAuthSpan.End()
+		ch.logger.Error("No authorization header provided")
 		c.JSON(http.StatusUnauthorized, schema.ErrorDTO{
 			Error: goerrors.Unauthorized,
 		})
@@ -80,16 +89,19 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 
 	username, err := ch.jwtManager.Verify(token)
 	if err != nil {
-		log.Error("Failed to verify token: ", err)
+		checkAuthSpan.AddEvent("Failed to verify token")
+		checkAuthSpan.End()
+		ch.logger.Error("Failed to verify token: ", err)
 		c.JSON(http.StatusUnauthorized, schema.ErrorDTO{
 			Error: goerrors.Unauthorized,
 		})
 		return
 	}
+	checkAuthSpan.End()
 
 	chatId := c.Query("chatId")
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(string(keys.SubjectKey), username))
-	log.Info("ChatHandler: Preparing chat stream...")
+	ctx := metadata.NewOutgoingContext(c.Request.Context(), metadata.Pairs(string(keys.SubjectKey), username))
+	ch.logger.Info("ChatHandler: Preparing chat stream...")
 
 	if _, err = ch.chatServiceClient.PrepareChatStream(ctx, &pb.PrepareChatStreamRequest{
 		ChatId: chatId,
@@ -98,11 +110,11 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		returnErr := goerrors.InternalServerError
 
 		if code == codes.NotFound {
-			log.Warn("Chat not found")
+			ch.logger.Warn("Chat not found")
 			returnErr = goerrors.ChatNotFound
 		}
 
-		log.Error("Error in ch.chatServiceClient.PrepareChatStream: ", err)
+		ch.logger.Error("Error in ch.chatServiceClient.PrepareChatStream: ", err)
 		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -110,18 +122,18 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	}
 
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.ChatIDKey), chatId)
-	log.Info("ChatHandler: Creating chat stream...")
+	ch.logger.Info("ChatHandler: Creating chat stream...")
 	stream, err := ch.chatServiceClient.ChatStream(ctx)
 	if err != nil {
 		status := status.Convert(err)
 		returnErr := goerrors.InternalServerError
 
 		if status.Code() == codes.FailedPrecondition {
-			log.Error("Chat stream not prepared")
+			ch.logger.Error("Chat stream not prepared")
 			returnErr = goerrors.BadRequest
 		}
 
-		log.Error("Failed to create chat stream: ", err)
+		ch.logger.Error("Failed to create chat stream: ", err)
 		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -132,24 +144,28 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	// We need to pass the token in the websocket connection into the subprotocols, because
 	// the client expects it there. This is a consequence of the browser not allowing custom
 	// headers in websocket connections.
+	_, upgradeSpan := ch.tracer.Start(ctx, "UpgradeToWebsocket")
 	ch.upgrader.Subprotocols = []string{token}
 
 	// Upgrade to websocket
-	log.Info("ChatHandler: Upgrading to websocket...")
+	ch.logger.Info("ChatHandler: Upgrading to websocket...")
 	conn, err := ch.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Error("Failed to upgrade to websocket: ", err)
+		upgradeSpan.AddEvent("Failed to upgrade to websocket")
+		upgradeSpan.End()
+		ch.logger.Error("Failed to upgrade to websocket: ", err)
 		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
 	}
+	upgradeSpan.End()
 	defer conn.Close()
 
 	// Register client in hub
 	client := ws.NewClient(ch.hub, conn, stream, username)
 	ch.hub.Register <- client
-	log.Info("ChatHandler: Client registered, starting pumps...")
+	ch.logger.Info("ChatHandler: Client registered, starting pumps...")
 	// We wrap the pumps in a WaitGroup to ensure that we wait for all pumps to finish
 	// before returning from this function. This is necessary to ensure that we don't
 	// close the connection before all pumps have finished their cleanup.
@@ -159,15 +175,15 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	go client.WritePump(&wg)
 	go client.ReadPump(&wg)
 	go client.GrpcReceivePump(&wg)
-	log.Info("ChatHandler: Pumps started, waiting for client to disconnect...")
+	ch.logger.Info("ChatHandler: Pumps started, waiting for client to disconnect...")
 
 	<-client.Disconnect
-	log.Info("ChatHandler: Client disconnected, cleaning up...")
+	ch.logger.Info("ChatHandler: Client disconnected, cleaning up...")
 	ch.hub.Unregister <- client
 
 	// Wait for all pumps to finish and then return
 	wg.Wait()
-	log.Info("ChatHandler: Client cleanup finished")
+	ch.logger.Info("ChatHandler: Client cleanup finished")
 }
 
 // CreateChat implements ChatHdlr.
@@ -194,7 +210,7 @@ func (ch *ChatHandler) CreateChat(c *gin.Context) {
 			returnErr = goerrors.BadRequest
 		}
 
-		log.Error("Error in ch.chatServiceClient.CreateChat: ", err)
+		ch.logger.Error("Error in ch.chatServiceClient.CreateChat: ", err)
 		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -232,7 +248,7 @@ func (ch *ChatHandler) GetChat(c *gin.Context) {
 			returnErr = goerrors.ChatNotFound
 		}
 
-		log.Error("Error in ch.chatServiceClient.GetChat: ", err)
+		ch.logger.Error("Error in ch.chatServiceClient.GetChat: ", err)
 		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -264,7 +280,7 @@ func (ch *ChatHandler) GetChats(c *gin.Context) {
 
 	resp, err := ch.chatServiceClient.ListChats(ctx, &pbCommon.Empty{})
 	if err != nil {
-		log.Error("Error in ch.chatServiceClient.ListChats: ", err)
+		ch.logger.Error("Error in ch.chatServiceClient.ListChats: ", err)
 		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})

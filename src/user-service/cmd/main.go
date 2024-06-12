@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
@@ -113,12 +111,10 @@ func main() {
 
 	// Start metrics server
 	go func() {
-		http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{
-			ErrorHandling:     promhttp.ContinueOnError,
-			EnableOpenMetrics: true,
-		}))
-		logger.Info("Metrics server started on port 2112")
-		http.ListenAndServe(":2112", nil)
+		err := tracing.StartMetricsServer(logger, reg)
+		if err != nil {
+			logger.Fatal("Failed to start metrics server", zap.Error(err))
+		}
 	}()
 
 	// Start server

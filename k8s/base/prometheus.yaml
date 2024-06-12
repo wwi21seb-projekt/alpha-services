@@ -18,11 +18,13 @@ metadata:
   name: prometheus
 spec:
   selector:
-      prometheus: prometheus
+    prometheus: prometheus
   ports:
-      - protocol: TCP
-        port: 9090
-        targetPort: 9090
+    - name: web
+      port: 9090
+      targetPort: web
+  sessionAffinity: ClientIP
+
 ---
 apiVersion: v1
 kind: ServiceAccount

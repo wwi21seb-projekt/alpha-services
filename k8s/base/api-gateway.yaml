@@ -19,14 +19,18 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: PORT
+              value: "8080"
+            - name: ENVIRONMENT
+              value: "production"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
             - name: POST_SERVICE_URL
               value: "post-service:50051"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: CHAT_SERVICE_URL
               value: "chat-service:50055"
-            - name: PORT
-              value: "8080"
             - name: JWT_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
@@ -47,8 +51,14 @@ spec:
     app: api-gateway
   ports:
     - protocol: TCP
+      name: web
       port: 80
       targetPort: 8080
+    # metrics server
+    - protocol: TCP
+      name: metrics
+      port: 2112
+      targetPort: 2112
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

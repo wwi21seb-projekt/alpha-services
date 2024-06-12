@@ -21,6 +21,10 @@ spec:
           env:
             - name: PORT
               value: "50053"
+            - name: ENVIRONMENT
+              value: "production"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
             - name: MAILGUN_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -36,5 +40,24 @@ spec:
     app: mail-service
   ports:
     - protocol: TCP
+      name: grpc
       port: 50053
       targetPort: 50053
+    # metrics server
+    - protocol: TCP
+      name: metrics
+      port: 2112
+      targetPort: 2112
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mail-service
+  labels:
+    team: team-alpha
+spec:
+  selector:
+    matchLabels:
+      app: mail-service
+  endpoints:
+    - port: web
