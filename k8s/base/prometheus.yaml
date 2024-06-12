@@ -2,20 +2,41 @@ apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 metadata:
   name: prometheus
+  namespace: observability
 spec:
-  serviceAccountName: prometheus
+  serviceAccountName: prometheus-service-account
+  serviceMonitorNamespaceSelector: {}
   serviceMonitorSelector:
     matchLabels:
       team: team-alpha
+  logLevel: info
+  replicas: 1
   resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
     requests:
-      memory: 400Mi
+      cpu: 1
+      memory: 2Gi
+  storage:
+    volumeClaimTemplate:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: prometheus-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
   enableAdminAPI: false
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
+  namespace: observability
 spec:
   selector:
     prometheus: prometheus
@@ -24,22 +45,21 @@ spec:
       port: 9090
       targetPort: web
   sessionAffinity: ClientIP
-
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: prometheus
+  name: prometheus-service-account
+  namespace: observability
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: prometheus
+  name: prometheus-cluster-role
 rules:
   - apiGroups: [""]
     resources:
       - nodes
-      - nodes/metrics
       - services
       - endpoints
       - pods
@@ -48,23 +68,25 @@ rules:
     resources:
       - configmaps
     verbs: ["get"]
-  - apiGroups:
-      - networking.k8s.io
+  - apiGroups: [""]
     resources:
-      - ingresses
-    verbs: ["get", "list", "watch"]
-  - nonResourceURLs: ["/metrics"]
-    verbs: ["get"]
+      - nodes/metrics
+    verbs:
+      - get
+  - nonResourceURLs:
+      - "/metrics"
+    verbs:
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: prometheus
+  name: prometheus-cluster-role-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: prometheus
+  name: prometheus-cluster-role
 subjects:
   - kind: ServiceAccount
-    name: prometheus
-    namespace: default
+    name: prometheus-service-account
+    namespace: observability

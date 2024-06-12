@@ -57,6 +57,8 @@ git clone <ssh or https link>
 6. Install the prometheus operator with `kubectl create -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.74.0/bundle.yaml`
 7. Install the otel operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.102.0/opentelemetry-operator.yaml`
 
+> Note: It can take up to a few minutes for each step to complete. Ensure that `cert-manager` and `ingress-nginx` are running before proceeding with the rest of the steps.
+
 #### Running the services
 
 1. Run `skaffold dev` in the root directory to start the services and database.

@@ -78,4 +78,4 @@ spec:
     matchLabels:
       app: post-service
   endpoints:
-    - port: web
+    - port: metrics

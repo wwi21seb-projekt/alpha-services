@@ -18,6 +18,7 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 50053
+            - containerPort: 2112
           env:
             - name: PORT
               value: "50053"
@@ -60,4 +61,6 @@ spec:
     matchLabels:
       app: mail-service
   endpoints:
-    - port: web
+    - port: metrics
+      interval: 15s
+      path: /metrics
