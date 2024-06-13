@@ -36,6 +36,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mail-service
+  labels:
+    app: mail-service
 spec:
   selector:
     app: mail-service
@@ -56,11 +58,11 @@ metadata:
   name: mail-service
   labels:
     team: team-alpha
+    release: alpha-kube-prometheus-stack
 spec:
   selector:
     matchLabels:
       app: mail-service
   endpoints:
     - port: metrics
-      interval: 15s
       path: /metrics

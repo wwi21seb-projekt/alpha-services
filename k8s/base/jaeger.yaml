@@ -19,7 +19,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: jaeger-operator
-    namespace: observability
+    namespace: default
 roleRef:
   kind: Role
   name: jaeger-operator

@@ -20,9 +20,9 @@ Every service uses shared libraries for common functionality, such as protos, da
 
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kubectl and Kind](https://kubernetes.io/docs/tasks/tools/)
+- [Helm](https://helm.sh/docs/intro/install/)
 - [Skaffold](https://skaffold.dev/docs/install/)
 - [Go](https://golang.org/doc/install)
-- [Protoc](https://grpc.io/docs/protoc-installation/) (only if you work on the API in `alpha-shared`)
 - [Atlas](https://atlasgo.io/getting-started)
 
 You need to have a `.env.local` file in the `k8s/overlays/local` directory with the following content:
@@ -52,9 +52,15 @@ git clone <ssh or https link>
 1. Create a local Kubernetes cluster with `kind create cluster --name <some_name> --config k8s/overlays/local/kind-config.yaml`.
 2. Install cert-manager with `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.6.3/cert-manager.yaml`
 3. Setup ingress-nginx with `kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/release-1.10/deploy/static/provider/kind/deploy.yaml`
-4. Create a separate namespace for the observability tools with `kubectl create namespace observability`.
+4. Create the `observability` namespace with `kubectl create namespace observability`, since the jaeger operator requires it.
 5. Install the jaeger operator with `kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.57.0/jaeger-operator.yaml -n observability`
-6. Install the prometheus operator with `kubectl create -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.74.0/bundle.yaml`
+6. Install the kube-prometheus-stack with:
+
+```sh
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install alpha-kube-prometheus-stack prometheus-community/kube-prometheus-stack --version 60.1.0
+```
+
 7. Install the otel operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.102.0/opentelemetry-operator.yaml`
 
 > Note: It can take up to a few minutes for each step to complete. Ensure that `cert-manager` and `ingress-nginx` are running before proceeding with the rest of the steps.

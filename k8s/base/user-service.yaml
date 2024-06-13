@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
+  labels:
+    app: user-service
 spec:
   replicas: 1
   selector:
@@ -54,6 +56,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: user-service
+  labels:
+    app: user-service
 spec:
   selector:
     app: user-service
@@ -75,13 +79,14 @@ metadata:
   name: user-service
   labels:
     team: team-alpha
+    release: alpha-kube-prometheus-stack
 spec:
   selector:
     matchLabels:
       app: user-service
   endpoints:
-    - port: metrics
-      interval: 15s
-      path: /metrics
+    - path: /metrics
+      port: metrics
   namespaceSelector:
-    any: true
+    matchNames:
+      - default

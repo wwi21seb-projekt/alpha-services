@@ -6,5 +6,4 @@ resources:
   - mail-service.yaml
   - postgres.yaml
   - jaeger.yaml
-  - prometheus.yaml
   - otel-config.yaml

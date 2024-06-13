@@ -53,6 +53,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: chat-service
+  labels:
+    app: chat-service
 spec:
   selector:
     app: chat-service
@@ -73,6 +75,7 @@ metadata:
   name: chat-service
   labels:
     team: team-alpha
+    release: alpha-kube-prometheus-stack
 spec:
   selector:
     matchLabels:
