@@ -16,6 +16,9 @@ spec:
       containers:
         - name: postgres
           image: postgres:16
+          resources:
+            limits:
+              memory: 1000Mi
           env:
             - name: POSTGRES_DB
               valueFrom:

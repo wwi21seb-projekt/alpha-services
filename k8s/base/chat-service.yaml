@@ -16,6 +16,9 @@ spec:
         - name: chat-service
           image: chat-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50055
           env:

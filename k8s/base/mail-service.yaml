@@ -16,6 +16,9 @@ spec:
         - name: mail-service
           image: mail-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50053
             - containerPort: 2112

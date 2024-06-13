@@ -16,6 +16,9 @@ spec:
         - name: notification-service
           image: notification-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50054
           env:

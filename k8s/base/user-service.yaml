@@ -18,6 +18,9 @@ spec:
         - name: user-service
           image: user-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50052
             - containerPort: 2112

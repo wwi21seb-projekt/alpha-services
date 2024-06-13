@@ -16,6 +16,9 @@ spec:
         - name: post-service
           image: post-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50051
           env:
