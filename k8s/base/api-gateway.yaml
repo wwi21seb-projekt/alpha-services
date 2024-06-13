@@ -31,6 +31,8 @@ spec:
               value: "user-service:50052"
             - name: CHAT_SERVICE_URL
               value: "chat-service:50055"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "notification-service:50054"
             - name: JWT_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:

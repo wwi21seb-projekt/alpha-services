@@ -14,6 +14,7 @@ import (
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -90,20 +91,27 @@ func main() {
 	grpcServer := grpc.NewServer(tracing.NewServerOptions(srvMetrics, zapLogger, &panicCounter)...)
 
 	// Create client connections
-	mailConn, err := grpc.NewClient(cfg.ServiceEndpoints.MailServiceURL, tracing.NewClientOptions(clMetrics, zapLogger)...)
+	dialOpts := tracing.NewClientOptions(clMetrics, zapLogger)
+
+	mailConn, err := grpc.NewClient(cfg.ServiceEndpoints.MailServiceURL, dialOpts...)
 	if err != nil {
 		logger.Fatal("Failed to connect to mail service", zap.Error(err))
+	}
+	notificationConn, err := grpc.NewClient(cfg.ServiceEndpoints.NotificationServiceURL, dialOpts...)
+	if err != nil {
+		logger.Fatal("Failed to connect to notification service", zap.Error(err))
 	}
 
 	// Create client stubs
 	mailClient := pbMail.NewMailServiceClient(mailConn)
+	notificationClient := pbNotification.NewNotificationServiceClient(notificationConn)
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
 	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database))
-	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database))
+	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient))
 
 	// Initialize server metrics

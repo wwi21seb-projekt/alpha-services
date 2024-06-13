@@ -41,7 +41,6 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
 	}
 	defer conn.Release()
-
 	// Get authenticated user from metadata
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 

@@ -32,7 +32,11 @@ MAILGUN_API_KEY=getItFromLuca
 POSTGRES_PASSWORD=mypassword
 POSTGRES_USER=myuser
 POSTGRES_NAME=mydatabase
+VAPID_PUBLIC_KEY=yourVapidPublicKey
+VAPID_PRIVATE_KEY=yourVapidPrivateKey
 ```
+
+You can get the `MAILGUN_API_KEY` from Luca, the `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` can be generated on the following website for development purposes: [VAPID Key Generator](https://web-push-codelab.glitch.me/).
 
 ### Setup
 

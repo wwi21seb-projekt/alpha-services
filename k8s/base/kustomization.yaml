@@ -6,3 +6,4 @@ resources:
   - mail-service.yaml
   - postgres.yaml
   - otel-config.yaml
+  - notification-service.yaml

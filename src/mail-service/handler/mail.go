@@ -126,8 +126,8 @@ func (ms *mailService) sendMail(ctx context.Context, email hermes.Email, subject
 	return nil
 }
 
-func (ms mailService) generateRegistrationMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
-	ctx, span := ms.tracer.Start(ctx, "generateRegistrationMail")
+func (ms *mailService) generateRegistrationMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
+	_, span := ms.tracer.Start(ctx, "generateRegistrationMail")
 	defer span.End()
 
 	return hermes.Email{
@@ -150,8 +150,8 @@ func (ms mailService) generateRegistrationMail(ctx context.Context, request *pb.
 	}
 }
 
-func (ms mailService) generatePasswordResetMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
-	ctx, span := ms.tracer.Start(ctx, "generatePasswordResetMail")
+func (ms *mailService) generatePasswordResetMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
+	_, span := ms.tracer.Start(ctx, "generatePasswordResetMail")
 	defer span.End()
 
 	return hermes.Email{

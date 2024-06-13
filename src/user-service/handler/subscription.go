@@ -13,6 +13,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -23,17 +24,19 @@ import (
 )
 
 type subscriptionService struct {
-	logger *zap.SugaredLogger
-	tracer trace.Tracer
-	db     *db.DB
+	logger             *zap.SugaredLogger
+	tracer             trace.Tracer
+	db                 *db.DB
+	notificationClient pbNotification.NotificationServiceClient
 	pb.UnimplementedSubscriptionServiceServer
 }
 
-func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB) pb.SubscriptionServiceServer {
+func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificiationClient pbNotification.NotificationServiceClient) pb.SubscriptionServiceServer {
 	return &subscriptionService{
-		logger: logger,
-		tracer: otel.GetTracerProvider().Tracer("subscription-service"),
-		db:     database,
+		logger:             logger,
+		tracer:             otel.GetTracerProvider().Tracer("subscription-service"),
+		db:                 database,
+		notificationClient: notificiationClient,
 	}
 }
 
@@ -98,6 +101,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 
 	if userCount == 0 {
 		ss.logger.Errorf("user %s does not exist", request.GetUsername())
+		selectSpan.End()
 		return nil, status.Errorf(codes.NotFound, "user does not exist")
 	}
 
@@ -201,6 +205,16 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	if err = ss.db.Commit(ctx, tx); err != nil {
 		ss.logger.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
+	}
+
+	// Send a notification to the user that they have been subscribed to
+	sendNotificationRequest := pbNotification.SendNotificationRequest{
+		NotificationType: "follow",
+		Sender:           request.GetFollowedUsername(),
+	}
+
+	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {
+		ss.logger.Error("Error in ss.notificationClient.SendNotification", zap.Error(err))
 	}
 
 	return &pb.CreateSubscriptionResponse{
