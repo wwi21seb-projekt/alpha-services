@@ -16,11 +16,16 @@ spec:
         - name: notification-service
           image: notification-service-image
           imagePullPolicy: Always
+          resources:
+            limits:
+              memory: 100Mi
           ports:
             - containerPort: 50054
           env:
             - name: PORT
               value: "50054"
+            - name: ENVIROMENT
+              value: "production"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
