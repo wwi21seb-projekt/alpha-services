@@ -5,5 +5,4 @@ resources:
   - user-service.yaml
   - mail-service.yaml
   - postgres.yaml
-  - jaeger.yaml
   - otel-config.yaml

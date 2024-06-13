@@ -1,9 +1,9 @@
 resources:
   - ../../base
-  - traefik.yaml
+  - ingress.yaml
 
 patchesStrategicMerge:
-  - jaeger-patch.yaml
+  - prod-patch.yaml
 
 namespace: prod
 

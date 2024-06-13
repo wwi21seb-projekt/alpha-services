@@ -4,12 +4,12 @@ metadata:
   name: jaeger
   namespace: observability
 spec:
-  collector:
-    maxReplicas: 1
-    resources:
-      limits:
-        cpu: 100m
-        memory: 128Mi
+  # collector:
+  #   maxReplicas: 1
+  #   resources:
+  #     limits:
+  #       cpu: 100m
+  #       memory: 128Mi
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
