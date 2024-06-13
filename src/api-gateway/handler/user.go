@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
@@ -13,6 +12,9 @@ import (
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -34,14 +36,18 @@ type UserHdlr interface {
 }
 
 type UserHandler struct {
+	logger              *zap.SugaredLogger
+	tracer              trace.Tracer
 	authService         pb.AuthenticationServiceClient
 	profileService      pb.UserServiceClient
 	subscriptionService pb.SubscriptionServiceClient
 	jwtManager          manager.JWTManager
 }
 
-func NewUserHandler(authService pb.AuthenticationServiceClient, profileService pb.UserServiceClient, subscriptionService pb.SubscriptionServiceClient, jwtManager manager.JWTManager) *UserHandler {
+func NewUserHandler(logger *zap.SugaredLogger, authService pb.AuthenticationServiceClient, profileService pb.UserServiceClient, subscriptionService pb.SubscriptionServiceClient, jwtManager manager.JWTManager) *UserHandler {
 	return &UserHandler{
+		logger:              logger,
+		tracer:              otel.GetTracerProvider().Tracer("user-handler"),
 		authService:         authService,
 		profileService:      profileService,
 		subscriptionService: subscriptionService,
@@ -51,8 +57,9 @@ func NewUserHandler(authService pb.AuthenticationServiceClient, profileService p
 
 func (uh *UserHandler) RegisterUser(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RegistrationRequest)
+	ctx := c.Request.Context()
 
-	user, err := uh.authService.RegisterUser(c, &pb.RegisterUserRequest{
+	user, err := uh.authService.RegisterUser(ctx, &pb.RegisterUserRequest{
 		Username: req.Username,
 		Password: req.Password,
 		Nickname: req.Nickname,
@@ -74,7 +81,7 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 			returnErr = goerrors.EmailUnreachable
 		}
 
-		log.Printf("Error in upstream call uh.authService.RegisterUser: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.authService.RegisterUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -87,8 +94,9 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	username := c.Query("username")
 	offset, limit := helper.ExtractPaginationFromContext(c)
+	ctx := c.Request.Context()
 
-	users, err := uh.profileService.SearchUsers(c, &pb.SearchUsersRequest{
+	users, err := uh.profileService.SearchUsers(ctx, &pb.SearchUsersRequest{
 		Query: username,
 		Pagination: &pbCommon.PaginationRequest{
 			Offset: int32(offset),
@@ -96,7 +104,7 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 		},
 	})
 	if err != nil {
-		log.Printf("Error in upstream call uh.profileService.SearchUsers: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.profileService.SearchUsers: %v", err)
 		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
@@ -131,7 +139,7 @@ func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		log.Printf("Error in upstream call uh.profileService.UpdateUser: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.profileService.UpdateUser: %v", err)
 		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
 		return
 	}
@@ -160,7 +168,7 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 			returnErr = goerrors.InvalidCredentials
 		}
 
-		log.Printf("Error in upstream call uh.authService.UpdatePassword: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.authService.UpdatePassword: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -172,8 +180,9 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 
 func (uh *UserHandler) LoginUser(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.LoginRequest)
+	ctx := c.Request.Context()
 
-	_, err := uh.authService.LoginUser(c, &pb.LoginUserRequest{
+	_, err := uh.authService.LoginUser(ctx, &pb.LoginUserRequest{
 		Username: req.Username,
 		Password: req.Password,
 	})
@@ -189,16 +198,19 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		log.Printf("Error in upstream call uh.authService.LoginUser: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.authService.LoginUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
 		return
 	}
 
+	_, generateTokenSpan := uh.tracer.Start(ctx, "GenerateToken")
+	defer generateTokenSpan.End()
 	tokenPair, err := uh.jwtManager.Generate(req.Username)
 	if err != nil {
-		log.Printf("Error in jwtManager.Generate: %v", err)
+		generateTokenSpan.AddEvent("Error in jwtManager.Generate")
+		uh.logger.Errorf("Error in jwtManager.Generate: %v", err)
 		c.JSON(goerrors.InternalServerError.HttpStatus, goerrors.InternalServerError)
 		return
 	}
@@ -208,19 +220,26 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 
 func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RefreshTokenRequest)
+	_, verifySpan := uh.tracer.Start(c.Request.Context(), "VerifyToken")
 
 	_, err := uh.jwtManager.Verify(req.RefreshToken)
 	if err != nil {
-		log.Printf("Error in jwtManager.Verify: %v", err)
+		verifySpan.AddEvent("Error in jwtManager.Verify")
+		verifySpan.End()
+		uh.logger.Errorf("Error in jwtManager.Verify: %v", err)
 		c.JSON(goerrors.InvalidToken.HttpStatus, &schema.ErrorDTO{
 			Error: goerrors.InvalidToken,
 		})
 		return
 	}
+	verifySpan.End()
 
+	_, refreshSpan := uh.tracer.Start(c.Request.Context(), "RefreshToken")
+	defer refreshSpan.End()
 	tokenPair, err := uh.jwtManager.Refresh(req.RefreshToken)
 	if err != nil {
-		log.Printf("Error in jwtManager.Refresh: %v", err)
+		refreshSpan.AddEvent("Error in jwtManager.Refresh")
+		uh.logger.Errorf("Error in jwtManager.Refresh: %v", err)
 		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
@@ -232,9 +251,10 @@ func (uh *UserHandler) RefreshToken(c *gin.Context) {
 func (uh *UserHandler) ActivateUser(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.ActivationRequest)
 	username := c.Param("username")
+	ctx := c.Request.Context()
 
-	log.Printf("Calling upstream service uh.authService.ActivateUser with username %s and token %s", username, req.Token)
-	_, err := uh.authService.ActivateUser(c, &pb.ActivateUserRequest{
+	uh.logger.Infof("Calling upstream service uh.authService.ActivateUser with username %s and token %s", username, req.Token)
+	_, err := uh.authService.ActivateUser(ctx, &pb.ActivateUserRequest{
 		Username: username,
 		Token:    req.Token,
 	})
@@ -254,31 +274,35 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 			returnErr = goerrors.UserAlreadyActivated
 		}
 
-		log.Printf("Error in upstream call uh.authService.ActivateUser: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.authService.ActivateUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
 		return
 	}
 
+	_, generateSpan := uh.tracer.Start(ctx, "GenerateToken")
+	defer generateSpan.End()
 	tokenPair, err := uh.jwtManager.Generate(username)
 	if err != nil {
-		log.Printf("Error in jwtManager.Generate: %v", err)
+		generateSpan.AddEvent("Error in jwtManager.Generate")
+		uh.logger.Errorf("Error in jwtManager.Generate: %v", err)
 		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
 	}
 
-	log.Printf("User %s activated", username)
+	uh.logger.Infof("User %s activated", username)
 	c.JSON(200, tokenPair)
 }
 
 func (uh *UserHandler) ResendToken(c *gin.Context) {
 	username := c.Param("username")
+	ctx := c.Request.Context()
 
-	log.Printf("Calling upstream service uh.authService.ResendToken with username %s", username)
-	_, err := uh.authService.ResendActivationEmail(c, &pb.ResendActivationEmailRequest{
+	uh.logger.Infof("Calling upstream service uh.authService.ResendToken with username %s", username)
+	_, err := uh.authService.ResendActivationEmail(ctx, &pb.ResendActivationEmailRequest{
 		Username: username,
 	})
 	if err != nil {
@@ -291,7 +315,7 @@ func (uh *UserHandler) ResendToken(c *gin.Context) {
 			returnErr = goerrors.UserAlreadyActivated
 		}
 
-		log.Printf("Error in upstream call uh.authService.ResendToken: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.authService.ResendToken: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -322,7 +346,7 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		log.Printf("Error in upstream call uh.profileService.GetUser: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.profileService.GetUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -364,7 +388,7 @@ func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 			returnErr = goerrors.SubscriptionSelfFollow
 		}
 
-		log.Printf("Error in upstream call uh.subscriptionService.CreateSubscription: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.subscriptionService.CreateSubscription: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -400,7 +424,7 @@ func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 			returnErr = goerrors.UnsubscribeForbidden
 		}
 
-		log.Printf("Error in upstream call uh.subscriptionService.DeleteSubscription: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.subscriptionService.DeleteSubscription: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -438,7 +462,7 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		log.Printf("Error in upstream call uh.subscriptionService.GetSubscriptions: %v", err)
+		uh.logger.Errorf("Error in upstream call uh.subscriptionService.GetSubscriptions: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -455,7 +479,7 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	}
 
 	// Convert subscriptions to schema.Subscription
-	log.Printf("Converting %d subscriptions to schema.UserSubscription", len(subscriptions.Subscriptions))
+	uh.logger.Infof("Converting %d subscriptions to schema.UserSubscription", len(subscriptions.Subscriptions))
 	for i, sub := range subscriptions.Subscriptions {
 		response.Subscriptions[i] = *helper.TransformUserSubscription(sub)
 	}

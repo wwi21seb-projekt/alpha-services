@@ -45,7 +45,7 @@ func SetClaimsMiddleware(jwtManager manager.JWTManager) gin.HandlerFunc {
 		c.Set(string(keys.SubjectKey), username)
 		c.Set(string(keys.TokenKey), tokenString)
 		// Create initial gRPC metadata with the username
-		ctx := metadata.AppendToOutgoingContext(c, string(keys.SubjectKey), username)
+		ctx := metadata.AppendToOutgoingContext(c.Request.Context(), string(keys.SubjectKey), username)
 		c.Set(string(GRPCMetadataKey), ctx)
 		c.Next()
 	}

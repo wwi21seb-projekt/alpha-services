@@ -10,25 +10,31 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
 type subscriptionService struct {
+	logger             *zap.SugaredLogger
+	tracer             trace.Tracer
 	db                 *db.DB
 	notificationClient pbNotification.NotificationServiceClient
 	pb.UnimplementedSubscriptionServiceServer
 }
 
-func NewSubscriptionServer(database *db.DB, notificiationClient pbNotification.NotificationServiceClient) pb.SubscriptionServiceServer {
+func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificiationClient pbNotification.NotificationServiceClient) pb.SubscriptionServiceServer {
 	return &subscriptionService{
+		logger:             logger,
+		tracer:             otel.GetTracerProvider().Tracer("subscription-service"),
 		db:                 database,
 		notificationClient: notificiationClient,
 	}
@@ -37,7 +43,7 @@ func NewSubscriptionServer(database *db.DB, notificiationClient pbNotification.N
 func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
 	conn, err := ss.db.Pool.Acquire(ctx)
 	if err != nil {
-		log.Errorf("Error in ss.db.Pool.Acquire: %v", err)
+		ss.logger.Errorf("Error in ss.db.Pool.Acquire: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
 	}
 	defer conn.Release()
@@ -55,6 +61,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	// For every subscription we also want to know if the authenticated user is subscribed to the subscribee and vice
 	// versa. Table S1 is the current subscriber or subscribee in the loop of the user we are querying, S2 represents
 	// the subscription of the current user in the loop to the authenticated user and S3 the other way around.
+	selectCtx, selectSpan := ss.tracer.Start(ctx, "GetSubscriptionsData")
 	dataQuery, dataArgs, _ := psql.Select().
 		Columns("s2.subscription_id", "s3.subscription_id").
 		Columns("u.username", "u.nickname", "u.profile_picture_url").
@@ -77,40 +84,46 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 		Where("u.username = ?", request.GetUsername()).
 		ToSql()
 
-	log.Info("Starting batch request for subscription data")
+	ss.logger.Info("Starting batch request for subscription data")
 	batch := &pgx.Batch{}
 	batch.Queue(countQuery, countArgs...)
 	batch.Queue(dataQuery, dataArgs...)
-	br := conn.SendBatch(ctx, batch)
+	br := conn.SendBatch(selectCtx, batch)
 	defer br.Close()
 
 	// Get the first batch result which contains the total number of subscriptions and the user count
 	var subscriptionCount, userCount int32
 	if err = br.QueryRow().Scan(&subscriptionCount, &userCount); err != nil {
-		log.Errorf("Error in br.QueryRow: %v", err)
+		ss.logger.Errorf("Error in br.QueryRow: %v", err)
+		selectSpan.End()
 		return nil, status.Errorf(codes.Internal, "Error in br.QueryRow: %v", err)
 	}
 
 	if userCount == 0 {
-		log.Errorf("user %s does not exist", request.GetUsername())
+		ss.logger.Errorf("user %s does not exist", request.GetUsername())
+		selectSpan.End()
 		return nil, status.Errorf(codes.NotFound, "user does not exist")
 	}
 
 	// Get the second batch result which contains the subscription data
 	rows, err := br.Query()
 	if err != nil {
-		log.Errorf("Error in br.Query: %v", err)
+		ss.logger.Errorf("Error in br.Query: %v", err)
+		selectSpan.End()
 		return nil, status.Errorf(codes.Internal, "Error in br.Query: %v", err)
 	}
+	selectSpan.End()
 	defer rows.Close()
 
 	response := &pb.ListSubscriptionsResponse{}
+	_, scanRowsSpan := ss.tracer.Start(ctx, "ScanSubscriptionRows")
+	defer scanRowsSpan.End() // we defer the span here, since we'll return after the loop anyway
 	for rows.Next() {
 		subscription := &pb.Subscription{}
 		var followedId, followerId, nickname, profilePictureUrl pgtype.Text
 
 		if err = rows.Scan(&followedId, &followerId, &subscription.Username, &nickname, &profilePictureUrl); err != nil {
-			log.Errorf("Error in rows.Scan: %v", err)
+			ss.logger.Errorf("Error in rows.Scan: %v", err)
 			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
 		}
 
@@ -142,7 +155,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 func (ss subscriptionService) CreateSubscription(ctx context.Context, request *pb.CreateSubscriptionRequest) (*pb.CreateSubscriptionResponse, error) {
 	tx, err := ss.db.Begin(ctx)
 	if err != nil {
-		log.Errorf("Error in ss.db.Begin: %v", err)
+		ss.logger.Errorf("Error in ss.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
 	}
 	defer ss.db.Rollback(ctx, tx)
@@ -152,12 +165,13 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 
 	// Return early error if the user tries to subscribe to themselves
 	if username == request.GetFollowedUsername() {
-		log.Errorf("user %s tried to subscribe to themselves", username)
+		ss.logger.Errorf("user %s tried to subscribe to themselves", username)
 		return nil, status.Errorf(codes.InvalidArgument, "user %s tried to subscribe to themselves", username)
 	}
 
 	// Create the subscription within the transaction, we'll get a constraint violation if the
 	// user does not exist or the subscription already exists
+	insertCtx, insertSpan := ss.tracer.Start(ctx, "CreateSubscription")
 	subscriptionId := uuid.New()
 	createdAt := time.Now()
 	query, args, _ := psql.Insert("subscriptions").
@@ -165,8 +179,9 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 		Values(subscriptionId, username, request.GetFollowedUsername(), createdAt).
 		ToSql()
 
-	log.Info("Creating subscription")
-	if _, err = tx.Exec(ctx, query, args...); err != nil {
+	ss.logger.Info("Creating subscription")
+	if _, err = tx.Exec(insertCtx, query, args...); err != nil {
+		insertSpan.End()
 		// Check if the error is a constraint violation
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
@@ -174,20 +189,21 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 			// 1: Foreign key violation -> user does not exist
 			// 2: Unique violation -> subscription already exists
 			if pgErr.ConstraintName == "subscribee_fk" {
-				log.Errorf("user %s does not exist", request.GetFollowedUsername())
+				ss.logger.Errorf("user %s does not exist", request.GetFollowedUsername())
 				return nil, status.Error(codes.NotFound, "user does not exist")
 			} else if pgErr.ConstraintName == "subscriptions_uq" {
-				log.Errorf("subscription already exists")
+				ss.logger.Errorf("subscription already exists")
 				return nil, status.Errorf(codes.AlreadyExists, "subscription already exists")
 			}
 		}
 
-		log.Errorf("Error in tx.Exec: %v", err)
+		ss.logger.Errorf("Error in tx.Exec: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
+	insertSpan.End()
 
 	if err = ss.db.Commit(ctx, tx); err != nil {
-		log.Errorf("Error in ss.db.Commit: %v", err)
+		ss.logger.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
 	}
 
@@ -198,7 +214,7 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	}
 
 	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {
-		log.Errorf("Error in ss.notificationClient.SendNotification: %v", err)
+		ss.logger.Error("Error in ss.notificationClient.SendNotification", zap.Error(err))
 	}
 
 	return &pb.CreateSubscriptionResponse{
@@ -211,7 +227,7 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *pb.DeleteSubscriptionRequest) (*pbCommon.Empty, error) {
 	tx, err := ss.db.Begin(ctx)
 	if err != nil {
-		log.Errorf("Error in ss.db.Begin: %v", err)
+		ss.logger.Errorf("Error in ss.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
 	}
 	defer ss.db.Rollback(ctx, tx)
@@ -221,32 +237,35 @@ func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *p
 
 	// Trigger the deletion of the subscription within the transaction, if the subscription does not exist
 	// we'll get an appropriate error
+	deleteCtx, deleteSpan := ss.tracer.Start(ctx, "DeleteSubscription")
 	query, args, _ := psql.Delete("subscriptions").
 		Where("subscription_id = ?", request.GetSubscriptionId()).
 		// We return the subscriber_name to verify that the authenticated user is the subscriber
 		Suffix("RETURNING subscriber_name").
 		ToSql()
 
-	log.Info("Deleting subscription...")
+	ss.logger.Info("Deleting subscription...")
 	var subscriberName string
-	if err = tx.QueryRow(ctx, query, args...).Scan(&subscriberName); err != nil {
+	if err = tx.QueryRow(deleteCtx, query, args...).Scan(&subscriberName); err != nil {
+		deleteSpan.End()
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Errorf("subscription %s does not exist", request.GetSubscriptionId())
+			ss.logger.Errorf("subscription %s does not exist", request.GetSubscriptionId())
 			return nil, status.Errorf(codes.NotFound, "subscription does not exist")
 		}
 
-		log.Errorf("Error in tx.QueryRow: %v", err)
+		ss.logger.Errorf("Error in tx.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.QueryRow: %v", err)
 	}
+	deleteSpan.End()
 
 	// Check if the authenticated user is the subscriber
 	if subscriberName != username {
-		log.Errorf("user %s tried to delete subscription %s", username, request.GetSubscriptionId())
+		ss.logger.Errorf("user %s tried to delete subscription %s", username, request.GetSubscriptionId())
 		return nil, status.Errorf(codes.PermissionDenied, "the authenticated user is not the subscriber")
 	}
 
 	if err = ss.db.Commit(ctx, tx); err != nil {
-		log.Errorf("Error in ss.db.Commit: %v", err)
+		ss.logger.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
 	}
 

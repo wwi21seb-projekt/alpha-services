@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 
 	log "github.com/sirupsen/logrus"
@@ -29,12 +28,8 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Construct the DSN (Data Source Name) for the database connection
-	dsn := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=disable search_path=%s",
-		cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.SchemaName)
-
 	// Initialize the database
-	database, err := db.NewDB(dsn)
+	database, err := db.NewDB(cfg.DatabaseConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %v", err)
 	}
@@ -53,7 +48,7 @@ func main() {
 	// Create user client
 	var dialOpts []grpc.DialOption
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	userClient, err := grpc.NewClient(cfg.UserServiceURL, dialOpts...)
+	userClient, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
 	if err != nil {
 		log.Fatalf("Failed to connect to user service: %v", err)
 	}

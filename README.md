@@ -20,9 +20,9 @@ Every service uses shared libraries for common functionality, such as protos, da
 
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kubectl and Kind](https://kubernetes.io/docs/tasks/tools/)
+- [Helm](https://helm.sh/docs/intro/install/)
 - [Skaffold](https://skaffold.dev/docs/install/)
 - [Go](https://golang.org/doc/install)
-- [Protoc](https://grpc.io/docs/protoc-installation/) (only if you work on the API in `alpha-shared`)
 - [Atlas](https://atlasgo.io/getting-started)
 
 You need to have a `.env.local` file in the `k8s/overlays/local` directory with the following content:
@@ -40,13 +40,42 @@ You can get the `MAILGUN_API_KEY` from Luca, the `VAPID_PUBLIC_KEY` and `VAPID_P
 
 ### Setup
 
-1. Clone the repository with the GitHub CLI or via `git clone`.
-2. Start a local Kubernetes cluster with `kind create cluster`, make sure the Docker daemon is running.
-3. Run `skaffold dev` in the root directory to start the services and database.
-4. Change to the `db` directory and run `atlas migrate apply --env=local` to apply the newest schema migrations.
-5. The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`.
-6. To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
-7. Optionally, you can run `kind delete cluster` to delete the local Kubernetes cluster.
+#### Cloning the repository
+
+Clone the repository with the GitHub CLI or via `git clone`.
+
+```bash
+# Either through GitHub CLI
+gh repo clone wwi21seb-projekt/alpha-services
+# Or via git
+git clone <ssh or https link>
+```
+
+#### Preparing the cluster
+
+1. Create a local Kubernetes cluster with `kind create cluster --name <some_name> --config k8s/overlays/local/kind-config.yaml`.
+2. Install cert-manager with `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.6.3/cert-manager.yaml`
+3. Setup ingress-nginx with `kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/release-1.10/deploy/static/provider/kind/deploy.yaml`
+4. Create the `observability` namespace with `kubectl create namespace observability`, since the jaeger operator requires it.
+5. Install the jaeger operator with `kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.57.0/jaeger-operator.yaml -n observability`
+6. Install the kube-prometheus-stack with:
+
+```sh
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install alpha-kube-prometheus-stack prometheus-community/kube-prometheus-stack --version 60.1.0
+```
+
+7. Install the otel operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.102.0/opentelemetry-operator.yaml`
+
+> Note: It can take up to a few minutes for each step to complete. Ensure that `cert-manager` and `ingress-nginx` are running before proceeding with the rest of the steps.
+
+#### Running the services
+
+1. Run `skaffold dev` in the root directory to start the services and database.
+2. Change to the `db` directory and run `atlas migrate apply --env=local` to apply the newest schema migrations.
+3. The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`.
+4. To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
+5. Optionally, you can run `kind delete cluster` to delete the local Kubernetes cluster. Note that this will delete all data in the cluster and you will need to prepare the cluster again [as described above](#preparing-the-cluster).
 
 ## Contributing
 

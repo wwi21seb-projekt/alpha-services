@@ -16,6 +16,9 @@ spec:
       containers:
         - name: postgres
           image: postgres:16
+          resources:
+            limits:
+              memory: 1000Mi
           env:
             - name: POSTGRES_DB
               valueFrom:
@@ -32,12 +35,21 @@ spec:
                 secretKeyRef:
                   name: alpha-secrets
                   key: POSTGRES_PASSWORD
+            # need to define PGDATA env var because not using the default /var/lib/postgresql/data, but a subpath under it.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
               name: postgres
           volumeMounts:
+            # need a subpath as postgres wants an empty folder (the mounted folder `/var/lib/postgresql/data` has a `lost+found` directory)
+            # see https://stackoverflow.com/questions/51168558/how-to-mount-a-postgresql-volume-using-aws-ebs-in-kubernete
+            # this is used together with the env var PGDATA = /var/lib/postgresql/data/pgdata (below)
+            # the owner:group of this folder is 70:70 (postgres:postgres), done by this step in the docker image:
+            # https://github.com/docker-library/postgres/blob/master/Dockerfile-alpine.template#L146
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
+              subPath: pgdata
       volumes:
         - name: postgres-storage
           persistentVolumeClaim:

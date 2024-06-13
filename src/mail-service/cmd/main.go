@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync/atomic"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/sirupsen/logrus"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/wwi21seb-projekt/alpha-services/src/mail-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
+	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
+	"github.com/wwi21seb-projekt/alpha-shared/tracing"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -21,66 +26,76 @@ var (
 )
 
 func main() {
+	// Initialize logger
+	logger := sharedLogging.GetZapLogger()
+	defer func(logger *zap.SugaredLogger) {
+		err := logger.Sync()
+		if err != nil {
+			logger.Fatal("Failed to sync logger", zap.Error(err))
+		}
+	}(logger)
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	// Initizalize logger
-	logger := logrus.New()
-
-	opts := []logging.Option{
-		logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
-		logging.WithDurationField(logging.DefaultDurationToFields),
-		logging.WithLevels(logging.DefaultServerCodeToLevel),
+		logger.Fatal("Failed to listen", zap.Error(err))
 	}
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		logger.Fatal("Failed to listen", zap.Error(err))
 	}
 
-	// Create server
-	var serverOpts []grpc.ServerOption
-	serverOpts = append(serverOpts, grpc.ChainUnaryInterceptor(
-		logging.UnaryServerInterceptor(InterceptorLogger(logger), opts...),
-	))
-	grpcServer := grpc.NewServer(serverOpts...)
+	// Initialize prometheus metrics for gRPC server and client
+	reg := prometheus.NewRegistry()
+	srvMetrics := tracing.GetServerMetrics()
+	clMetrics := tracing.GetClientMetrics()
+	reg.MustRegister(srvMetrics)
+	reg.MustRegister(clMetrics)
+
+	// Setup metric for panic recoveries.
+	var panicCounter uint64 = 0
+	promauto.With(reg).NewCounterFunc(
+		prometheus.CounterOpts{
+			Name: "grpc_req_panics_recovered_total",
+			Help: "Total number of gRPC requests recovered from internal panic.",
+		},
+		func() float64 {
+			return float64(atomic.LoadUint64(&panicCounter))
+		},
+	)
+
+	// Init telemetry and create server
+	shutdown, err := tracing.InitTelemetry(context.Background(), name, version)
+	if err != nil {
+		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			logger.Fatal("Failed to shutdown telemetry", zap.Error(err))
+		}
+	}()
+	otelgrpc.NewServerHandler()
+
+	zapLogger := logger.With(zap.String("service", name)).Desugar()
+	grpcServer := grpc.NewServer(tracing.NewServerOptions(srvMetrics, zapLogger, &panicCounter)...)
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
-	pb.RegisterMailServiceServer(grpcServer, handler.NewMailService())
+	pb.RegisterMailServiceServer(grpcServer, handler.NewMailService(logger))
+
+	// Start metrics server
+	go func() {
+		err := tracing.StartMetricsServer(logger, reg)
+		if err != nil {
+			logger.Fatal("Failed to start metrics server", zap.Error(err))
+		}
+	}()
 
 	// Start server
 	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
-}
-
-func InterceptorLogger(l logrus.FieldLogger) logging.Logger {
-	return logging.LoggerFunc(func(_ context.Context, lvl logging.Level, msg string, fields ...any) {
-		f := make(map[string]any, len(fields)/2)
-		i := logging.Fields(fields).Iterator()
-		for i.Next() {
-			k, v := i.At()
-			f[k] = v
-		}
-		l := l.WithFields(f)
-
-		switch lvl {
-		case logging.LevelDebug:
-			l.Debug(msg)
-		case logging.LevelInfo:
-			l.Info(msg)
-		case logging.LevelWarn:
-			l.Warn(msg)
-		case logging.LevelError:
-			l.Error(msg)
-		default:
-			panic(fmt.Sprintf("unknown level %v", lvl))
-		}
-	})
 }

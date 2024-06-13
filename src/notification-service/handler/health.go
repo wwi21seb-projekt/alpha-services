@@ -17,12 +17,12 @@ func NewHealthServer() pb.HealthServer {
 	return &healthService{}
 }
 
-func (h *healthService) Check(ctx context.Context, request *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+func (h *healthService) Check(context.Context, *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
 	return &pb.HealthCheckResponse{
 		Status: pb.HealthCheckResponse_SERVING,
 	}, nil
 }
 
-func (h *healthService) Watch(request *pb.HealthCheckRequest, stream pb.Health_WatchServer) error {
+func (h *healthService) Watch(*pb.HealthCheckRequest, pb.Health_WatchServer) error {
 	return status.Errorf(codes.Unimplemented, "health check via Watch not implemented")
 }

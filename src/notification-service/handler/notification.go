@@ -46,7 +46,7 @@ func NewNotificationServiceServer(db *db.DB, profileClient pbUser.UserServiceCli
 	}
 }
 
-func (n *NotificationService) GetNotifications(ctx context.Context, request *pbCommon.Empty) (*pb.GetNotificationsResponse, error) {
+func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.Empty) (*pb.GetNotificationsResponse, error) {
 	conn, err := n.db.Pool.Acquire(ctx)
 	if err != nil {
 		log.Errorf("Error in n.db.Pool.Acquire: %v", err)
