@@ -4,7 +4,7 @@ go 1.22.3
 
 require (
 	github.com/sirupsen/logrus v1.9.3
-	github.com/wwi21seb-projekt/alpha-shared v0.18.0
+	github.com/wwi21seb-projekt/alpha-shared v0.19.0
 	google.golang.org/grpc v1.64.0
 )
 
