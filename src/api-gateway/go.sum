@@ -130,6 +130,8 @@ github.com/wwi21seb-projekt/alpha-shared v0.19.0 h1:57q3K272ndZIHPzD9YuSLEBrrPIf
 github.com/wwi21seb-projekt/alpha-shared v0.19.0/go.mod h1:ketVYvADa2HWLrpnSwLYwAto4bhdFmW8dCy+DDQu9n8=
 github.com/wwi21seb-projekt/errors-go v0.5.0 h1:GiPDZQU6swKlLIhavUiXOeiNGTEaw614ap3KTpxniPo=
 github.com/wwi21seb-projekt/errors-go v0.5.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
+github.com/wwi21seb-projekt/errors-go v0.6.0 h1:0MKRG5m2ht/yA7Iab4EGJE30hF17ueRBf79ECzDpUoM=
+github.com/wwi21seb-projekt/errors-go v0.6.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
 go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.52.0 h1:vkioc4XBfqnZZ7u40wK3Kgbjj9JYkvW6FY1ghmM/Shk=
 go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.52.0/go.mod h1:vsyxiwPzPlijgouF1SRZRGqbuHod8fV6+MRCH7ltxDE=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.52.0 h1:vS1Ao/R55RNV4O7TA2Qopok8yN+X0LIP6RVWLFkprck=
