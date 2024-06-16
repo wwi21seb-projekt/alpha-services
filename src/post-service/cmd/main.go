@@ -44,7 +44,7 @@ func main() {
 	defer database.Close()
 
 	// Initialize tracing
-	tracingShutdown, err := tracing.InitializeTracing(ctx, name, version)
+	tracingShutdown, err := tracing.InitializeTelemetry(ctx, name, version)
 	if err != nil {
 		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
 	}
