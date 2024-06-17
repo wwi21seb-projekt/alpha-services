@@ -175,7 +175,7 @@ table "posts" {
     type = uuid
   }
   column "content" {
-    null = true
+    null = false
     type = character_varying(256)
   }
   column "created_at" {
@@ -274,7 +274,7 @@ table "users" {
     type = character_varying(256)
   }
   column "profile_picture_url" {
-    null = true
+    null = false
     type = character_varying(256)
   }
   column "created_at" {
