@@ -77,8 +77,8 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	insertUserCtx, insertUserSpan := as.tracer.Start(ctx, "InsertUser")
 	as.logger.Info("Inserting user into database...")
 	query, args, _ := psql.Insert("users").
-		Columns("username", "nickname", "password", "email", "created_at", "expires_at").
-		Values(request.Username, request.Nickname, hashedPassword, request.Email, createdAt, expiresAt).
+		Columns("username", "nickname", "password", "email", "profile_picture_url", "created_at", "expires_at").
+		Values(request.Username, request.Nickname, hashedPassword, request.Email, "todo: add default", createdAt, expiresAt).
 		ToSql()
 	_, err = tx.Exec(insertUserCtx, query, args...)
 	if err != nil {

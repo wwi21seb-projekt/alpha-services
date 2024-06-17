@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.6.0
-	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240616190547-b8e2d0c57718
+	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240617205814-8680ebe6d665
 	go.opentelemetry.io/otel/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	golang.org/x/crypto v0.24.0
@@ -48,3 +48,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240610135401-a8a62080eff3 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+// replace github.com/wwi21seb-projekt/alpha-shared v0.19.0 => ../../../alpha-shared
