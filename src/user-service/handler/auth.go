@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"github.com/ggwhite/go-masker/v2"
 	"math/rand"
 	"strconv"
 	"time"
@@ -418,7 +419,7 @@ func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.
 	expiresAt := time.Now().Add(24 * time.Hour)
 	query, args, _ := psql.Insert("tokens").
 		Columns("token_id", "token", "expires_at", "type", "username").
-		Values(tokenId, activationCode, expiresAt, "password_reset", username).
+		Values(tokenId, activationCode, expiresAt, Password, username).
 		Suffix("ON CONFLICT (username, type) DO UPDATE SET token = ?, expires_at = ?", activationCode, expiresAt).
 		ToSql()
 
@@ -457,7 +458,7 @@ func generateToken() string {
 func (as authenticationService) ResetPassword(ctx context.Context, request *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
-		log.Errorf("Error in db.Begin: %v", err)
+		log.Errorf("Error in as.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
 	defer as.db.Rollback(ctx, tx)
@@ -488,36 +489,58 @@ func (as authenticationService) ResetPassword(ctx context.Context, request *pb.R
 	}
 
 	if err := as.db.Commit(ctx, tx); err != nil {
-		log.Errorf("Error in tx.Commit: %v", err)
+		log.Errorf("Error in as.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pb.ResetPasswordResponse{Email: email}, nil
+	// Create an instance of EmailMasker
+	emailMasker := &masker.EmailMasker{}
+	// Mask the email
+	maskedEmail := emailMasker.Marshal("*", email)
+
+	return &pb.ResetPasswordResponse{Email: maskedEmail}, nil
 }
 
 func (as authenticationService) SetPassword(ctx context.Context, request *pb.SetPasswordRequest) (*pbCommon.Empty, error) {
 	tx, err := as.db.Begin(ctx)
 	if err != nil {
-		log.Errorf("Error in db.Begin: %v", err)
+		log.Errorf("Error in as.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
 	defer as.db.Rollback(ctx, tx)
 
+	// Check if the user exists
+	query, args, _ := psql.Select("username").
+		From("users").
+		Where("username = ?", request.GetUsername()).
+		ToSql()
+
+	var username string
+	log.Println("Checking user in database...")
+	err = tx.QueryRow(ctx, query, args...).Scan(&username)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Error("User not found")
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+
+		log.Errorf("Error in tx.QueryRow: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to verify user: %v", err)
+	}
+
 	// Check if the token is valid and not expired
-	query, args, _ := psql.Delete("tokens").
+	query, args, _ = psql.Delete("tokens").
 		Where("token = ? AND type = ? AND username = ?", request.GetToken(), Password, request.GetUsername()).
 		Suffix("RETURNING expires_at").
 		ToSql()
-	log.Printf("Query: %s", query)
-	log.Printf("Args: %v", args)
 
 	var expiresAt time.Time
 	log.Println("Checking token in database...")
 	err = tx.QueryRow(ctx, query, args...).Scan(&expiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Error("Token not found")
-			return nil, status.Error(codes.NotFound, "token not found")
+			log.Error("Token not found or invalid")
+			return nil, status.Error(codes.PermissionDenied, "token not found or invalid")
 		}
 
 		log.Errorf("Error in tx.QueryRow: %v", err)
@@ -526,7 +549,7 @@ func (as authenticationService) SetPassword(ctx context.Context, request *pb.Set
 
 	if time.Now().After(expiresAt) {
 		log.Error("Token expired")
-		return nil, status.Error(codes.DeadlineExceeded, "token expired")
+		return nil, status.Error(codes.PermissionDenied, "token expired")
 	}
 
 	// Hash the new password
@@ -550,7 +573,7 @@ func (as authenticationService) SetPassword(ctx context.Context, request *pb.Set
 	}
 
 	if err := as.db.Commit(ctx, tx); err != nil {
-		log.Errorf("Error in tx.Commit: %v", err)
+		log.Errorf("Error in as.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 

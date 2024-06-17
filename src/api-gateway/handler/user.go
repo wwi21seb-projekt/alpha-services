@@ -440,11 +440,9 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 }
 
 func (uh *UserHandler) ResetPassword(c *gin.Context) {
-
 	username := c.Param("username")
 
-	email, err := uh.authService.ResetPassword(c, &pb.ResetPasswordRequest{Username: username})
-
+	res, err := uh.authService.ResetPassword(c, &pb.ResetPasswordRequest{Username: username})
 	if err != nil {
 		code := status.Code(err)
 		returnErr := goerrors.InternalServerError
@@ -453,12 +451,14 @@ func (uh *UserHandler) ResetPassword(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+			Error: returnErr,
+		})
 		return
 	}
 
 	response := &schema.ResetPasswordResponse{
-		Email: email.Email,
+		Email: res.Email,
 	}
 
 	c.JSON(200, response)
@@ -480,15 +480,13 @@ func (uh *UserHandler) SetPassword(c *gin.Context) {
 		switch code {
 		case codes.NotFound:
 			returnErr = goerrors.UserNotFound
-		case codes.InvalidArgument:
-			returnErr = goerrors.BadRequest
 		case codes.PermissionDenied:
 			returnErr = goerrors.PasswordResetTokenInvalid
-		default:
-			log.Printf("Error in upstream call uh.authService.SetPassword: %v", err)
 		}
 
-		c.JSON(returnErr.HttpStatus, returnErr)
+		log.Printf("Error in upstream call uh.authService.SetPassword: %v", err)
+
+		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{Error: returnErr})
 		return
 	}
 

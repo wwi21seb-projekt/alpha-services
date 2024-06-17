@@ -4,6 +4,7 @@ go 1.22.3
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
+	github.com/ggwhite/go-masker/v2 v2.0.0
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
