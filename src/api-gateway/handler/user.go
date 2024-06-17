@@ -491,8 +491,10 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 
 func (uh *UserHandler) ResetPassword(c *gin.Context) {
 	username := c.Param("username")
+	ctx := c.Request.Context()
 
-	res, err := uh.authService.ResetPassword(c, &pb.ResetPasswordRequest{Username: username})
+	uh.logger.Infof("Calling upstream service uh.authService.ResetPassword with username %s", username)
+	res, err := uh.authService.ResetPassword(ctx, &pb.ResetPasswordRequest{Username: username})
 	if err != nil {
 		code := status.Code(err)
 		returnErr := goerrors.InternalServerError
@@ -501,6 +503,7 @@ func (uh *UserHandler) ResetPassword(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
+		uh.logger.Error("Error in upstream call uh.authService.ResetPassword", zap.Error(err))
 		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
 			Error: returnErr,
 		})

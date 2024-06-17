@@ -471,7 +471,11 @@ func (as authenticationService) setNewRegistrationTokenAndSendMail(ctx context.C
 }
 
 func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.Context, tx pgx.Tx, username, email string) error {
+	ctx, span := as.tracer.Start(ctx, "SetNewPasswordResetTokenAndSendMail")
+	defer span.End()
+
 	// Generate a random 6-digit number
+	insertCtx, insertSpan := as.tracer.Start(ctx, "InsertToken")
 	activationCode := generateToken()
 	tokenId := uuid.New()
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -482,11 +486,13 @@ func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.
 		ToSql()
 
 	as.logger.Info("Inserting reset password token into database...")
-	_, err := tx.Exec(ctx, query, args...)
+	_, err := tx.Exec(insertCtx, query, args...)
 	if err != nil {
 		as.logger.Errorf("Error in tx.Exec: %v", err)
+		insertSpan.End()
 		return status.Errorf(codes.Internal, "failed to insert token: %v", err)
 	}
+	insertSpan.End()
 
 	// Call mail service to send registration email
 	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
@@ -528,17 +534,21 @@ func (as authenticationService) ResetPassword(ctx context.Context, request *pb.R
 		ToSql()
 
 	var email string
+	selectCtx, selectSpan := as.tracer.Start(ctx, "QueryDatabase")
 	as.logger.Info("Querying database for user...")
-	err = tx.QueryRow(ctx, query, args...).Scan(&email)
+	err = tx.QueryRow(selectCtx, query, args...).Scan(&email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			as.logger.Error("User not found", zap.Error(err))
+			selectSpan.End()
 			return nil, status.Error(codes.NotFound, "user not found")
 		}
 
 		as.logger.Error("Error in tx.QueryRow", zap.Error(err))
+		selectSpan.End()
 		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
 	}
+	selectSpan.End()
 
 	// Set a new activation token and send the email
 	if err := as.setNewPasswordResetTokenAndSendMail(ctx, tx, request.GetUsername(), email); err != nil {
