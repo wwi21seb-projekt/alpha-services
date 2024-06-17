@@ -8,83 +8,140 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/graceful"
+	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+
+	"github.com/gin-contrib/graceful"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
+	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"github.com/wwi21seb-projekt/alpha-shared/tracing"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-var contentTypeHeader = "Content-Type"
+var (
+	name    = "api-gateway"
+	version = "0.1.0"
+)
 
 func main() {
+	// Initialize logger
+	logger := sharedLogging.GetZapLogger()
+	defer func(logger *zap.SugaredLogger) {
+		err := logger.Sync()
+		if err != nil {
+			logger.Fatal("Failed to sync logger", zap.Error(err))
+		}
+	}(logger)
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		logger.Fatalf("failed to load configuration: %v", err)
 	}
+	logger.Infof("Loaded configuration: %+v", cfg)
+
+	// Create client metrics
+	reg := prometheus.NewRegistry()
+	clMetrics := tracing.GetClientMetrics()
+	reg.MustRegister(clMetrics)
+
+	// Init telemetry
+	shutdown, err := tracing.InitTelemetry(context.Background(), name, version)
+	if err != nil {
+		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			logger.Fatal("Failed to shutdown telemetry", zap.Error(err))
+		}
+	}()
+
+	// Create dial options
+	zapLogger := logger.With(zap.String("service", name)).Desugar()
+	dialOpts := tracing.NewClientOptions(clMetrics, zapLogger)
 
 	// Set up a connection to the gRPC post server
-	postConn, err := grpc.NewClient(cfg.PostServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	postConn, err := grpc.NewClient(cfg.ServiceEndpoints.PostServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the post-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the post-service gRPC server: %v", err)
 	}
 	defer postConn.Close()
 
 	// Set up a connection to the gRPC user server
-	userConn, err := grpc.NewClient(cfg.UserServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	userConn, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the user-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the user-service gRPC server: %v", err)
 	}
 	defer userConn.Close()
 
 	// Set up a connection to the gRPC chat server
-	chatConn, err := grpc.NewClient(cfg.ChatServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	chatConn, err := grpc.NewClient(cfg.ServiceEndpoints.ChatServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
 	}
 	defer chatConn.Close()
 
+	// Set up a connection to the gRPC notification server
+	notificationConn, err := grpc.NewClient(cfg.ServiceEndpoints.NotificationServiceURL, dialOpts...)
+	if err != nil {
+		logger.Fatalf("failed to connect to the notification-service gRPC server: %v", err)
+	}
+	defer notificationConn.Close()
+
 	// Create client stubs
-	postClient := pbPost.NewPostServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
 	chatClient := pbChat.NewChatServiceClient(chatConn)
+	postClient := pbPost.NewPostServiceClient(postConn)
+	notificationClient := pbNotification.NewNotificationServiceClient(notificationConn)
+	pushSubscriptionClient := pbNotification.NewPushServiceClient(notificationConn)
 
 	// Create JWT manager
-	jwtManager := manager.NewJWTManager()
+	jwtManager := manager.NewJWTManager(logger)
 
 	// Create chat hub
-	hub := ws.NewHub()
+	hub := ws.NewHub(logger)
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(postClient)
-	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
-	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
+	postHandler := handler.NewPostHandler(logger, postClient)
+	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
+	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
+	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
-	setupCommonMiddleware(r)
+	// Set up common middleware
+	setupCommonMiddleware(r, zapLogger)
+
+	// Expose metrics endpoint
+	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(reg, promhttp.HandlerOpts{
+		ErrorHandling:     promhttp.ContinueOnError,
+		EnableOpenMetrics: true,
+	})))
+
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
-	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
+	authorizedRouter.Use(middleware.SetClaimsMiddleware(logger, jwtManager))
 	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
-	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler)
+	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -94,24 +151,25 @@ func main() {
 	go hub.Run()
 
 	// Run the gin server
-	log.Info("Starting server...")
+	logger.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Errorf("Server error: %v", err)
+		logger.Errorf("Server error: %v", err)
 	}
 
 	// Close the chat hub
 	hub.Close()
-	log.Info("Server stopped gracefully")
+	logger.Info("Server stopped gracefully")
 }
 
-func setupCommonMiddleware(r *graceful.Graceful) {
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
+func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
+	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
+	r.Use(ginzap.RecoveryWithZap(logger, true))
+	r.Use(otelgin.Middleware("api-gateway"))
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "PATCH", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Accept, Authorization", contentTypeHeader, "Sec-WebSocket-Protocol"},
-		ExposeHeaders: []string{"Content-Length", contentTypeHeader, "X-Correlation-ID"},
+		AllowHeaders:  []string{"Accept, Authorization", "Content-Type", "Sec-WebSocket-Protocol"},
+		ExposeHeaders: []string{"Content-Length", "Content-Type", "X-Correlation-ID"},
 		MaxAge:        12 * time.Hour,
 	}))
 }
@@ -134,12 +192,9 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	// In theory this is an authorized endpoint as well, but our middleware does not support
 	// the workaround we use here, hence we declare it as unauthorized and handle it in the method.
 	apiRouter.GET("/chat", chatHandler.Chat)
-
-	// Metrics route
-	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, notificationHandler handler.NotificationHdlr) {
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
@@ -163,4 +218,10 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	authRouter.GET("/chats", chatHandler.GetChats)
 	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
 	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
+
+	// Set notification routes
+	authRouter.GET("/notifications", notificationHandler.GetNotifications)
+	authRouter.DELETE("/notifications/:notificationId", notificationHandler.DeleteNotification)
+	authRouter.GET("/push/vapid", notificationHandler.GetPublicKey)
+	authRouter.POST("/push/register", notificationHandler.CreatePushSubscription)
 }

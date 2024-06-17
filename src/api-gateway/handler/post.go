@@ -11,6 +11,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	"go.uber.org/zap"
 )
 
 type PostHdlr interface {
@@ -25,11 +26,13 @@ type PostHdlr interface {
 }
 
 type PostHandler struct {
+	logger      *zap.SugaredLogger
 	postService pbPost.PostServiceClient
 }
 
-func NewPostHandler(client pbPost.PostServiceClient) PostHdlr {
+func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient) PostHdlr {
 	return &PostHandler{
+		logger:      logger,
 		postService: client,
 	}
 }

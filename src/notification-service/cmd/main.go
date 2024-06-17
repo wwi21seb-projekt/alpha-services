@@ -3,12 +3,12 @@ package main
 import (
 	"net"
 
-	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	name    = "post-service"
+	name    = "notification-service"
 	version = "0.1.0"
 )
 
@@ -66,9 +66,9 @@ func main() {
 	userProfileClient := pbUser.NewUserServiceClient(userClient)
 	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(userClient)
 
-	// Register post service
-	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(database, userProfileClient, userSubscriptionClient))
-
+	// Register notification service
+	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 

@@ -1,33 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: post-service
+  name: notification-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: post-service
+      app: notification-service
   template:
     metadata:
       labels:
-        app: post-service
+        app: notification-service
     spec:
       containers:
-        - name: post-service
-          image: post-service-image
+        - name: notification-service
+          image: notification-service-image
           imagePullPolicy: Always
           resources:
             limits:
               memory: 100Mi
           ports:
-            - containerPort: 50051
+            - containerPort: 50054
           env:
             - name: PORT
-              value: "50051"
-            - name: ENVIRONMENT
+              value: "50054"
+            - name: ENVIROMENT
               value: "production"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector:4317"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST
@@ -35,7 +33,7 @@ spec:
             - name: POSTGRES_PORT
               value: "5432"
             - name: SCHEMA_NAME
-              value: post_service
+              value: notification_service
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -51,36 +49,25 @@ spec:
                 secretKeyRef:
                   name: alpha-secrets
                   key: POSTGRES_PASSWORD
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: VAPID_PUBLIC_KEY
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alpha-secrets
+                  key: VAPID_PRIVATE_KEY
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: post-service
-  labels:
-    app: post-service
+  name: notification-service
 spec:
   selector:
-    app: post-service
+    app: notification-service
   ports:
     - protocol: TCP
-      name: grpc
-      port: 50051
-      targetPort: 50051
-    # metrics server
-    - protocol: TCP
-      name: metrics
-      port: 2112
-      targetPort: 2112
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: post-service
-  labels:
-    team: team-alpha
-spec:
-  selector:
-    matchLabels:
-      app: post-service
-  endpoints:
-    - port: metrics
+      port: 50054
+      targetPort: 50054
