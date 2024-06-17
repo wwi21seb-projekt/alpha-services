@@ -24,6 +24,8 @@ runs:
         filters: |
           api-gateway:
             - 'src/api-gateway/**'
+          chat-service:
+            - 'src/chat-service/**'
           mail-service:
             - 'src/mail-service/**'
           notification-service:
@@ -43,6 +45,10 @@ runs:
 
         if [ "${{ steps.detect-changed-dirs.outputs.api-gateway }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"api-gateway\"},"
+          RESULT="true"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.chat-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"chat-service\"},"
           RESULT="true"
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.mail-service }}" == "true" ]; then

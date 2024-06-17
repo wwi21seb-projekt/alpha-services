@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	log "github.com/sirupsen/logrus"
@@ -191,7 +192,7 @@ func (ps userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	queryBuilder, queryArgs, _ := psql.Select().
 		Columns("username", "nickname", "profile_picture_url").
 		From("users").
-		Where("user_id IN (?)", request.GetUsernames()).
+		Where(sq.Eq{"username": request.GetUsernames()}).
 		ToSql()
 
 	log.Info("Querying user data")

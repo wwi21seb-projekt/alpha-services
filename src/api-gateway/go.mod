@@ -6,14 +6,24 @@ require (
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-contrib/graceful v1.0.2
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-playground/validator/v10 v10.20.0
+	github.com/go-playground/validator/v10 v10.21.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/microcosm-cc/bluemonday v1.0.26
+	github.com/prometheus/client_golang v1.19.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/truemail-rb/truemail-go v1.1.3
-	github.com/wwi21seb-projekt/alpha-shared v0.11.4-0.20240605080739-23c5fb63046c
+	github.com/wwi21seb-projekt/alpha-shared v0.16.0
 	github.com/wwi21seb-projekt/errors-go v0.5.0
 	google.golang.org/grpc v1.64.0
+)
+
+require (
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
+	github.com/prometheus/common v0.48.0 // indirect
+	github.com/prometheus/procfs v0.12.0 // indirect
 )
 
 require (
@@ -31,9 +41,9 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
+	github.com/gorilla/websocket v1.5.1
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.58 // indirect

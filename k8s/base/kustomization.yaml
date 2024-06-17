@@ -1,5 +1,6 @@
 resources:
   - api-gateway.yaml
+  - chat-service.yaml
   - post-service.yaml
   - user-service.yaml
   - mail-service.yaml

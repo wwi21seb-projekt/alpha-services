@@ -8,15 +8,17 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-
 	"github.com/gin-contrib/graceful"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
+	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"google.golang.org/grpc"
@@ -46,18 +48,30 @@ func main() {
 	}
 	defer userConn.Close()
 
+	// Set up a connection to the gRPC chat server
+	chatConn, err := grpc.NewClient(cfg.ChatServiceURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
+	}
+	defer chatConn.Close()
+
 	// Create client stubs
 	postClient := pbPost.NewPostServiceClient(postConn)
 	userClient := pbUser.NewUserServiceClient(userConn)
 	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
 	authClient := pbUser.NewAuthenticationServiceClient(userConn)
+	chatClient := pbChat.NewChatServiceClient(chatConn)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager()
 
+	// Create chat hub
+	hub := ws.NewHub()
+
 	// Create handler instances
 	postHandler := handler.NewPostHandler(postClient)
 	userHandler := handler.NewUserHandler(authClient, userClient, subscriptionClient, jwtManager)
+	chatHandler := handler.NewChatHandler(jwtManager, chatClient, hub)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -69,18 +83,24 @@ func main() {
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
-	setupRoutes(unauthorizedRouter, postHandler, userHandler)
-	setupAuthRoutes(authorizedRouter, postHandler, userHandler)
+	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
+	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Run chat hub in a separate goroutine
+	go hub.Run()
+
+	// Run the gin server
 	log.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatalf("Server error: %v", err)
+		log.Errorf("Server error: %v", err)
 	}
 
+	// Close the chat hub
+	hub.Close()
 	log.Info("Server stopped gracefully")
 }
 
@@ -90,14 +110,14 @@ func setupCommonMiddleware(r *graceful.Graceful) {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "PATCH", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Accept, Authorization", contentTypeHeader},
+		AllowHeaders:  []string{"Accept, Authorization", contentTypeHeader, "Sec-WebSocket-Protocol"},
 		ExposeHeaders: []string{"Content-Length", contentTypeHeader, "X-Correlation-ID"},
 		MaxAge:        12 * time.Hour,
 	}))
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
 
@@ -109,9 +129,17 @@ func setupRoutes(apiRouter *gin.RouterGroup, postHandler handler.PostHdlr, userH
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
 	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
 	apiRouter.PATCH("/users/:username/reset-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
+
+	// Chat routes
+	// In theory this is an authorized endpoint as well, but our middleware does not support
+	// the workaround we use here, hence we declare it as unauthorized and handle it in the method.
+	apiRouter.GET("/chat", chatHandler.Chat)
+
+	// Metrics route
+	apiRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
 	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
@@ -130,4 +158,9 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, postHandler handler.PostHdlr, 
 	authRouter.GET("/posts/:postId/comments", postHandler.GetComments)
 	authRouter.POST("/posts/:postId/likes", postHandler.CreateLike)
 	authRouter.DELETE("/posts/:postId/likes", postHandler.DeleteLike)
+
+	// Set chat routes
+	authRouter.GET("/chats", chatHandler.GetChats)
+	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
+	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
 }
