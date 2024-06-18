@@ -50,6 +50,11 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword" validate:"required,min=8,password_validation"`
 }
 
+type SetPasswordRequest struct {
+	NewPassword string `json:"newPassword" validate:"required,min=8,password_validation"`
+	Token       string `json:"token" validate:"required,numeric,len=6"`
+}
+
 // ----------------- Response Schemas -----------------
 
 type TokenPairResponse struct {
@@ -88,4 +93,8 @@ type CreateSubscriptionResponse struct {
 type GetSubscriptionsResponse struct {
 	Subscriptions []UserSubscription  `json:"records"`
 	Pagination    *PaginationResponse `json:"pagination"`
+}
+
+type ResetPasswordResponse struct {
+	Email string `json:"email"`
 }

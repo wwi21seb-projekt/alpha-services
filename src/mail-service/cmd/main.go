@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"sync/atomic"
 
@@ -94,8 +93,8 @@ func main() {
 	}()
 
 	// Start server
-	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)
+	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		logger.Fatalf("Failed to serve: %v", err)
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"sync/atomic"
 
@@ -93,7 +92,7 @@ func main() {
 	// Create client connections
 	userConn, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, tracing.NewClientOptions(clMetrics, zapLogger)...)
 	if err != nil {
-		log.Fatalf("Failed to connect to mail service: %v", err)
+		logger.Fatalf("Failed to connect to mail service: %v", err)
 	}
 
 	// Create client stubs

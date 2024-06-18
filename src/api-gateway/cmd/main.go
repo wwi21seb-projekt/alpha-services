@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/gin-contrib/graceful"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/handler/ws"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
@@ -50,7 +49,7 @@ func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		logger.Fatalf("failed to load configuration: %v", err)
 	}
 	logger.Infof("Loaded configuration: %+v", cfg)
 
@@ -77,28 +76,28 @@ func main() {
 	// Set up a connection to the gRPC post server
 	postConn, err := grpc.NewClient(cfg.ServiceEndpoints.PostServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the post-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the post-service gRPC server: %v", err)
 	}
 	defer postConn.Close()
 
 	// Set up a connection to the gRPC user server
 	userConn, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the user-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the user-service gRPC server: %v", err)
 	}
 	defer userConn.Close()
 
 	// Set up a connection to the gRPC chat server
 	chatConn, err := grpc.NewClient(cfg.ServiceEndpoints.ChatServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
 	}
 	defer chatConn.Close()
 
 	// Set up a connection to the gRPC notification server
 	notificationConn, err := grpc.NewClient(cfg.ServiceEndpoints.NotificationServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("failed to connect to the notification-service gRPC server: %v", err)
+		logger.Fatalf("failed to connect to the notification-service gRPC server: %v", err)
 	}
 	defer notificationConn.Close()
 
@@ -112,21 +111,21 @@ func main() {
 	pushSubscriptionClient := pbNotification.NewPushServiceClient(notificationConn)
 
 	// Create JWT manager
-	jwtManager := manager.NewJWTManager()
+	jwtManager := manager.NewJWTManager(logger)
 
 	// Create chat hub
-	hub := ws.NewHub()
+	hub := ws.NewHub(logger)
 
 	// Create handler instances
 	postHandler := handler.NewPostHandler(postClient)
 	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
-	notificationHandler := handler.NewNotificationHandler(notificationClient, pushSubscriptionClient)
+	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
 	// Set up common middleware
@@ -140,7 +139,7 @@ func main() {
 
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
-	authorizedRouter.Use(middleware.SetClaimsMiddleware(jwtManager))
+	authorizedRouter.Use(middleware.SetClaimsMiddleware(logger, jwtManager))
 	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
 	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
 
@@ -152,14 +151,14 @@ func main() {
 	go hub.Run()
 
 	// Run the gin server
-	log.Info("Starting server...")
+	logger.Info("Starting server...")
 	if err = r.RunWithContext(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Errorf("Server error: %v", err)
+		logger.Errorf("Server error: %v", err)
 	}
 
 	// Close the chat hub
 	hub.Close()
-	log.Info("Server stopped gracefully")
+	logger.Info("Server stopped gracefully")
 }
 
 func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
@@ -186,6 +185,8 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	apiRouter.POST("users/refresh", middleware.ValidateAndSanitizeStruct(&schema.RefreshTokenRequest{}), userHandler.RefreshToken)
 	apiRouter.POST("/users/:username/activate", middleware.ValidateAndSanitizeStruct(&schema.ActivationRequest{}), userHandler.ActivateUser)
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
+	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
+	apiRouter.PATCH("/users/:username/reset-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
 
 	// Chat routes
 	// In theory this is an authorized endpoint as well, but our middleware does not support
