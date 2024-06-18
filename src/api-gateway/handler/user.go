@@ -33,6 +33,8 @@ type UserHdlr interface {
 	CreateSubscription(c *gin.Context) // POST /subscriptions
 	DeleteSubscription(c *gin.Context) // DELETE /subscriptions/:subscriptionId
 	GetSubscriptions(c *gin.Context)   // GET /subscriptions/:username
+	ResetPassword(c *gin.Context)      // POST /users/:username/reset-password
+	SetPassword(c *gin.Context)        // PATCH /users/:username/set-password
 }
 
 type UserHandler struct {
@@ -485,4 +487,60 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	}
 
 	c.JSON(200, response)
+}
+
+func (uh *UserHandler) ResetPassword(c *gin.Context) {
+	username := c.Param("username")
+	ctx := c.Request.Context()
+
+	uh.logger.Infof("Calling upstream service uh.authService.ResetPassword with username %s", username)
+	res, err := uh.authService.ResetPassword(ctx, &pb.ResetPasswordRequest{Username: username})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		if code == codes.NotFound {
+			returnErr = goerrors.UserNotFound
+		}
+
+		uh.logger.Error("Error in upstream call uh.authService.ResetPassword", zap.Error(err))
+		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+			Error: returnErr,
+		})
+		return
+	}
+
+	response := &schema.ResetPasswordResponse{
+		Email: res.Email,
+	}
+
+	c.JSON(200, response)
+}
+
+func (uh *UserHandler) SetPassword(c *gin.Context) {
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.SetPasswordRequest)
+	username := c.Param("username")
+
+	_, err := uh.authService.SetPassword(c, &pb.SetPasswordRequest{
+		Username:    username,
+		NewPassword: req.NewPassword,
+		Token:       req.Token,
+	})
+	if err != nil {
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+
+		switch code {
+		case codes.NotFound:
+			returnErr = goerrors.UserNotFound
+		case codes.PermissionDenied:
+			returnErr = goerrors.PasswordResetTokenInvalid
+		}
+
+		uh.logger.Error("Error in upstream call uh.authService.SetPassword", zap.Error(err))
+		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.JSON(204, nil)
 }

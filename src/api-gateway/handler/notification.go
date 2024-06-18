@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,12 +23,14 @@ type NotificationHdlr interface {
 }
 
 type NotificationHandler struct {
+	logger                  *zap.SugaredLogger
 	notificationService     pbNotification.NotificationServiceClient
 	pushSubscriptionService pbNotification.PushServiceClient
 }
 
-func NewNotificationHandler(notificationClient pbNotification.NotificationServiceClient, pushSubscriptionClient pbNotification.PushServiceClient) NotificationHdlr {
+func NewNotificationHandler(logger *zap.SugaredLogger, notificationClient pbNotification.NotificationServiceClient, pushSubscriptionClient pbNotification.PushServiceClient) NotificationHdlr {
 	return &NotificationHandler{
+		logger:                  logger,
 		notificationService:     notificationClient,
 		pushSubscriptionService: pushSubscriptionClient,
 	}
@@ -43,7 +45,7 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 	if err != nil {
 		returnErr := goerrors.InternalServerError
 
-		log.Printf("Error in upstream call n.pushSubscriptionService.GetPublicKey: %v", err)
+		n.logger.Infof("Error in upstream call n.pushSubscriptionService.GetPublicKey: %v", err)
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
@@ -76,7 +78,7 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 		if status.Code(err) == codes.NotFound {
 			returnErr = goerrors.NotificationNotFound
 		}
-		log.Printf("Error in upstream call n.pushSubscriptionService.CreatePushSubscription: %v", err)
+		n.logger.Infof("Error in upstream call n.pushSubscriptionService.CreatePushSubscription: %v", err)
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
@@ -100,7 +102,7 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		log.Printf("Error in upstream call n.notificationService.GetNotification: %v", err)
+		n.logger.Infof("Error in upstream call n.notificationService.GetNotification: %v", err)
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
@@ -135,7 +137,7 @@ func (n *NotificationHandler) DeleteNotification(c *gin.Context) {
 		if status.Code(err) == codes.NotFound {
 			returnErr = goerrors.NotificationNotFound
 		}
-		log.Printf("Error in upstream call n.notificationService.DeleteNotification: %v", err)
+		n.logger.Infof("Error in upstream call n.notificationService.DeleteNotification: %v", err)
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}

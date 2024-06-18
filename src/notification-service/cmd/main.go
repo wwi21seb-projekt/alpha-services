@@ -3,15 +3,15 @@ package main
 import (
 	"net"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -22,23 +22,32 @@ var (
 )
 
 func main() {
+	// Initialize logger
+	logger := sharedLogging.GetZapLogger()
+	defer func(logger *zap.SugaredLogger) {
+		err := logger.Sync()
+		if err != nil {
+			logger.Fatal("Failed to sync logger", zap.Error(err))
+		}
+	}(logger)
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Initialize the database
 	database, err := db.NewDB(cfg.DatabaseConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v", err)
+		logger.Fatalf("Failed to connect to the database: %v", err)
 	}
 	defer database.Close()
 
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		logger.Fatalf("Failed to listen: %v", err)
 	}
 
 	// Create server
@@ -50,7 +59,7 @@ func main() {
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	userClient, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
 	if err != nil {
-		log.Fatalf("Failed to connect to user service: %v", err)
+		logger.Fatalf("Failed to connect to user service: %v", err)
 	}
 	defer userClient.Close()
 
@@ -59,14 +68,14 @@ func main() {
 	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(userClient)
 
 	// Register notification service
-	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(database, userProfileClient, userSubscriptionClient))
-	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(database, userProfileClient, userSubscriptionClient))
+	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Start server
-	log.Printf("Starting %s v%s on port %s", name, version, cfg.Port)
+	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
 	if err = grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		logger.Fatalf("Failed to serve: %v", err)
 	}
 }
