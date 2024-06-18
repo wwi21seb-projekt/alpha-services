@@ -6,13 +6,15 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/microcosm-cc/bluemonday"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
+	"go.uber.org/zap"
 )
 
 type Client struct {
+	// Central logger instance
+	logger *zap.SugaredLogger
 	// Central hub, which manages all clients
 	hub *Hub
 	// Username of the client
@@ -46,8 +48,9 @@ const (
 	maxMessageSize = 256
 )
 
-func NewClient(hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamClient, username string) *Client {
+func NewClient(logger *zap.SugaredLogger, hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamClient, username string) *Client {
 	return &Client{
+		logger:     logger,
 		hub:        hub,
 		conn:       conn,
 		stream:     stream,
@@ -68,27 +71,27 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 	defer func() {
 		c.triggerDisconnect()
 		wg.Done()
-		log.Infof("ReadPump: Stopping read pump for client %s", c.username)
+		c.logger.Infof("ReadPump: Stopping read pump for client %s", c.username)
 	}()
-	log.Infof("ReadPump: Starting read pump for client %s", c.username)
+	c.logger.Infof("ReadPump: Starting read pump for client %s", c.username)
 	c.conn.SetReadLimit(readLimit)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := c.conn.ReadMessage()
-		log.Infof("Received chat mesage from client: %s", c.username)
+		c.logger.Infof("Received chat mesage from client: %s", c.username)
 		if err != nil {
-			log.Errorf("Failed to read message from client: %v", err)
+			c.logger.Errorf("Failed to read message from client: %v", err)
 			return
 		}
 
 		// Check if the message exceeds the maximum message size or is empty
 		if len(message) == 0 || len(message) > maxMessageSize {
-			log.Errorf("Message exceeds maximum message size or is empty")
+			c.logger.Errorf("Message exceeds maximum message size or is empty")
 			errorMessage := schema.ErrorDTO{Error: goerrors.BadRequest}
 			errorMessageBytes, err := errorMessage.MarshalJSON()
 			if err != nil {
-				log.Errorf("Failed to marshal error message: %v", err)
+				c.logger.Errorf("Failed to marshal error message: %v", err)
 				return
 			}
 			c.send <- errorMessageBytes
@@ -97,7 +100,7 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 
 		// Send it to the chat service via the open gRPC stream.
 		if err := c.sendMessageToChatService(message); err != nil {
-			log.Errorf("Failed to send message to chat service: %v", err)
+			c.logger.Errorf("Failed to send message to chat service: %v", err)
 			return
 		}
 	}
@@ -108,7 +111,7 @@ func (c *Client) sendMessageToChatService(message []byte) error {
 	// Prepare a message to be sent via gRPC
 	var unmarshalledMessage schema.Message
 	if err := unmarshalledMessage.UnmarshalJSON(message); err != nil {
-		log.Errorf("Failed to unmarshal message: %v", err)
+		c.logger.Errorf("Failed to unmarshal message: %v", err)
 		return err
 	}
 
@@ -124,7 +127,7 @@ func (c *Client) sendMessageToChatService(message []byte) error {
 	// Send the message to the chat service via gRPC
 	err := c.stream.Send(grpcMessage)
 	if err != nil {
-		log.Errorf("Failed to send message to chat service: %v", err)
+		c.logger.Errorf("Failed to send message to chat service: %v", err)
 		return err
 	}
 	return nil
@@ -141,9 +144,9 @@ func (c *Client) WritePump(wg *sync.WaitGroup) {
 		ticker.Stop()
 		c.triggerDisconnect()
 		wg.Done()
-		log.Infof("WritePump: Stopping write pump for client %s", c.username)
+		c.logger.Infof("WritePump: Stopping write pump for client %s", c.username)
 	}()
-	log.Infof("WritePump: Starting write pump for client %s", c.username)
+	c.logger.Infof("WritePump: Starting write pump for client %s", c.username)
 	for {
 		select {
 		// We receive two types of messages on the send channel: actual messages to be sent to the client
@@ -179,15 +182,15 @@ func (c *Client) GrpcReceivePump(wg *sync.WaitGroup) {
 	defer func() {
 		c.triggerDisconnect()
 		wg.Done()
-		log.Infof("GrpcReceivePump: Stopping grpc receive pump for client %s", c.username)
+		c.logger.Infof("GrpcReceivePump: Stopping grpc receive pump for client %s", c.username)
 	}()
-	log.Infof("GrpcReceivePump: Starting grpc receive pump for client %s", c.username)
+	c.logger.Infof("GrpcReceivePump: Starting grpc receive pump for client %s", c.username)
 
 	for {
 		// Enter an infinite loop to receive messages from the chat service via gRPC
 		msg, err := c.stream.Recv()
 		if err != nil {
-			log.Errorf("Failed to receive message from stream: %v", err)
+			c.logger.Errorf("Failed to receive message from stream: %v", err)
 			break
 		}
 
@@ -198,7 +201,7 @@ func (c *Client) GrpcReceivePump(wg *sync.WaitGroup) {
 		}
 		wsMessageBytes, err := wsMessage.MarshalJSON()
 		if err != nil {
-			log.Errorf("Failed to marshal message to json: %v", err)
+			c.logger.Errorf("Failed to marshal message to json: %v", err)
 			break
 		}
 
@@ -216,7 +219,7 @@ func (c *Client) GrpcReceivePump(wg *sync.WaitGroup) {
 func (c *Client) triggerDisconnect() {
 	c.once.Do(func() {
 		close(c.Disconnect)
-		log.Infof("Disconnect triggered for client %s", c.username)
+		c.logger.Infof("Disconnect triggered for client %s", c.username)
 	})
 }
 

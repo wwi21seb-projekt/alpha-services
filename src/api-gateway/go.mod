@@ -11,7 +11,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/prometheus/client_golang v1.19.1
-	github.com/sirupsen/logrus v1.9.3
 	github.com/truemail-rb/truemail-go v1.1.3
 	github.com/wwi21seb-projekt/alpha-shared v0.19.0
 	github.com/wwi21seb-projekt/errors-go v0.6.0

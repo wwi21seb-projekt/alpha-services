@@ -163,7 +163,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	defer conn.Close()
 
 	// Register client in hub
-	client := ws.NewClient(ch.hub, conn, stream, username)
+	client := ws.NewClient(ch.logger, ch.hub, conn, stream, username)
 	ch.hub.Register <- client
 	ch.logger.Info("ChatHandler: Client registered, starting pumps...")
 	// We wrap the pumps in a WaitGroup to ensure that we wait for all pumps to finish

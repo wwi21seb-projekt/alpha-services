@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/gin-gonic/gin"
@@ -17,18 +17,18 @@ import (
 var unauthorizedError = &schema.ErrorDTO{Error: goerrors.Unauthorized}
 var GRPCMetadataKey = "grpc-metadata" // to be added to shared keys
 
-func SetClaimsMiddleware(jwtManager manager.JWTManager) gin.HandlerFunc {
+func SetClaimsMiddleware(logger *zap.SugaredLogger, jwtManager manager.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorizationHeader := c.GetHeader("Authorization")
 		if authorizationHeader == "" {
-			log.Error("Authorization header is missing")
+			logger.Error("Authorization header is missing")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
 
 		authorizationHeaderParts := strings.Split(authorizationHeader, " ")
 		if len(authorizationHeaderParts) != 2 {
-			log.Error("Authorization header is invalid")
+			logger.Error("Authorization header is invalid")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}
@@ -36,7 +36,7 @@ func SetClaimsMiddleware(jwtManager manager.JWTManager) gin.HandlerFunc {
 		tokenString := authorizationHeaderParts[1]
 		username, err := jwtManager.Verify(tokenString)
 		if err != nil {
-			log.Errorf("Error in jwtManager.Verify: %v", err)
+			logger.Errorf("Error in jwtManager.Verify: %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, unauthorizedError)
 			return
 		}

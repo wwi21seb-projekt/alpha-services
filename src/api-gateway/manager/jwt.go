@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	log "github.com/sirupsen/logrus"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,20 +36,22 @@ type JWTManager interface {
 }
 
 type jwtManager struct {
+	logger     *zap.SugaredLogger
 	publicKey  ed25519.PublicKey
 	privateKey ed25519.PrivateKey
 }
 
-func NewJWTManager() JWTManager {
+func NewJWTManager(logger *zap.SugaredLogger) JWTManager {
 	// Get the public and private key from the environment
 	publicKeyPem := os.Getenv("JWT_PUBLIC_KEY")
 	privateKeyPem := os.Getenv("JWT_PRIVATE_KEY")
 
 	// Load the public and private key
-	publicKey := loadPublicKey(publicKeyPem)
-	privateKey := loadPrivateKey(privateKeyPem)
+	publicKey := loadPublicKey(logger, publicKeyPem)
+	privateKey := loadPrivateKey(logger, privateKeyPem)
 
 	return &jwtManager{
+		logger:     logger,
 		publicKey:  publicKey,
 		privateKey: privateKey,
 	}
@@ -74,12 +76,12 @@ func (j *jwtManager) Generate(username string) (*schema.TokenPairResponse, error
 }
 
 func (j *jwtManager) Verify(token string) (string, error) {
-	return verifyToken(token, false, j.publicKey)
+	return verifyToken(j.logger, token, false, j.publicKey)
 }
 
 func (j *jwtManager) Refresh(refreshToken string) (*schema.TokenPairResponse, error) {
 	// Verify the refresh token
-	username, err := verifyToken(refreshToken, true, j.publicKey)
+	username, err := verifyToken(j.logger, refreshToken, true, j.publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +102,7 @@ func (j *jwtManager) Refresh(refreshToken string) (*schema.TokenPairResponse, er
 	}, nil
 }
 
-func verifyToken(token string, shouldBeRefreshToken bool, publicKey ed25519.PublicKey) (string, error) {
+func verifyToken(logger *zap.SugaredLogger, token string, shouldBeRefreshToken bool, publicKey ed25519.PublicKey) (string, error) {
 	// Parse the token
 	claims := &AlphaClaims{}
 	parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
@@ -112,7 +114,7 @@ func verifyToken(token string, shouldBeRefreshToken bool, publicKey ed25519.Publ
 		return publicKey, nil
 	})
 	if err != nil {
-		log.Errorf("Received an unverifiable token: %v", err)
+		logger.Errorf("Received an unverifiable token: %v", err)
 		return "", err
 	}
 
@@ -150,39 +152,39 @@ func generateJWT(username string, isRefreshToken bool, privateKey ed25519.Privat
 	return token.SignedString(privateKey)
 }
 
-func loadPublicKey(pemKey string) ed25519.PublicKey {
+func loadPublicKey(logger *zap.SugaredLogger, pemKey string) ed25519.PublicKey {
 	block, _ := pem.Decode([]byte(pemKey))
 	if block == nil || block.Type != "PUBLIC KEY" {
-		log.Fatalf("Failed to decode PEM block containing public key")
+		logger.Fatalf("Failed to decode PEM block containing public key")
 	}
 
 	key, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		log.Fatalf("Failed to parse public key: %v", err)
+		logger.Fatalf("Failed to parse public key: %v", err)
 	}
 
 	ed25519Key, ok := key.(ed25519.PublicKey)
 	if !ok {
-		log.Fatalf("Failed to cast public key to Ed25519 public key")
+		logger.Fatalf("Failed to cast public key to Ed25519 public key")
 	}
 
 	return ed25519Key
 }
 
-func loadPrivateKey(path string) ed25519.PrivateKey {
+func loadPrivateKey(logger *zap.SugaredLogger, path string) ed25519.PrivateKey {
 	block, _ := pem.Decode([]byte(path))
 	if block == nil || block.Type != "PRIVATE KEY" {
-		log.Fatalf("Failed to decode PEM block containing private key")
+		logger.Fatalf("Failed to decode PEM block containing private key")
 	}
 
 	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		log.Fatalf("Failed to parse private key: %v", err)
+		logger.Fatalf("Failed to parse private key: %v", err)
 	}
 
 	ed25519Key, ok := key.(ed25519.PrivateKey)
 	if !ok {
-		log.Fatalf("Failed to cast private key to Ed25519 private key")
+		logger.Fatalf("Failed to cast private key to Ed25519 private key")
 	}
 
 	return ed25519Key
