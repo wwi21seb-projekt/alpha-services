@@ -47,7 +47,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	query, args, _ := psql.Select().
-		Columns("u.nickname", "u.status", "u.profile_picture_url").
+		Columns("u.nickname", "u.status", "u.picture_url", "u.picture_width", "u.picture_height").
 		Column("s1.subscription_id AS subscription_id").
 		Column("COUNT(s2.subscription_id) AS following_count").
 		Column("COUNT(s3.subscription_id) AS follower_count").
@@ -61,13 +61,13 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		GroupBy("u.nickname", "u.status", "u.profile_picture_url", "s1.subscription_id").
 		ToSql()
 
-	var nickname, userStatus, profilePictureURL, subscriptionID pgtype.Text
-	var followingCount, followerCount pgtype.Int4
+	var nickname, userStatus, pictureUrl, subscriptionID pgtype.Text
+	var followingCount, followerCount, pictureWidth, pictureHeight pgtype.Int4
 
 	us.logger.Info("Querying user data")
 	if err = conn.QueryRow(selectCtx, query, args...).Scan(
-		&nickname, &userStatus, &profilePictureURL, &subscriptionID,
-		&followingCount, &followerCount,
+		&nickname, &userStatus, &pictureUrl, &pictureWidth,
+		&pictureHeight, &subscriptionID, &followingCount, &followerCount,
 		//&response.PostCount,
 	); err != nil {
 		selectSpan.End()
@@ -82,14 +82,21 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	selectSpan.End()
 
 	response := &pb.GetUserResponse{
-		Username:          request.Username,
-		Nickname:          nickname.String,
-		Status:            userStatus.String,
-		ProfilePictureUrl: profilePictureURL.String,
-		SubscriptionId:    subscriptionID.String,
-		FollowingCount:    followingCount.Int32,
-		FollowerCount:     followerCount.Int32,
-		PostCount:         -1,
+		Username:       request.Username,
+		Nickname:       nickname.String,
+		Status:         userStatus.String,
+		SubscriptionId: subscriptionID.String,
+		FollowingCount: followingCount.Int32,
+		FollowerCount:  followerCount.Int32,
+		PostCount:      -1,
+	}
+
+	if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+		response.Picture = &pb.Picture{
+			Url:    pictureUrl.String,
+			Width:  pictureWidth.Int32,
+			Height: pictureHeight.Int32,
+		}
 	}
 
 	return response, nil
@@ -144,7 +151,7 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	dataQuery, dataArgs, _ := psql.Select().
-		Columns("username", "nickname", "profile_picture_url").
+		Columns("username", "nickname", "picture_url", "picture_width", "picture_height").
 		Column("levenshtein(username, ?) AS distance", request.GetQuery()).
 		From("users").
 		Where("levenshtein(username, ?) <= 5", request.GetQuery()).
@@ -180,11 +187,26 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 	levenshteinDistance := 0
 	for rows.Next() {
 		user := &pb.PublicUser{}
-		if err = rows.Scan(&user.Username, &user.Nickname, &user.ProfilePictureUrl, &levenshteinDistance); err != nil {
+		var nickname, pictureUrl pgtype.Text
+		var pictureWidth, pictureHeight pgtype.Int4
+
+		if err = rows.Scan(&user.Username, &nickname, &pictureUrl, &pictureWidth, &pictureHeight, &levenshteinDistance); err != nil {
 			scanUserSpan.End()
 			us.logger.Errorf("Error in rows.Scan: %v", err)
 			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
 		}
+
+		if nickname.Valid {
+			user.Nickname = nickname.String
+		}
+		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+			user.Picture = &pb.Picture{
+				Url:    pictureUrl.String,
+				Width:  pictureWidth.Int32,
+				Height: pictureHeight.Int32,
+			}
+		}
+
 		users = append(users, user)
 	}
 	scanUserSpan.End()
@@ -220,7 +242,7 @@ func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	queryBuilder, queryArgs, _ := psql.Select().
-		Columns("username", "nickname", "profile_picture_url").
+		Columns("username", "nickname", "picture_url", "picture_width", "picture_height").
 		From("users").
 		Where(sq.Eq{"username": request.GetUsernames()}).
 		ToSql()
@@ -251,9 +273,24 @@ func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {
 	var users []*pb.PublicUser
 	for rows.Next() {
 		user := &pb.PublicUser{}
-		if err := rows.Scan(&user.Username, &user.Nickname, &user.ProfilePictureUrl); err != nil {
+		var nickname, pictureUrl pgtype.Text
+		var pictureWidth, pictureHeight pgtype.Int4
+
+		if err := rows.Scan(&user.Username, &nickname, &pictureUrl, &pictureWidth, &pictureHeight); err != nil {
 			return nil, err
 		}
+
+		if nickname.Valid {
+			user.Nickname = nickname.String
+		}
+		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+			user.Picture = &pb.Picture{
+				Url:    pictureUrl.String,
+				Width:  pictureWidth.Int32,
+				Height: pictureHeight.Int32,
+			}
+		}
+
 		users = append(users, user)
 	}
 	return users, nil

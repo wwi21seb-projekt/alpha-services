@@ -30,6 +30,12 @@ import (
 
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
+const (
+	defaultAvatarURL    = "https://getdrawings.com/free-icon/default-avatar-icon-62.png"
+	defaultAvatarWidth  = 512
+	defaultAvatarHeight = 512
+)
+
 type TokenTypeEnum string
 
 const (

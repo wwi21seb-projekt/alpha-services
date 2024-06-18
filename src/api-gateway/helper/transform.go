@@ -12,9 +12,9 @@ func TransformLocation(location *pbPost.Location) *schema.Location {
 	}
 
 	return &schema.Location{
-		Latitude:  location.Latitude,
-		Longitude: location.Longitude,
-		Accuracy:  location.Accuracy,
+		Latitude:  *location.Latitude,
+		Longitude: *location.Longitude,
+		Accuracy:  *location.Accuracy,
 	}
 }
 
@@ -24,9 +24,9 @@ func LocationToProto(location *schema.Location) *pbPost.Location {
 	}
 
 	return &pbPost.Location{
-		Latitude:  location.Latitude,
-		Longitude: location.Longitude,
-		Accuracy:  location.Accuracy,
+		Latitude:  &location.Latitude,
+		Longitude: &location.Longitude,
+		Accuracy:  &location.Accuracy,
 	}
 }
 
@@ -36,9 +36,13 @@ func TransformUser(user *pbUser.User) *schema.Author {
 	}
 
 	return &schema.Author{
-		Username:          user.Username,
-		Nickname:          user.Nickname,
-		ProfilePictureUrl: user.ProfilePictureUrl,
+		Username: user.Username,
+		Nickname: user.Nickname,
+		Picture: &schema.Picture{
+			Url:    user.Picture.Url,
+			Width:  user.Picture.Width,
+			Height: user.Picture.Height,
+		},
 	}
 }
 
@@ -48,9 +52,13 @@ func AuthorToProto(author *schema.Author) *pbUser.User {
 	}
 
 	return &pbUser.User{
-		Username:          author.Username,
-		Nickname:          author.Nickname,
-		ProfilePictureUrl: author.ProfilePictureUrl,
+		Username: author.Username,
+		Nickname: author.Nickname,
+		Picture: &pbUser.Picture{
+			Url:    author.Picture.Url,
+			Width:  author.Picture.Width,
+			Height: author.Picture.Height,
+		},
 	}
 }
 
@@ -60,10 +68,14 @@ func TransformUserSubscription(subscription *pbUser.Subscription) *schema.UserSu
 	}
 
 	return &schema.UserSubscription{
-		FollowerId:        subscription.FollowerSubscriptionId,
-		FollowingId:       subscription.FollowedSubscriptionId,
-		Username:          subscription.Username,
-		Nickname:          subscription.Nickname,
-		ProfilePictureUrl: subscription.ProfilePictureUrl,
+		FollowerId:  subscription.FollowerSubscriptionId,
+		FollowingId: subscription.FollowedSubscriptionId,
+		Username:    subscription.Username,
+		Nickname:    subscription.Nickname,
+		Picture: &schema.Picture{
+			Url:    subscription.Picture.Url,
+			Width:  subscription.Picture.Width,
+			Height: subscription.Picture.Height,
+		},
 	}
 }

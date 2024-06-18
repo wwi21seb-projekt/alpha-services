@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	"go.uber.org/zap"
 
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
@@ -12,14 +14,16 @@ import (
 //var hashtagRegex = regexp.MustCompile(`#\w+`)
 
 type postService struct {
+	logger        *zap.SugaredLogger
 	db            *db.DB
 	profileClient pbUser.UserServiceClient
 	subscription  pbUser.SubscriptionServiceClient
 	pb.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
+func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
 	return &postService{
+		logger:        logger,
 		db:            db,
 		profileClient: profileClient,
 		subscription:  subscription,

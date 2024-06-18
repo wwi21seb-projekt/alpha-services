@@ -28,10 +28,6 @@ spec:
               value: "production"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4317"
-            - name: POSTGRES_HOST
-              value: postgres
-            - name: POSTGRES_PORT
-              value: "5432"
           volumeMounts:
             - name: image-service-storage
               mountPath: /serveralpha/data

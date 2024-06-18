@@ -1,26 +1,27 @@
 package schema
 
 type Author struct {
-	Username          string `json:"username"`
-	Nickname          string `json:"nickname"`
-	ProfilePictureUrl string `json:"profilePictureURL"`
+	Username string   `json:"username"`
+	Nickname string   `json:"nickname"`
+	Picture  *Picture `json:"picture"`
 }
 
 type UserSubscription struct {
-	FollowerId        string `json:"followerId"`
-	FollowingId       string `json:"followingId"`
-	Username          string `json:"username"`
-	Nickname          string `json:"nickname"`
-	ProfilePictureUrl string `json:"profilePictureUrl"`
+	FollowerId  string   `json:"followerId"`
+	FollowingId string   `json:"followingId"`
+	Username    string   `json:"username"`
+	Nickname    string   `json:"nickname"`
+	Picture     *Picture `json:"picture"`
 }
 
 // ----------------- Request Schemas -----------------
 
 type RegistrationRequest struct {
-	Username string `json:"username" validate:"required,max=20,username_validation"`
-	Nickname string `json:"nickname" validate:"max=25"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8,password_validation"`
+	Username string   `json:"username" validate:"required,max=20,username_validation"`
+	Nickname string   `json:"nickname" validate:"max=25"`
+	Email    string   `json:"email" validate:"required,email"`
+	Password string   `json:"password" validate:"required,min=8,password_validation"`
+	Picture  *Picture `json:"picture" validate:"omitempty,base64"`
 }
 
 type LoginRequest struct {
@@ -63,14 +64,14 @@ type TokenPairResponse struct {
 }
 
 type GetUserResponse struct {
-	Username          string `json:"username"`
-	Nickname          string `json:"nickname"`
-	Status            string `json:"status"`
-	ProfilePictureUrl string `json:"profilePictureUrl"`
-	FollowerCount     int32  `json:"follower"`
-	FollowingCount    int32  `json:"following"`
-	PostCount         int32  `json:"posts"`
-	SubscriptionId    string `json:"subscriptionId"`
+	Username       string   `json:"username"`
+	Nickname       string   `json:"nickname"`
+	Status         string   `json:"status"`
+	Picture        *Picture `json:"picture"`
+	FollowerCount  int32    `json:"follower"`
+	FollowingCount int32    `json:"following"`
+	PostCount      int32    `json:"posts"`
+	SubscriptionId string   `json:"subscriptionId"`
 }
 
 type SearchUsersResponse struct {

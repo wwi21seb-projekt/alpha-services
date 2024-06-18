@@ -124,7 +124,15 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 
 	// Convert users to schema.Author
 	for i, user := range users.Users {
-		response.Users[i] = *helper.TransformUser(user)
+		response.Users[i] = schema.Author{
+			Username: user.Username,
+			Nickname: user.Nickname,
+			Picture: &schema.Picture{
+				Url:    user.GetPicture().GetUrl(),
+				Width:  user.GetPicture().GetWidth(),
+				Height: user.GetPicture().GetHeight(),
+			},
+		}
 	}
 
 	c.JSON(200, response)
@@ -356,14 +364,18 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 	}
 
 	response := &schema.GetUserResponse{
-		Username:          username,
-		Nickname:          user.Nickname,
-		Status:            user.Status,
-		ProfilePictureUrl: user.ProfilePictureUrl,
-		FollowerCount:     user.FollowerCount,
-		FollowingCount:    user.FollowingCount,
-		PostCount:         user.PostCount,
-		SubscriptionId:    user.SubscriptionId,
+		Username: username,
+		Nickname: user.Nickname,
+		Status:   user.Status,
+		Picture: &schema.Picture{
+			Url:    user.Picture.Url,
+			Width:  user.Picture.Width,
+			Height: user.Picture.Height,
+		},
+		FollowerCount:  user.FollowerCount,
+		FollowingCount: user.FollowingCount,
+		PostCount:      user.PostCount,
+		SubscriptionId: user.SubscriptionId,
 	}
 
 	c.JSON(200, response)

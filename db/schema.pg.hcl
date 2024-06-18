@@ -198,6 +198,18 @@ table "posts" {
     null = true
     type = integer
   }
+  column "picture_url" {
+    null = false
+    type = character_varying(64)
+  }
+  column "picture_width" {
+    null = false
+    type = integer
+  }
+  column "picture_height" {
+    null = false
+    type = integer
+  }
   column "repost_post_id" {
     null = true
     type = uuid
@@ -273,9 +285,17 @@ table "users" {
     null = true
     type = character_varying(256)
   }
-  column "profile_picture_url" {
+  column "picture_url" {
     null = false
-    type = character_varying(256)
+    type = character_varying(64)
+  }
+  column "picture_width" {
+    null = false
+    type = integer
+  }
+  column "picture_height" {
+    null = false
+    type = integer
   }
   column "created_at" {
     null = false

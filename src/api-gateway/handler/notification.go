@@ -110,9 +110,13 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 	response := schema.GetNotificationsResponse{}
 	for _, notification := range notifications.Notifications {
 		responseUser := schema.Author{
-			Username:          notification.User.Username,
-			Nickname:          notification.User.Nickname,
-			ProfilePictureUrl: notification.User.ProfilePictureUrl,
+			Username: notification.User.Username,
+			Nickname: notification.User.Nickname,
+			Picture: &schema.Picture{
+				Url:    notification.User.GetPicture().GetUrl(),
+				Width:  notification.User.GetPicture().GetWidth(),
+				Height: notification.User.GetPicture().GetHeight(),
+			},
 		}
 		responseNotification := schema.Notification{
 			NotificationID:   notification.NotificationId,
