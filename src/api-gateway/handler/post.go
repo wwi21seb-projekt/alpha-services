@@ -186,7 +186,7 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 		return false
 	}
 
-	claimsfunc := middleware.SetClaimsMiddleware(ph.jwtManager)
+	claimsfunc := middleware.SetClaimsMiddleware(ph.logger, ph.jwtManager)
 	claimsfunc(c)
 
 	return false
