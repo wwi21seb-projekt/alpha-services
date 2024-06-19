@@ -47,25 +47,28 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	query, args, _ := psql.Select().
-		Columns("u.nickname", "u.status", "u.profile_picture_url").
+		Columns("u.nickname", "u.status", "u.picture_url", "u.picture_width", "u.picture_height").
 		Column("s1.subscription_id AS subscription_id").
 		Column("COUNT(s2.subscription_id) AS following_count").
 		Column("COUNT(s3.subscription_id) AS follower_count").
-		Column("COUNT(p.post_id) AS post_count").
+		//Column("COUNT(p.post_id) AS post_count").
 		From("users u").
 		LeftJoin("subscriptions s1 ON s1.subscribee_name = u.username AND s1.subscriber_name = ?", username).
 		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username").
 		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
-		LeftJoin("posts p ON p.author_name = u.username").
+		//LeftJoin("posts p ON p.author_name = u.username").
 		Where("u.username = ?", request.GetUsername()).
 		GroupBy("u.nickname", "u.status", "u.profile_picture_url", "s1.subscription_id").
 		ToSql()
 
+	var nickname, userStatus, pictureUrl, subscriptionID pgtype.Text
+	var followingCount, followerCount, pictureWidth, pictureHeight pgtype.Int4
+
 	us.logger.Info("Querying user data")
-	response := &pb.GetUserResponse{}
 	if err = conn.QueryRow(selectCtx, query, args...).Scan(
-		&response.Nickname, &response.Status, &response.ProfilePictureUrl, &response.SubscriptionId,
-		&response.FollowingCount, &response.FollowerCount, &response.PostCount,
+		&nickname, &userStatus, &pictureUrl, &pictureWidth,
+		&pictureHeight, &subscriptionID, &followingCount, &followerCount,
+		//&response.PostCount,
 	); err != nil {
 		selectSpan.End()
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -77,6 +80,24 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		return nil, status.Errorf(codes.Internal, "Error in conn.QueryRow: %v", err)
 	}
 	selectSpan.End()
+
+	response := &pb.GetUserResponse{
+		Username:       request.Username,
+		Nickname:       nickname.String,
+		Status:         userStatus.String,
+		SubscriptionId: subscriptionID.String,
+		FollowingCount: followingCount.Int32,
+		FollowerCount:  followerCount.Int32,
+		PostCount:      -1,
+	}
+
+	if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+		response.Picture = &pbCommon.Picture{
+			Url:    pictureUrl.String,
+			Width:  pictureWidth.Int32,
+			Height: pictureHeight.Int32,
+		}
+	}
 
 	return response, nil
 }
@@ -130,7 +151,7 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	dataQuery, dataArgs, _ := psql.Select().
-		Columns("username", "nickname", "profile_picture_url").
+		Columns("username", "nickname", "picture_url", "picture_width", "picture_height").
 		Column("levenshtein(username, ?) AS distance", request.GetQuery()).
 		From("users").
 		Where("levenshtein(username, ?) <= 5", request.GetQuery()).
@@ -162,22 +183,28 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 
 	// Scan users
 	_, scanUserSpan := us.tracer.Start(ctx, "ScanUsersFromRows")
-	users := make([]*pb.User, 0)
+	users := make([]*pb.PublicUser, 0)
 	levenshteinDistance := 0
 	for rows.Next() {
-		user := &pb.User{}
-		var nickname, profilePictureUrl = pgtype.Text{}, pgtype.Text{}
+		user := &pb.PublicUser{}
+		var nickname, pictureUrl pgtype.Text
+		var pictureWidth, pictureHeight pgtype.Int4
 
-		if err = rows.Scan(&user.Username, &nickname, &profilePictureUrl, &levenshteinDistance); err != nil {
+		if err = rows.Scan(&user.Username, &nickname, &pictureUrl, &pictureWidth, &pictureHeight, &levenshteinDistance); err != nil {
 			scanUserSpan.End()
 			us.logger.Errorf("Error in rows.Scan: %v", err)
 			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
 		}
+
 		if nickname.Valid {
 			user.Nickname = nickname.String
 		}
-		if profilePictureUrl.Valid {
-			user.ProfilePictureUrl = profilePictureUrl.String
+		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+			user.Picture = &pbCommon.Picture{
+				Url:    pictureUrl.String,
+				Width:  pictureWidth.Int32,
+				Height: pictureHeight.Int32,
+			}
 		}
 
 		users = append(users, user)
@@ -215,7 +242,7 @@ func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
 	queryBuilder, queryArgs, _ := psql.Select().
-		Columns("username", "nickname", "profile_picture_url").
+		Columns("username", "nickname", "picture_url", "picture_width", "picture_height").
 		From("users").
 		Where(sq.Eq{"username": request.GetUsernames()}).
 		ToSql()
@@ -242,20 +269,28 @@ func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	}, nil
 }
 
-func scanUsers(rows pgx.Rows) ([]*pb.User, error) {
-	var users []*pb.User
+func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {
+	var users []*pb.PublicUser
 	for rows.Next() {
-		user := &pb.User{}
-		var nickname, profilePictureUrl = pgtype.Text{}, pgtype.Text{}
-		if err := rows.Scan(&user.Username, &nickname, &profilePictureUrl); err != nil {
+		user := &pb.PublicUser{}
+		var nickname, pictureUrl pgtype.Text
+		var pictureWidth, pictureHeight pgtype.Int4
+
+		if err := rows.Scan(&user.Username, &nickname, &pictureUrl, &pictureWidth, &pictureHeight); err != nil {
 			return nil, err
 		}
+
 		if nickname.Valid {
 			user.Nickname = nickname.String
 		}
-		if profilePictureUrl.Valid {
-			user.ProfilePictureUrl = profilePictureUrl.String
+		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+			user.Picture = &pbCommon.Picture{
+				Url:    pictureUrl.String,
+				Width:  pictureWidth.Int32,
+				Height: pictureHeight.Int32,
+			}
 		}
+
 		users = append(users, user)
 	}
 	return users, nil

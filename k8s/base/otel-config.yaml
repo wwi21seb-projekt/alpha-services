@@ -9,6 +9,7 @@ spec:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
+
     processors:
       memory_limiter:
         check_interval: 1s
@@ -23,6 +24,10 @@ spec:
         endpoint: "jaeger-collector.observability:4317"
         tls:
           insecure: true
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      debug:
+        verbosity: detailed
 
     service:
       pipelines:
@@ -30,3 +35,26 @@ spec:
           receivers: [otlp]
           processors: [memory_limiter, batch]
           exporters: [otlp/jaeger]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus, debug]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otel-collector
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: opentelemetry-collector
+      app.kubernetes.io/instance: otel
+      app.kubernetes.io/managed-by: opentelemetry-operator
+      app.kubernetes.io/part-of: opentelemetry
+      operator.opentelemetry.io/collector-service-type: base
+  endpoints:
+    - port: prometheus
+      interval: 3s
+      path: /metrics

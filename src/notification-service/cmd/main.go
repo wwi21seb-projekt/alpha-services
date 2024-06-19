@@ -1,19 +1,22 @@
 package main
 
 import (
+	"context"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
+	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -23,13 +26,8 @@ var (
 
 func main() {
 	// Initialize logger
-	logger := sharedLogging.GetZapLogger()
-	defer func(logger *zap.SugaredLogger) {
-		err := logger.Sync()
-		if err != nil {
-			logger.Fatal("Failed to sync logger", zap.Error(err))
-		}
-	}(logger)
+	logger, cleanup := sharedLogging.InitializeLogger(name)
+	defer cleanup()
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -38,40 +36,51 @@ func main() {
 	}
 
 	// Initialize the database
-	database, err := db.NewDB(cfg.DatabaseConfig)
+	ctx := context.Background()
+	database, err := db.NewDB(ctx, cfg.DatabaseConfig)
 	if err != nil {
-		logger.Fatalf("Failed to connect to the database: %v", err)
+		logger.Fatal("Failed to connect to the database", zap.Error(err))
 	}
 	defer database.Close()
+
+	// Initialize tracing
+	tracingShutdown, err := tracing.InitializeTracing(ctx, name, version)
+	if err != nil {
+		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
+	}
+	defer tracingShutdown()
+
+	// Intialize metrics
+	metricShutdown, err := metrics.InitializeMetrics(ctx, name, version)
+	if err != nil {
+		logger.Fatal("Failed to initialize metrics", zap.Error(err))
+	}
+	defer metricShutdown()
+
+	// Initialize gRPC client connections
+	if err = cfg.InitializeClients(logger.Desugar()); err != nil {
+		logger.Fatal("Failed to initialize gRPC clients", zap.Error(err))
+	}
+
+	// Create client stubs
+	userProfileClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
+	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
+
+	// Create the gRPC Server
+	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
+
+	// Register notification service
+	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+
+	// Register health service
+	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
 		logger.Fatalf("Failed to listen: %v", err)
 	}
-
-	// Create server
-	var serverOpts []grpc.ServerOption
-	grpcServer := grpc.NewServer(serverOpts...)
-
-	// Create user client
-	var dialOpts []grpc.DialOption
-	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	userClient, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
-	if err != nil {
-		logger.Fatalf("Failed to connect to user service: %v", err)
-	}
-	defer userClient.Close()
-
-	// Create client stubs
-	userProfileClient := pbUser.NewUserServiceClient(userClient)
-	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(userClient)
-
-	// Register notification service
-	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
-	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
-	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Start server
 	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)

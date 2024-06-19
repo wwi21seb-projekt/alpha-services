@@ -1,4 +1,4 @@
-h1:wOZH1sJEs92xkjzA2WmQfcUECoO/Z2CpX67yTLXlW/4=
+h1:2VUKljdgszFTksVi/pMQNQ6Vy0rMAvPhllxpr6ATe7E=
 20240525191742_baseline.sql h1:NV4sYr/8qfI9Y84slewBhICxXge1q3eyldZ165sR1kc=
 20240527104134_create_unique_constraints.sql h1:0yyIMcnw3uKZJukxVqStP6IAYFOkAI1a59m0Hfh6kZ0=
 20240527111445_remove_null_constraints.sql h1:ZcYwSFI8t/fz9nTA8t6MhnYG7DFcsjuvnqiuMQkNBi0=
@@ -7,3 +7,7 @@ h1:wOZH1sJEs92xkjzA2WmQfcUECoO/Z2CpX67yTLXlW/4=
 20240531001808_import_fuzzystrmatch_extension.sql h1:RTQrObm2t0IkRKFO9jEb9+1FNw9dsuiERSD60ho3WLg=
 20240603131738_notification_service.sql h1:bbP3M5qvTaIbjyHhsJ7DIfU2EHkU72Lm8wk2eH0Sn2Q=
 20240603171941_create_chat_service_schema.sql h1:ISd6MzqRBCRo8Xr6y93hQO9CokrUSfaiV7JhRA/ycGc=
+20240617195048_remove_types_columns_fix.sql h1:ONjHSiU/XHAjhCjiKDTIr8q9FwCne2EPw93xyH56Y7o=
+20240617195157_add_types_columns_fix.sql h1:heqeI/uKcJkwP/lz7tCL4RKT25HN45pSohm453KKStI=
+20240617195513_change_optionals.sql h1:LADHnK2OemQwwCGBeFtFZLe1I5HjRC/IWf5Li7MwJys=
+20240618174306_picture_changes.sql h1:SiKch63+KsLvNJFdrF7FgGmwMtE1n1JHWjmqdZha4bU=

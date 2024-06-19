@@ -10,8 +10,6 @@ import (
 	"github.com/gin-contrib/cors"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/gin-contrib/graceful"
@@ -22,13 +20,14 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
+	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -38,13 +37,8 @@ var (
 
 func main() {
 	// Initialize logger
-	logger := sharedLogging.GetZapLogger()
-	defer func(logger *zap.SugaredLogger) {
-		err := logger.Sync()
-		if err != nil {
-			logger.Fatal("Failed to sync logger", zap.Error(err))
-		}
-	}(logger)
+	logger, cleanup := sharedLogging.InitializeLogger(name)
+	defer cleanup()
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -53,62 +47,35 @@ func main() {
 	}
 	logger.Infof("Loaded configuration: %+v", cfg)
 
-	// Create client metrics
-	reg := prometheus.NewRegistry()
-	clMetrics := tracing.GetClientMetrics()
-	reg.MustRegister(clMetrics)
-
-	// Init telemetry
-	shutdown, err := tracing.InitTelemetry(context.Background(), name, version)
+	ctx := context.Background()
+	// Initialize tracing
+	tracingShutdown, err := tracing.InitializeTracing(ctx, name, version)
 	if err != nil {
 		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
 	}
-	defer func() {
-		if err := shutdown(context.Background()); err != nil {
-			logger.Fatal("Failed to shutdown telemetry", zap.Error(err))
-		}
-	}()
+	defer tracingShutdown()
 
-	// Create dial options
-	zapLogger := logger.With(zap.String("service", name)).Desugar()
-	dialOpts := tracing.NewClientOptions(clMetrics, zapLogger)
-
-	// Set up a connection to the gRPC post server
-	postConn, err := grpc.NewClient(cfg.ServiceEndpoints.PostServiceURL, dialOpts...)
+	// Intialize metrics
+	metricShutdown, err := metrics.InitializeMetrics(ctx, name, version)
 	if err != nil {
-		logger.Fatalf("failed to connect to the post-service gRPC server: %v", err)
+		logger.Fatal("Failed to initialize metrics", zap.Error(err))
 	}
-	defer postConn.Close()
+	defer metricShutdown()
 
-	// Set up a connection to the gRPC user server
-	userConn, err := grpc.NewClient(cfg.ServiceEndpoints.UserServiceURL, dialOpts...)
-	if err != nil {
-		logger.Fatalf("failed to connect to the user-service gRPC server: %v", err)
+	// Initialize gRPC client connections
+	if err = cfg.InitializeClients(logger.Desugar()); err != nil {
+		logger.Fatal("Failed to initialize gRPC clients", zap.Error(err))
 	}
-	defer userConn.Close()
-
-	// Set up a connection to the gRPC chat server
-	chatConn, err := grpc.NewClient(cfg.ServiceEndpoints.ChatServiceURL, dialOpts...)
-	if err != nil {
-		logger.Fatalf("failed to connect to the chat-service gRPC server: %v", err)
-	}
-	defer chatConn.Close()
-
-	// Set up a connection to the gRPC notification server
-	notificationConn, err := grpc.NewClient(cfg.ServiceEndpoints.NotificationServiceURL, dialOpts...)
-	if err != nil {
-		logger.Fatalf("failed to connect to the notification-service gRPC server: %v", err)
-	}
-	defer notificationConn.Close()
 
 	// Create client stubs
-	userClient := pbUser.NewUserServiceClient(userConn)
-	subscriptionClient := pbUser.NewSubscriptionServiceClient(userConn)
-	authClient := pbUser.NewAuthenticationServiceClient(userConn)
-	chatClient := pbChat.NewChatServiceClient(chatConn)
-	postClient := pbPost.NewPostServiceClient(postConn)
-	notificationClient := pbNotification.NewNotificationServiceClient(notificationConn)
-	pushSubscriptionClient := pbNotification.NewPushServiceClient(notificationConn)
+	userClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
+	subscriptionClient := pbUser.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
+	authClient := pbUser.NewAuthenticationServiceClient(cfg.GRPCClients.UserService)
+	chatClient := pbChat.NewChatServiceClient(cfg.GRPCClients.ChatService)
+	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
+	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
+	pushSubscriptionClient := pbNotification.NewPushServiceClient(cfg.GRPCClients.NotificationService)
+	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager(logger)
@@ -121,6 +88,7 @@ func main() {
 	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
 	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)
+	imageHandler := handler.NewImageHandler(logger, imageClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -129,18 +97,12 @@ func main() {
 	}
 
 	// Set up common middleware
-	setupCommonMiddleware(r, zapLogger)
-
-	// Expose metrics endpoint
-	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(reg, promhttp.HandlerOpts{
-		ErrorHandling:     promhttp.ContinueOnError,
-		EnableOpenMetrics: true,
-	})))
+	setupCommonMiddleware(r, logger.Desugar())
 
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(logger, jwtManager))
-	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
+	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler, imageHandler)
 	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
 
 	// Create a context that listens for termination signals
@@ -175,9 +137,12 @@ func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
+
+	// Image routes
+	apiRouter.GET("/images", imageHandler.GetImage)
 
 	// User routes
 	apiRouter.POST("/users", middleware.ValidateAndSanitizeStruct(&schema.RegistrationRequest{}), userHandler.RegisterUser)

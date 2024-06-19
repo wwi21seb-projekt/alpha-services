@@ -292,9 +292,13 @@ func (ch *ChatHandler) GetChats(c *gin.Context) {
 		chat := schema.ChatInformation{
 			ChatID: chat.GetId(),
 			User: schema.Author{
-				Username:          chat.GetUser().GetUsername(),
-				Nickname:          chat.GetUser().GetNickname(),
-				ProfilePictureUrl: chat.GetUser().GetProfilePictureUrl(),
+				Username: chat.GetUser().GetUsername(),
+				Nickname: chat.GetUser().GetNickname(),
+				Picture: &schema.Picture{
+					Url:    chat.GetUser().GetPicture().GetUrl(),
+					Width:  chat.GetUser().GetPicture().GetWidth(),
+					Height: chat.GetUser().GetPicture().GetHeight(),
+				},
 			},
 		}
 
