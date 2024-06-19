@@ -37,17 +37,15 @@ type PostHandler struct {
 	logger      *zap.SugaredLogger
 	tracer      trace.Tracer
 	postService pbPost.PostServiceClient
-	feedService pbPost.FeedServiceClient
 	jwtManager  manager.JWTManager
 }
 
-func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, jwtManager manager.JWTManager, feedService pbPost.FeedServiceClient) PostHdlr {
+func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, jwtManager manager.JWTManager) PostHdlr {
 	return &PostHandler{
 		logger:      logger,
 		tracer:      otel.GetTracerProvider().Tracer("post-handler"),
 		postService: client,
 		jwtManager:  jwtManager,
-		feedService: feedService,
 	}
 }
 
@@ -57,8 +55,8 @@ func (ph *PostHandler) CreatePost(c *gin.Context) {
 	req := &pbPost.CreatePostRequest{
 		Content:        createPostRequest.Content,
 		Location:       helper.LocationToProto(&createPostRequest.Location),
-		Picture:        createPostRequest.Picture,
-		RepostedPostId: createPostRequest.RepostedPostID,
+		Picture:        &createPostRequest.Picture,
+		RepostedPostId: &createPostRequest.RepostedPostID,
 	}
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
@@ -100,9 +98,8 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 	c.Set("username", user)
 
 	resp, err := ph.postService.ListPosts(c, &pbPost.ListPostsRequest{
-		Author:      user,
-		LikedBy:     user,
-		CommentedBy: user,
+		FeedType: pbPost.FeedType_FEED_TYPE_USER,
+		Username: &user,
 		Pagination: &pbPost.PostPagination{
 			LastPostId: lastPostId,
 			Limit:      int32(limit),
@@ -134,14 +131,11 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 		limit = 10
 	}
 
-	var resp *pbPost.SearchPostsResponse
+	var resp *pbPost.ListPostsResponse
 
 	if publicFeedWanted {
-		/*resp, err = h.feedService.GetGlobalFeed(c, &pbPost.GetFeedRequest{
-			LastPostId: lastPostID,
-			Limit:      int32(limit),
-		})*/
 		resp, err = ph.postService.ListPosts(c, &pbPost.ListPostsRequest{
+			FeedType: pbPost.FeedType_FEED_TYPE_GLOBAL,
 			Pagination: &pbPost.PostPagination{
 				LastPostId: lastPostID,
 				Limit:      int32(limit),
@@ -150,9 +144,12 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 	} else {
 		ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-		resp, err = ph.feedService.GetPersonalFeed(ctx, &pbPost.GetFeedRequest{
-			LastPostId: lastPostID,
-			Limit:      int32(limit),
+		resp, err = ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
+			FeedType: pbPost.FeedType_FEED_TYPE_PERSONAL,
+			Pagination: &pbPost.PostPagination{
+				LastPostId: lastPostID,
+				Limit:      int32(limit),
+			},
 		})
 	}
 

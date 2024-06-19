@@ -10,8 +10,6 @@ import (
 	"github.com/gin-contrib/cors"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/gin-contrib/graceful"
@@ -86,7 +84,7 @@ func main() {
 	hub := ws.NewHub(logger)
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(postClient)
+	postHandler := handler.NewPostHandler(logger, postClient, jwtManager)
 	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
 	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)

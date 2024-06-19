@@ -3,7 +3,7 @@ module github.com/wwi21seb-projekt/alpha-services/src/notification-service
 go 1.22.3
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618231347-e892211d51e0
+	github.com/wwi21seb-projekt/alpha-shared v0.20.0
 	google.golang.org/grpc v1.64.0
 )
 

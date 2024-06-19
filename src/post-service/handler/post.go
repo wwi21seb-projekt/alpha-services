@@ -46,12 +46,7 @@ func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pb
 	}
 }
 
-func (ps *postService) SearchPosts(ctx context.Context, empty *pb.SearchPostsRequest) (*pb.SearchPostsResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.SearchPostsResponse, error) {
+func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.ListPostsResponse, error) {
 	conn, err := ps.db.Pool.Acquire(ctx)
 	if err != nil {
 		ps.logger.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
@@ -62,22 +57,58 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 	baseQueryBuilder := psql.Select().
 		From("posts p")
 
-	if request.Hashtag != nil {
-		baseQueryBuilder = baseQueryBuilder.Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
-			Where(sq.Eq{"h.hashtag_id_hashtags": request.Hashtag})
+	var authenticatedUsername string
+	if request.FeedType != pb.FeedType_FEED_TYPE_GLOBAL {
+		authenticatedUsername = metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 	}
 
-	if request.LikedBy != nil || request.CommentedBy != nil || request.Author != nil {
-		likedByUser := sq.Eq{"l.username": request.LikedBy}
-		commentedByUser := sq.Eq{"c.author_name": request.CommentedBy}
-		authoredByUser := sq.Eq{"p.author_name": request.Author}
+	if request.FeedType == pb.FeedType_FEED_TYPE_USER {
+		if request.Username != nil && *request.Username == "" {
+			return nil, status.Error(codes.InvalidArgument, "Username cannot be empty")
+		}
+
+		likedByUser := sq.Eq{"l.username": request.Username}
+		commentedByUser := sq.Eq{"c.author_name": request.Username}
+		authoredByUser := sq.Eq{"p.author_name": request.Username}
 		baseQueryBuilder = baseQueryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
 			LeftJoin("comments c ON p.post_id = c.post_id").
 			Where(sq.Or{likedByUser, commentedByUser, authoredByUser})
 	}
 
-	if request.Pagination.LastPostId != "" {
-		baseQueryBuilder = baseQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", request.Pagination.LastPostId)
+	if request.FeedType == pb.FeedType_FEED_TYPE_PERSONAL {
+		newCTX := metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
+
+		subCtx, subSpan := ps.tracer.Start(newCTX, "GetSubscriptions")
+		subscriptions, err := ps.subscription.ListSubscriptions(subCtx, &pbUser.ListSubscriptionsRequest{
+			Username:         authenticatedUsername,
+			SubscriptionType: pbUser.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING,
+			Pagination:       &pbCommon.PaginationRequest{Limit: 1000},
+		})
+		if err != nil {
+			subSpan.End()
+			ps.logger.Errorf("Error in subscriptionClient.ListSubscriptions: %v", err)
+			return nil, status.Errorf(codes.Internal, "failed to get subscriptions: %v", err)
+		}
+		subSpan.End()
+
+		peopleIFollow := make([]string, 0)
+		for _, sub := range subscriptions.Subscriptions {
+			peopleIFollow = append(peopleIFollow, sub.Username)
+		}
+		peopleIFollow = append(peopleIFollow, authenticatedUsername)
+
+		authoredCondition := sq.Eq{"p.author_name": peopleIFollow}
+		likedCondition := sq.Eq{"l.username": peopleIFollow}
+		commentedCondition := sq.Eq{"c.author_name": peopleIFollow}
+
+		baseQueryBuilder = baseQueryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
+			LeftJoin("comments c ON p.post_id = c.post_id").
+			Where(sq.Or{authoredCondition, likedCondition, commentedCondition})
+	}
+
+	if request.Hashtag != nil {
+		baseQueryBuilder = baseQueryBuilder.Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
+			Where(sq.Eq{"h.hashtag_id_hashtags": request.Hashtag})
 	}
 
 	// Create the count query
@@ -95,6 +126,10 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 	if err != nil {
 		ps.logger.Errorf("conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords) failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to execute count query: %v", err)
+	}
+
+	if request.GetPagination() != nil || request.Pagination.GetLastPostId() != "" {
+		baseQueryBuilder = baseQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", request.Pagination.LastPostId)
 	}
 
 	dataQueryBuilder := baseQueryBuilder.
@@ -156,11 +191,12 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 			return nil, status.Errorf(codes.Internal, "Failed to get author profile: %v", err)
 		}
 	*/
-	resp := &pb.SearchPostsResponse{
+	resp := &pb.ListPostsResponse{
 		Posts: posts,
-		Pagination: &pbCommon.Pagination{
-			Limit:   request.Pagination.Limit,
-			Records: int32(totalRecords),
+		Pagination: &pb.PostPagination{
+			LastPostId: request.Pagination.LastPostId,
+			Limit:      request.Pagination.Limit,
+			Records:    int32(totalRecords),
 		},
 	}
 
