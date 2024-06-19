@@ -3,7 +3,7 @@ module github.com/wwi21seb-projekt/alpha-services/src/post-service
 go 1.22.3
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618161444-2bf297050b1d
+	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618231347-e892211d51e0
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.64.0
 )

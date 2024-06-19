@@ -10,6 +10,7 @@ import (
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
+	pb "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"github.com/wwi21seb-projekt/src/image-service/handler"
 	"go.uber.org/zap"
@@ -52,6 +53,9 @@ func main() {
 
 	// Register health service
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
+
+	// Register image service
+	pb.RegisterImageServiceServer(grpcServer, handler.NewImageServiceServer(logger))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

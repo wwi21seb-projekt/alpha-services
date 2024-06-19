@@ -30,7 +30,7 @@ type imageService struct {
 	pb.UnimplementedImageServiceServer
 }
 
-func NewPostServiceServer(logger *zap.SugaredLogger) pb.ImageServiceServer {
+func NewImageServiceServer(logger *zap.SugaredLogger) pb.ImageServiceServer {
 	return &imageService{
 		logger: logger,
 	}
@@ -110,7 +110,7 @@ func validateImage(logger *zap.SugaredLogger, imageBytes []byte) (image.Image, s
 	image, imageType, err := image.Decode(bytes.NewReader(imageBytes))
 
 	switch imageType {
-	case "image/jpeg", "image/png", "image/webp":
+	case "jpeg", "png", "webp":
 		// Check if the image size is within the limit
 		if len(imageBytes) > MaxImageSize {
 			logger.Error("Image size exceeds the limit")

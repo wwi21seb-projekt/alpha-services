@@ -22,6 +22,7 @@ import (
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
@@ -74,6 +75,7 @@ func main() {
 	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
 	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 	pushSubscriptionClient := pbNotification.NewPushServiceClient(cfg.GRPCClients.NotificationService)
+	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager(logger)
@@ -86,6 +88,7 @@ func main() {
 	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
 	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)
+	imageHandler := handler.NewImageHandler(logger, imageClient)
 
 	// Expose HTTP endpoint with graceful shutdown
 	r, err := graceful.New(gin.New())
@@ -99,7 +102,7 @@ func main() {
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
 	authorizedRouter.Use(middleware.SetClaimsMiddleware(logger, jwtManager))
-	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler)
+	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler, imageHandler)
 	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
 
 	// Create a context that listens for termination signals
@@ -134,9 +137,12 @@ func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr) {
+func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
+
+	// Image routes
+	apiRouter.GET("/images", imageHandler.GetImage)
 
 	// User routes
 	apiRouter.POST("/users", middleware.ValidateAndSanitizeStruct(&schema.RegistrationRequest{}), userHandler.RegisterUser)

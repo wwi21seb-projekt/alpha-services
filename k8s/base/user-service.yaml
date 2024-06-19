@@ -33,6 +33,10 @@ spec:
               value: "http://otel-collector:4317"
             - name: MAIL_SERVICE_URL
               value: "mail-service:50053"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "notification-service:50054"
+            - name: IMAGE_SERVICE_URL
+              value: "image-service:50056"
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT

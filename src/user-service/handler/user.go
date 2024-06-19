@@ -92,7 +92,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	}
 
 	if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-		response.Picture = &pb.Picture{
+		response.Picture = &pbCommon.Picture{
 			Url:    pictureUrl.String,
 			Width:  pictureWidth.Int32,
 			Height: pictureHeight.Int32,
@@ -200,7 +200,7 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 			user.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			user.Picture = &pb.Picture{
+			user.Picture = &pbCommon.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,
@@ -284,7 +284,7 @@ func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {
 			user.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			user.Picture = &pb.Picture{
+			user.Picture = &pbCommon.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,

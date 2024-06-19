@@ -62,10 +62,11 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	user, err := uh.authService.RegisterUser(ctx, &pb.RegisterUserRequest{
-		Username: req.Username,
-		Password: req.Password,
-		Nickname: req.Nickname,
-		Email:    req.Email,
+		Username:      req.Username,
+		Password:      req.Password,
+		Nickname:      req.Nickname,
+		Email:         req.Email,
+		Base64Picture: req.Picture,
 	})
 	if err != nil {
 		rpcStatus := status.Convert(err)
@@ -145,8 +146,9 @@ func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	_, err := uh.profileService.UpdateUser(ctx, &pb.UpdateUserRequest{
-		Nickname: req.NewNickname,
-		Status:   req.Status,
+		Nickname:      req.NewNickname,
+		Status:        req.Status,
+		Base64Picture: &req.Picture,
 	})
 	if err != nil {
 		uh.logger.Errorf("Error in upstream call uh.profileService.UpdateUser: %v", err)

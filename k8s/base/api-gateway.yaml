@@ -32,10 +32,12 @@ spec:
               value: "post-service:50051"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
-            - name: CHAT_SERVICE_URL
-              value: "chat-service:50055"
             - name: NOTIFICATION_SERVICE_URL
               value: "notification-service:50054"
+            - name: CHAT_SERVICE_URL
+              value: "chat-service:50055"
+            - name: IMAGE_SERVICE_URL
+              value: "image-service:50056"
             - name: JWT_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:

@@ -17,11 +17,11 @@ type UserSubscription struct {
 // ----------------- Request Schemas -----------------
 
 type RegistrationRequest struct {
-	Username string   `json:"username" validate:"required,max=20,username_validation"`
-	Nickname string   `json:"nickname" validate:"max=25"`
-	Email    string   `json:"email" validate:"required,email"`
-	Password string   `json:"password" validate:"required,min=8,password_validation"`
-	Picture  *Picture `json:"picture" validate:"omitempty,base64"`
+	Username string `json:"username" validate:"required,max=20,username_validation"`
+	Nickname string `json:"nickname" validate:"max=25"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8,password_validation"`
+	Picture  string `json:"profilePicture"`
 }
 
 type LoginRequest struct {
@@ -44,6 +44,7 @@ type SubscriptionRequest struct {
 type ChangeTrivialInformationRequest struct {
 	NewNickname string `json:"nickname" validate:"max=25"`
 	Status      string `json:"status" validate:"max=256"`
+	Picture     string `json:"picture" validate:"omitempty,base64"`
 }
 
 type ChangePasswordRequest struct {

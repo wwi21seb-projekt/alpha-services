@@ -2,6 +2,7 @@ package helper
 
 import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
+	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
@@ -54,7 +55,7 @@ func AuthorToProto(author *schema.Author) *pbUser.User {
 	return &pbUser.User{
 		Username: author.Username,
 		Nickname: author.Nickname,
-		Picture: &pbUser.Picture{
+		Picture: &pbCommon.Picture{
 			Url:    author.Picture.Url,
 			Width:  author.Picture.Width,
 			Height: author.Picture.Height,

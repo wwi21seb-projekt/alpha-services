@@ -139,7 +139,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 			subscription.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			subscription.Picture = &pb.Picture{
+			subscription.Picture = &pbCommon.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,

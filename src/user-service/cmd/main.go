@@ -12,6 +12,7 @@ import (
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
@@ -66,6 +67,7 @@ func main() {
 	// Create client stubs
 	mailClient := pbMail.NewMailServiceClient(cfg.GRPCClients.MailService)
 	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
+	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
@@ -76,7 +78,7 @@ func main() {
 	// Register user services
 	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database))
 	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
-	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient))
+	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))
