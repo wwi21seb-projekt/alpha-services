@@ -28,7 +28,7 @@ require (
 )
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618161444-2bf297050b1d
+	github.com/wwi21seb-projekt/alpha-shared f1d9150700df
 	golang.org/x/image v0.17.0
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect

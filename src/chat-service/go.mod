@@ -4,7 +4,7 @@ go 1.22.3
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
-	github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618231347-e892211d51e0
+	github.com/wwi21seb-projekt/alpha-shared f1d9150700df
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	go.uber.org/zap v1.27.0
