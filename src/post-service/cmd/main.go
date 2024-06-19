@@ -74,6 +74,7 @@ func main() {
 
 	// Register post service
 	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	pbPost.RegisterFeedServiceServer(grpcServer, handler.NewFeedServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

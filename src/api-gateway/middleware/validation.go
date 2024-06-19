@@ -187,12 +187,8 @@ func postValidation(fl validator.FieldLevel) bool {
 // It ensures that the longitude, latitude, and accuracy fields contain valid values.
 func locationValidation(fl validator.FieldLevel) bool {
 	// Get the location struct from the field
-	location := fl.Field().Interface().(*schema.Location)
+	location := fl.Field().Interface().(schema.Location)
 
-	// If location is empty, return true since it is not required
-	if location == nil {
-		return true
-	}
 	// Check if the longitude is valid
 	if location.Longitude < -180 || location.Longitude > 180 {
 		return false
