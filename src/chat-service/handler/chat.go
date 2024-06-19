@@ -313,7 +313,7 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 		for _, user := range resp.Users {
 			if chat.User.Username == user.Username {
 				chat.User.Nickname = user.Nickname
-				chat.User.ProfilePictureUrl = user.ProfilePictureUrl
+				chat.User.Picture = user.Picture
 				break
 			}
 		}

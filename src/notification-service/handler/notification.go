@@ -114,14 +114,14 @@ func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.
 	userMap := make(map[string]*pbUser.User)
 	for _, user := range userdata.Users {
 		userMap[user.Username] = &pbUser.User{
-			Nickname:          user.Nickname,
-			ProfilePictureUrl: user.ProfilePictureUrl,
+			Nickname: user.Nickname,
+			Picture:  user.Picture,
 		}
 	}
 	for _, notfication := range notificationsResponse.Notifications {
 
 		notfication.User.Nickname = userMap[notfication.User.Username].Nickname
-		notfication.User.ProfilePictureUrl = userMap[notfication.User.Username].ProfilePictureUrl
+		notfication.User.Picture = userMap[notfication.User.Username].Picture
 
 	}
 	return notificationsResponse, nil

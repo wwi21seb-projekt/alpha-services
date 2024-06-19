@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
@@ -30,6 +33,12 @@ import (
 
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
+const (
+	defaultAvatarURL    = "https://getdrawings.com/free-icon/default-avatar-icon-62.png"
+	defaultAvatarWidth  = int32(512)
+	defaultAvatarHeight = int32(512)
+)
+
 type TokenTypeEnum string
 
 const (
@@ -38,19 +47,21 @@ const (
 )
 
 type authenticationService struct {
-	logger     *zap.SugaredLogger
-	tracer     trace.Tracer
-	db         *db.DB
-	mailClient pbMail.MailServiceClient
+	logger      *zap.SugaredLogger
+	tracer      trace.Tracer
+	db          *db.DB
+	mailClient  pbMail.MailServiceClient
+	imageClient pbImage.ImageServiceClient
 	pb.UnimplementedAuthenticationServiceServer
 }
 
-func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient pbMail.MailServiceClient) pb.AuthenticationServiceServer {
+func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient pbMail.MailServiceClient, imageClient pbImage.ImageServiceClient) pb.AuthenticationServiceServer {
 	return &authenticationService{
-		logger:     logger,
-		tracer:     otel.GetTracerProvider().Tracer("auth-service"),
-		db:         database,
-		mailClient: mailClient,
+		logger:      logger,
+		tracer:      otel.GetTracerProvider().Tracer("auth-service"),
+		db:          database,
+		mailClient:  mailClient,
+		imageClient: imageClient,
 	}
 }
 
@@ -72,14 +83,45 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	}
 	hashSpan.End()
 
+	// Upload image to storage if provided
+	imageUrl := defaultAvatarURL
+	imageWidth := defaultAvatarWidth
+	imageHeight := defaultAvatarHeight
+
+	if request.GetBase64Picture() != "" {
+		uploadImageCtx, uploadImageSpan := as.tracer.Start(ctx, "UploadImage")
+		as.logger.Info("Calling upstream imageClient.UploadImage...")
+		uploadImageResponse, err := as.imageClient.UploadImage(uploadImageCtx, &pbImage.UploadImageRequest{
+			Image:         request.GetBase64Picture(),
+			ContextString: request.GetUsername(),
+		})
+		if err != nil {
+			as.logger.Errorf("Error in upstream call imageClient.UploadImage: %v", err)
+			uploadImageSpan.End()
+			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
+		}
+
+		environment := os.Getenv("ENVIRONMENT")
+		if environment == "local" {
+			imageUrl = fmt.Sprintf("http://localhost:8080/images?image=%s", uploadImageResponse.GetUrl())
+		} else {
+			imageUrl = fmt.Sprintf("https://alpha.c930.net/images?image=%s", uploadImageResponse.GetUrl())
+		}
+
+		imageWidth = 500  // replace with actual width
+		imageHeight = 500 // replace with actual height
+
+		uploadImageSpan.End()
+	}
+
 	createdAt := time.Now()
 	expiresAt := createdAt.Add(168 * time.Hour)
 
 	insertUserCtx, insertUserSpan := as.tracer.Start(ctx, "InsertUser")
 	as.logger.Info("Inserting user into database...")
 	query, args, _ := psql.Insert("users").
-		Columns("username", "nickname", "password", "email", "created_at", "expires_at").
-		Values(request.Username, request.Nickname, hashedPassword, request.Email, createdAt, expiresAt).
+		Columns("username", "nickname", "password", "email", "picture_url", "picture_width", "picture_height", "created_at", "expires_at").
+		Values(request.Username, request.Nickname, hashedPassword, request.Email, imageUrl, imageWidth, imageHeight, createdAt, expiresAt).
 		ToSql()
 	_, err = tx.Exec(insertUserCtx, query, args...)
 	if err != nil {
@@ -148,6 +190,11 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		Username: request.Username,
 		Nickname: request.Nickname,
 		Email:    request.Email,
+		Picture: &pbCommon.Picture{
+			Url:    imageUrl,
+			Width:  imageWidth,
+			Height: imageHeight,
+		},
 	}, nil
 }
 

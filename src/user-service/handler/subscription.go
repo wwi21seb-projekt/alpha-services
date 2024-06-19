@@ -64,7 +64,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	selectCtx, selectSpan := ss.tracer.Start(ctx, "GetSubscriptionsData")
 	dataQuery, dataArgs, _ := psql.Select().
 		Columns("s2.subscription_id", "s3.subscription_id").
-		Columns("u.username", "u.nickname", "u.profile_picture_url").
+		Columns("u.username", "u.nickname", "u.picture_url", "u.picture_width", "u.picture_height").
 		From("users u").
 		Join("subscriptions s1 ON s1."+userTypes[0]+" = u.username").
 		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username AND s2.subscribee_name = ?", authenticatedUsername).
@@ -120,9 +120,10 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	defer scanRowsSpan.End() // we defer the span here, since we'll return after the loop anyway
 	for rows.Next() {
 		subscription := &pb.Subscription{}
-		var followedId, followerId, nickname, profilePictureUrl pgtype.Text
+		var followedId, followerId, nickname, pictureUrl pgtype.Text
+		var pictureWidth, pictureHeight pgtype.Int4
 
-		if err = rows.Scan(&followedId, &followerId, &subscription.Username, &nickname, &profilePictureUrl); err != nil {
+		if err = rows.Scan(&followedId, &followerId, &subscription.Username, &nickname, &pictureUrl, &pictureWidth, &pictureHeight); err != nil {
 			ss.logger.Errorf("Error in rows.Scan: %v", err)
 			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
 		}
@@ -137,8 +138,12 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 		if nickname.Valid {
 			subscription.Nickname = nickname.String
 		}
-		if profilePictureUrl.Valid {
-			subscription.ProfilePictureUrl = profilePictureUrl.String
+		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
+			subscription.Picture = &pbCommon.Picture{
+				Url:    pictureUrl.String,
+				Width:  pictureWidth.Int32,
+				Height: pictureHeight.Int32,
+			}
 		}
 		response.Subscriptions = append(response.Subscriptions, subscription)
 	}

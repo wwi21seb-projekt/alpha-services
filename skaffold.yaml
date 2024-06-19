@@ -27,7 +27,11 @@ build:
     - image: notification-service-image
       context: src/notification-service
       docker:
-        dockerfile: Dockerfile   
+        dockerfile: Dockerfile
+    - image: image-service-image
+      context: src/image-service
+      docker:
+        dockerfile: Dockerfile
   tagPolicy:
     sha256: {}
   local:
