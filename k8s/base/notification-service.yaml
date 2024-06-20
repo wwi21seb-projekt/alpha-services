@@ -26,6 +26,8 @@ spec:
               value: "50054"
             - name: ENVIROMENT
               value: "production"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
             - name: USER_SERVICE_URL
               value: "user-service:50052"
             - name: POSTGRES_HOST

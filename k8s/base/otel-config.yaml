@@ -38,7 +38,7 @@ spec:
         metrics:
           receivers: [ otlp ]
           processors: [memory_limiter, batch]
-          exporters: [ prometheus, debug ]
+          exporters: [ prometheus ]
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

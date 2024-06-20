@@ -63,19 +63,3 @@ spec:
       name: web
       port: 80
       targetPort: 8080
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: api-gateway
-  labels:
-    team: team-alpha
-    release: alpha-kube-prometheus-stack
-spec:
-  selector:
-    matchLabels:
-      app: api-gateway
-  endpoints:
-    - port: web
-      interval: 15s
-      path: /metrics
