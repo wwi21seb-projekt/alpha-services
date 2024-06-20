@@ -199,15 +199,15 @@ table "posts" {
     type = integer
   }
   column "picture_url" {
-    null = false
+    null = true
     type = character_varying(64)
   }
   column "picture_width" {
-    null = false
+    null = true
     type = integer
   }
   column "picture_height" {
-    null = false
+    null = true
     type = integer
   }
   column "repost_post_id" {
