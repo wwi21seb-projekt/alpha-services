@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
@@ -20,17 +21,19 @@ import (
 )
 
 type userService struct {
-	logger *zap.SugaredLogger
-	tracer trace.Tracer
-	db     *db.DB
+	logger     *zap.SugaredLogger
+	tracer     trace.Tracer
+	db         *db.DB
+	postClient pbPost.PostServiceClient
 	pb.UnimplementedUserServiceServer
 }
 
-func NewUserServer(logger *zap.SugaredLogger, database *db.DB) pb.UserServiceServer {
+func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost.PostServiceClient) pb.UserServiceServer {
 	return &userService{
-		logger: logger,
-		tracer: otel.GetTracerProvider().Tracer("user-service"),
-		db:     database,
+		logger:     logger,
+		tracer:     otel.GetTracerProvider().Tracer("user-service"),
+		db:         database,
+		postClient: postClient,
 	}
 }
 
@@ -58,7 +61,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
 		//LeftJoin("posts p ON p.author_name = u.username").
 		Where("u.username = ?", request.GetUsername()).
-		GroupBy("u.nickname", "u.status", "u.profile_picture_url", "s1.subscription_id").
+		GroupBy("u.nickname", "u.status", "u.picture_url", "s1.subscription_id", "u.picture_width", "u.picture_height").
 		ToSql()
 
 	var nickname, userStatus, pictureUrl, subscriptionID pgtype.Text
@@ -81,6 +84,12 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	}
 	selectSpan.End()
 
+	// Get post count by pagination response of ListPosts
+	postCount, err := us.getPostCount(ctx, request.GetUsername())
+	if err != nil {
+		return nil, err
+	}
+
 	response := &pb.GetUserResponse{
 		Username:       request.Username,
 		Nickname:       nickname.String,
@@ -88,7 +97,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		SubscriptionId: subscriptionID.String,
 		FollowingCount: followingCount.Int32,
 		FollowerCount:  followerCount.Int32,
-		PostCount:      -1,
+		PostCount:      postCount,
 	}
 
 	if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
@@ -100,6 +109,20 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	}
 
 	return response, nil
+}
+
+func (us userService) getPostCount(ctx context.Context, username string) (int32, error) {
+	resp, err := us.postClient.ListPosts(ctx, &pbPost.ListPostsRequest{
+		Username:   &username,
+		FeedType:   pbPost.FeedType_FEED_TYPE_USER,
+		Pagination: &pbPost.PostPagination{Limit: 0},
+	})
+	if err != nil {
+		us.logger.Errorf("Error in postClient.ListPosts: %v", err)
+		return -1, status.Errorf(codes.Internal, "Error in postClient.ListPosts: %v", err)
+	}
+
+	return resp.Pagination.Records, nil
 }
 
 func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {

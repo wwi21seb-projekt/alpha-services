@@ -35,6 +35,8 @@ spec:
               value: "mail-service:50053"
             - name: NOTIFICATION_SERVICE_URL
               value: "notification-service:50054"
+            - name: POST_SERVICE_URL
+              value: "post-service:50051"
             - name: IMAGE_SERVICE_URL
               value: "image-service:50056"
             - name: POSTGRES_HOST

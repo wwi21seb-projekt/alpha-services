@@ -70,7 +70,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username AND s2.subscribee_name = ?", authenticatedUsername).
 		LeftJoin("subscriptions s3 ON s3.subscriber_name = ? AND s3.subscribee_name = u.username", authenticatedUsername).
 		Where("s1."+userTypes[1]+" = ?", request.GetUsername()).
-		GroupBy("s1.created_at", "s2.subscription_id", "s3.subscription_id", "u.username", "u.nickname", "u.profile_picture_url").
+		GroupBy("s1.created_at", "s2.subscription_id", "s3.subscription_id", "u.username", "u.nickname", "u.picture_url").
 		OrderBy("s1.created_at DESC").
 		Limit(uint64(request.GetPagination().GetLimit())).
 		Offset(uint64(request.GetPagination().GetOffset())).

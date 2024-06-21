@@ -7,21 +7,9 @@ import (
 	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
-func TransformLocation(location *pbPost.Location) *schema.Location {
-	if location == nil {
-		return nil
-	}
-
-	return &schema.Location{
-		Latitude:  *location.Latitude,
-		Longitude: *location.Longitude,
-		Accuracy:  *location.Accuracy,
-	}
-}
-
 func LocationToProto(location *schema.Location) *pbPost.Location {
 	if location == nil {
-		return nil
+		return &pbPost.Location{}
 	}
 
 	return &pbPost.Location{

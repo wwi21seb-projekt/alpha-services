@@ -73,6 +73,7 @@ func main() {
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register post service
+	pbPost.RegisterInteractionServiceServer(grpcServer, handler.NewInteractionService(logger, database, userProfileClient))
 	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 
 	// Create listener

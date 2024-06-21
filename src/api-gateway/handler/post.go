@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
+	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -34,18 +35,22 @@ type PostHdlr interface {
 }
 
 type PostHandler struct {
-	logger      *zap.SugaredLogger
-	tracer      trace.Tracer
-	postService pbPost.PostServiceClient
-	jwtManager  manager.JWTManager
+	logger             *zap.SugaredLogger
+	tracer             trace.Tracer
+	jwtManager         manager.JWTManager
+	postService        pbPost.PostServiceClient
+	interactionService pbPost.InteractionServiceClient
+	middleware         middleware.Middleware
 }
 
-func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, jwtManager manager.JWTManager) PostHdlr {
+func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, jwtManager manager.JWTManager, interactionClient pbPost.InteractionServiceClient, middleware middleware.Middleware) PostHdlr {
 	return &PostHandler{
-		logger:      logger,
-		tracer:      otel.GetTracerProvider().Tracer("post-handler"),
-		postService: client,
-		jwtManager:  jwtManager,
+		logger:             logger,
+		tracer:             otel.GetTracerProvider().Tracer("post-handler"),
+		postService:        client,
+		jwtManager:         jwtManager,
+		interactionService: interactionClient,
+		middleware:         middleware,
 	}
 }
 
@@ -54,9 +59,9 @@ func (ph *PostHandler) CreatePost(c *gin.Context) {
 
 	req := &pbPost.CreatePostRequest{
 		Content:        createPostRequest.Content,
-		Location:       helper.LocationToProto(&createPostRequest.Location),
-		Picture:        &createPostRequest.Picture,
-		RepostedPostId: &createPostRequest.RepostedPostID,
+		Location:       helper.LocationToProto(createPostRequest.Location),
+		Picture:        createPostRequest.Picture,
+		RepostedPostId: createPostRequest.RepostedPostID,
 	}
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
@@ -94,10 +99,9 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 		return
 	}
 
-	// Save the username to context
-	c.Set("username", user)
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	resp, err := ph.postService.ListPosts(c, &pbPost.ListPostsRequest{
+	resp, err := ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
 		FeedType: pbPost.FeedType_FEED_TYPE_USER,
 		Username: &user,
 		Pagination: &pbPost.PostPagination{
@@ -115,11 +119,67 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 }
 
 func (ph *PostHandler) QueryPosts(c *gin.Context) {
-	// to-do
+	query := c.Query("q")
+	lastPostId := c.Query("postId")
+	limit, err := strconv.Atoi(c.Query("limit"))
+	if err != nil {
+		limit = 10
+	}
+
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	resp, err := ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
+		FeedType: pbPost.FeedType_FEED_TYPE_GLOBAL,
+		Hashtag:  &query,
+		Pagination: &pbPost.PostPagination{
+			LastPostId: lastPostId,
+			Limit:      int32(limit),
+		},
+	})
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (ph *PostHandler) DeletePost(c *gin.Context) {
-	// to-do
+	postID := c.Param("postId")
+	if postID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	req := &pbPost.GetPostRequest{
+		PostId: postID,
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	_, err := ph.postService.DeletePost(ctx, req)
+	if err != nil {
+		rpcStatus := status.Convert(err)
+		returnErr := goerrors.InternalServerError
+
+		switch rpcStatus.Code() {
+		case codes.NotFound:
+			returnErr = goerrors.PostNotFound
+		case codes.InvalidArgument:
+			returnErr = goerrors.BadRequest
+		}
+
+		ph.logger.Errorf("error in upstream call uh.postService.DeletePost: %v", err)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (ph *PostHandler) GetFeed(c *gin.Context) {
@@ -183,24 +243,154 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 		return false
 	}
 
-	claimsfunc := middleware.SetClaimsMiddleware(ph.logger, ph.jwtManager)
+	claimsfunc := ph.middleware.SetClaimsMiddleware()
 	claimsfunc(c)
 
 	return false
 }
 
 func (ph *PostHandler) CreateComment(c *gin.Context) {
-	// to-do
+	createCommentRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*schema.CreateCommentRequest)
+	postID := c.Param("postId")
+	if postID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	req := &pbPost.CreateCommentRequest{
+		PostId:  postID,
+		Content: createCommentRequest.Content,
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	rsp, err := ph.interactionService.CreateComment(ctx, req)
+	if err != nil {
+		rpcStatus := status.Convert(err)
+		returnErr := goerrors.InternalServerError
+
+		switch rpcStatus.Code() {
+		case codes.NotFound:
+			returnErr = goerrors.PostNotFound
+		case codes.InvalidArgument:
+			returnErr = goerrors.BadRequest
+		}
+
+		ph.logger.Errorf("error in upstream call uh.postService.CreateComment: %v", err)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.JSON(http.StatusCreated, rsp)
 }
 
 func (ph *PostHandler) GetComments(c *gin.Context) {
-	// to-do
+	postID := c.Param("postId")
+	if postID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	limit, err := strconv.Atoi(c.Query("limit"))
+	if err != nil {
+		limit = 10
+	}
+
+	offset, err := strconv.Atoi(c.Query("offset"))
+	if err != nil {
+		offset = 0
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	req := &pbPost.ListCommentsRequest{
+		PostId: postID,
+		Pagination: &pbCommon.PaginationRequest{
+			Offset: int32(offset),
+			Limit:  int32(limit),
+		},
+	}
+
+	rsp, err := ph.interactionService.ListComments(ctx, req)
+	if err != nil {
+		rpcStatus := status.Convert(err)
+		returnErr := goerrors.InternalServerError
+
+		switch rpcStatus.Code() {
+		case codes.NotFound:
+			returnErr = goerrors.PostNotFound
+		case codes.InvalidArgument:
+			returnErr = goerrors.BadRequest
+		}
+
+		ph.logger.Errorf("error in upstream call uh.postService.ListComments: %v", err)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.JSON(http.StatusOK, rsp)
 }
 
 func (ph *PostHandler) CreateLike(c *gin.Context) {
-	// to-do
+	// Get post id from path
+	postID := c.Param("postId")
+	if postID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	req := &pbPost.LikePostRequest{
+		PostId: postID,
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	_, err := ph.interactionService.LikePost(ctx, req)
+	if err != nil {
+		rpcStatus := status.Convert(err)
+		returnErr := goerrors.InternalServerError
+
+		switch rpcStatus.Code() {
+		case codes.NotFound:
+			returnErr = goerrors.PostNotFound
+		case codes.InvalidArgument:
+			returnErr = goerrors.BadRequest
+		}
+
+		ph.logger.Errorf("error in upstream call uh.postService.LikePost: %v", err)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.Status(http.StatusCreated)
 }
 
 func (ph *PostHandler) DeleteLike(c *gin.Context) {
-	// to-do
+	// Get post id from path
+	postID := c.Param("postId")
+	if postID == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	req := &pbPost.UnlikePostRequest{
+		PostId: postID,
+	}
+
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
+	_, err := ph.interactionService.UnlikePost(ctx, req)
+	if err != nil {
+		rpcStatus := status.Convert(err)
+		returnErr := goerrors.InternalServerError
+
+		switch rpcStatus.Code() {
+		case codes.NotFound:
+			returnErr = goerrors.NotLiked
+		case codes.InvalidArgument:
+			returnErr = goerrors.BadRequest
+		}
+
+		ph.logger.Errorf("error in upstream call uh.postService.UnlikePost: %v", err)
+		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

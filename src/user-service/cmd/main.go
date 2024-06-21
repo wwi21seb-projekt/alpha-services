@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
+	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
@@ -68,6 +69,7 @@ func main() {
 	mailClient := pbMail.NewMailServiceClient(cfg.GRPCClients.MailService)
 	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
+	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
@@ -76,7 +78,7 @@ func main() {
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
-	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database))
+	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient))
 	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
 

@@ -5,19 +5,19 @@ package schema
 // ------------------------------------------
 
 type Location struct {
-	Latitude  float32 `json:"latitude"`
-	Longitude float32 `json:"longitude"`
-	Accuracy  int32   `json:"accuracy"`
+	Latitude  float32 `json:"latitude" validate:"latitude,required_with=Longitude"`
+	Longitude float32 `json:"longitude" validate:"longitude,required_with=Latitude"`
+	Accuracy  int32   `json:"accuracy" validate:"gte=0"`
 }
 
 // CreatePostRequest is a struct that represents a create post request
 // Content is required and must be less than 256 characters, as well as written in UTF-8
 // Location is optional and must be a valid location if provided
 type CreatePostRequest struct {
-	RepostedPostID string   `json:"repostedPostId"`
-	Content        string   `json:"content" validate:"required,max=256,post_validation"`
-	Picture        string   `json:"picture"`
-	Location       Location `json:"location,omitempty" validate:"location_validation"`
+	RepostedPostID *string   `json:"repostedPostId,omitempty" validate:"omitempty,uuid4"`
+	Content        string    `json:"content" validate:"max=256,post_validation,required_without=Picture"`
+	Picture        *string   `json:"picture" validate:"omitempty"`
+	Location       *Location `json:"location" validate:"omitempty"`
 }
 
 type CreateCommentRequest struct {

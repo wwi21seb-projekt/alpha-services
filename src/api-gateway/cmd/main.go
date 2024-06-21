@@ -73,6 +73,7 @@ func main() {
 	authClient := pbUser.NewAuthenticationServiceClient(cfg.GRPCClients.UserService)
 	chatClient := pbChat.NewChatServiceClient(cfg.GRPCClients.ChatService)
 	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
+	interactionClient := pbPost.NewInteractionServiceClient(cfg.GRPCClients.PostService)
 	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 	pushSubscriptionClient := pbNotification.NewPushServiceClient(cfg.GRPCClients.NotificationService)
 	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
@@ -80,11 +81,13 @@ func main() {
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager(logger)
 
+	m := middleware.NewMiddleware(logger, jwtManager)
+
 	// Create chat hub
 	hub := ws.NewHub(logger)
 
 	// Create handler instances
-	postHandler := handler.NewPostHandler(logger, postClient, jwtManager)
+	postHandler := handler.NewPostHandler(logger, postClient, jwtManager, interactionClient, *m)
 	userHandler := handler.NewUserHandler(logger, authClient, userClient, subscriptionClient, jwtManager)
 	chatHandler := handler.NewChatHandler(logger, jwtManager, chatClient, hub)
 	notificationHandler := handler.NewNotificationHandler(logger, notificationClient, pushSubscriptionClient)
@@ -101,9 +104,9 @@ func main() {
 
 	unauthorizedRouter := r.Group("/api")
 	authorizedRouter := r.Group("/api")
-	authorizedRouter.Use(middleware.SetClaimsMiddleware(logger, jwtManager))
-	setupRoutes(unauthorizedRouter, chatHandler, postHandler, userHandler, imageHandler)
-	setupAuthRoutes(authorizedRouter, chatHandler, postHandler, userHandler, notificationHandler)
+	authorizedRouter.Use(m.SetClaimsMiddleware())
+	setupRoutes(unauthorizedRouter, m, chatHandler, postHandler, userHandler, imageHandler)
+	setupAuthRoutes(authorizedRouter, m, chatHandler, postHandler, userHandler, notificationHandler)
 
 	// Create a context that listens for termination signals
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -137,7 +140,7 @@ func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
+func setupRoutes(apiRouter *gin.RouterGroup, m *middleware.Middleware, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
 
@@ -145,13 +148,13 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	apiRouter.GET("/images", imageHandler.GetImage)
 
 	// User routes
-	apiRouter.POST("/users", middleware.ValidateAndSanitizeStruct(&schema.RegistrationRequest{}), userHandler.RegisterUser)
-	apiRouter.POST("/users/login", middleware.ValidateAndSanitizeStruct(&schema.LoginRequest{}), userHandler.LoginUser)
-	apiRouter.POST("users/refresh", middleware.ValidateAndSanitizeStruct(&schema.RefreshTokenRequest{}), userHandler.RefreshToken)
-	apiRouter.POST("/users/:username/activate", middleware.ValidateAndSanitizeStruct(&schema.ActivationRequest{}), userHandler.ActivateUser)
+	apiRouter.POST("/users", m.ValidateAndSanitizeStruct(schema.RegistrationRequest{}), userHandler.RegisterUser)
+	apiRouter.POST("/users/login", m.ValidateAndSanitizeStruct(schema.LoginRequest{}), userHandler.LoginUser)
+	apiRouter.POST("users/refresh", m.ValidateAndSanitizeStruct(schema.RefreshTokenRequest{}), userHandler.RefreshToken)
+	apiRouter.POST("/users/:username/activate", m.ValidateAndSanitizeStruct(schema.ActivationRequest{}), userHandler.ActivateUser)
 	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
 	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
-	apiRouter.PATCH("/users/:username/reset-password", middleware.ValidateAndSanitizeStruct(&schema.SetPasswordRequest{}), userHandler.SetPassword)
+	apiRouter.PATCH("/users/:username/reset-password", m.ValidateAndSanitizeStruct(schema.SetPasswordRequest{}), userHandler.SetPassword)
 
 	// Chat routes
 	// In theory this is an authorized endpoint as well, but our middleware does not support
@@ -159,22 +162,22 @@ func setupRoutes(apiRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postH
 	apiRouter.GET("/chat", chatHandler.Chat)
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, notificationHandler handler.NotificationHdlr) {
+func setupAuthRoutes(authRouter *gin.RouterGroup, m *middleware.Middleware, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, notificationHandler handler.NotificationHdlr) {
 	// Set user routes
 	authRouter.GET("/users", userHandler.SearchUsers)
-	authRouter.PUT("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
-	authRouter.PATCH("/users", middleware.ValidateAndSanitizeStruct(&schema.ChangePasswordRequest{}), userHandler.ChangePassword)
+	authRouter.PUT("/users", m.ValidateAndSanitizeStruct(schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
+	authRouter.PATCH("/users", m.ValidateAndSanitizeStruct(schema.ChangePasswordRequest{}), userHandler.ChangePassword)
 	authRouter.GET("/users/:username", userHandler.GetUser)
 	authRouter.GET("/users/:username/feed", postHandler.GetUserFeed)
-	authRouter.POST("/subscriptions", middleware.ValidateAndSanitizeStruct(&schema.SubscriptionRequest{}), userHandler.CreateSubscription)
+	authRouter.POST("/subscriptions", m.ValidateAndSanitizeStruct(schema.SubscriptionRequest{}), userHandler.CreateSubscription)
 	authRouter.DELETE("/subscriptions/:subscriptionId", userHandler.DeleteSubscription)
 	authRouter.GET("/subscriptions/:username", userHandler.GetSubscriptions)
 
 	// Set post routes
-	authRouter.POST("posts", middleware.ValidateAndSanitizeStruct(&schema.CreatePostRequest{}), postHandler.CreatePost)
+	authRouter.POST("posts", m.ValidateAndSanitizeStruct(schema.CreatePostRequest{}), postHandler.CreatePost)
 	authRouter.GET("/posts", postHandler.QueryPosts)
 	authRouter.DELETE("/posts/:postId", postHandler.DeletePost)
-	authRouter.POST("/posts/:postId/comments", middleware.ValidateAndSanitizeStruct(&schema.CreateCommentRequest{}), postHandler.CreateComment)
+	authRouter.POST("/posts/:postId/comments", m.ValidateAndSanitizeStruct(schema.CreateCommentRequest{}), postHandler.CreateComment)
 	authRouter.GET("/posts/:postId/comments", postHandler.GetComments)
 	authRouter.POST("/posts/:postId/likes", postHandler.CreateLike)
 	authRouter.DELETE("/posts/:postId/likes", postHandler.DeleteLike)
@@ -182,7 +185,7 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, chatHandler handler.ChatHdlr, 
 	// Set chat routes
 	authRouter.GET("/chats", chatHandler.GetChats)
 	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
-	authRouter.POST("/chats", middleware.ValidateAndSanitizeStruct(&schema.CreateChatRequest{}), chatHandler.CreateChat)
+	authRouter.POST("/chats", m.ValidateAndSanitizeStruct(schema.CreateChatRequest{}), chatHandler.CreateChat)
 
 	// Set notification routes
 	authRouter.GET("/notifications", notificationHandler.GetNotifications)
