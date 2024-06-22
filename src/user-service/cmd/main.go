@@ -78,7 +78,7 @@ func main() {
 	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
 
 	// Register user services
-	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient))
+	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient, imageClient))
 	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
 	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
 

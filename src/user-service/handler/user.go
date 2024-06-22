@@ -3,7 +3,10 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	"os"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
@@ -21,19 +24,21 @@ import (
 )
 
 type userService struct {
-	logger     *zap.SugaredLogger
-	tracer     trace.Tracer
-	db         *db.DB
-	postClient pbPost.PostServiceClient
+	logger      *zap.SugaredLogger
+	tracer      trace.Tracer
+	db          *db.DB
+	postClient  pbPost.PostServiceClient
+	imageClient pbImage.ImageServiceClient
 	pb.UnimplementedUserServiceServer
 }
 
-func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost.PostServiceClient) pb.UserServiceServer {
+func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost.PostServiceClient, imageClient pbImage.ImageServiceClient) pb.UserServiceServer {
 	return &userService{
-		logger:     logger,
-		tracer:     otel.GetTracerProvider().Tracer("user-service"),
-		db:         database,
-		postClient: postClient,
+		logger:      logger,
+		tracer:      otel.GetTracerProvider().Tracer("user-service"),
+		db:          database,
+		postClient:  postClient,
+		imageClient: imageClient,
 	}
 }
 
@@ -126,6 +131,57 @@ func (us userService) getPostCount(ctx context.Context, username string) (int32,
 }
 
 func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	queryBuilder := psql.Update("users").Where(sq.Eq{"username": username})
+
+	if request.GetNickname() != "" {
+		queryBuilder = queryBuilder.Set("nickname", request.GetNickname())
+	}
+
+	if request.GetStatus() != "" {
+		queryBuilder = queryBuilder.Set("status", request.GetStatus())
+	}
+
+	// Upload image to storage if provided
+	imageUrl := defaultAvatarURL
+	imageWidth := defaultAvatarWidth
+	imageHeight := defaultAvatarHeight
+
+	// Before we start the transaction, we need to upload the picture to the storage service
+	if request.GetBase64Picture() != "" {
+		uploadImageCtx, uploadImageSpan := us.tracer.Start(ctx, "UploadImage")
+		us.logger.Debugw("Uploading image to storage...", "username", username)
+		uploadImageResponse, err := us.imageClient.UploadImage(uploadImageCtx, &pbImage.UploadImageRequest{
+			Image:         request.GetBase64Picture(),
+			ContextString: username,
+		})
+		if err != nil {
+			us.logger.Errorf("Error in upstream call imageClient.UploadImage: %v", err)
+			uploadImageSpan.End()
+			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
+		}
+
+		environment := os.Getenv("ENVIRONMENT")
+		if environment == "local" {
+			imageUrl = fmt.Sprintf("http://localhost:8080/images?image=%s", uploadImageResponse.GetUrl())
+		} else {
+			imageUrl = fmt.Sprintf("https://alpha.c930.net/images?image=%s", uploadImageResponse.GetUrl())
+		}
+
+		imageWidth = 500  // replace with actual width
+		imageHeight = 500 // replace with actual height
+
+		uploadImageSpan.End()
+
+		queryBuilder = queryBuilder.Set("picture_url", imageUrl).
+			Set("picture_width", imageWidth).
+			Set("picture_height", imageHeight)
+	}
+
+	// Update user data
+	query, args, _ := queryBuilder.ToSql()
+
 	tx, err := us.db.Begin(ctx)
 	if err != nil {
 		us.logger.Errorf("us.db.Pool.Begin failed: %v", err)
@@ -133,24 +189,11 @@ func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 	}
 	defer us.db.Rollback(ctx, tx)
 
-	// Get authenticated user from metadata
-	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
-	// Update user data
-	updateCtx, updateSpan := us.tracer.Start(ctx, "UpdateUserData")
-	query, args, _ := psql.Update("users").
-		Set("nickname", request.GetNickname()).
-		Set("status", request.GetStatus()).
-		Where("username = ?", username).
-		ToSql()
-
 	us.logger.Info("Updating user data")
-	if _, err = tx.Exec(updateCtx, query, args...); err != nil {
-		updateSpan.End()
+	if _, err = tx.Exec(ctx, query, args...); err != nil {
 		us.logger.Errorf("Error in tx.Exec: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
-	updateSpan.End()
 
 	if err = us.db.Commit(ctx, tx); err != nil {
 		us.logger.Errorf("Error in us.db.Commit: %v", err)
