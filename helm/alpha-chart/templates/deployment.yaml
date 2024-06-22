@@ -1,0 +1,34 @@
+{{- range $serviceName, $serviceConfig := .Values.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $serviceName }}
+spec:
+  replicas: {{ $serviceConfig.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $serviceName }}
+    spec:
+      containers:
+        - name: {{ $serviceName }}
+          image: "{{ $.Values.global.image.repository }}/{{ $serviceConfig.image.name | default $serviceName }}:{{ $.Values.global.image.tag }}"
+          imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $serviceConfig.port }}
+          env:
+          - name: PORT
+            value: "{{ $serviceConfig.port }}"
+            {{- include "alpha-chart.global.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 6 }}
+            {{- include "alpha-chart.service.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 6 }}
+          resources:
+            limits:
+              memory: {{ $.Values.global.resources.limits.memory }}
+---
+{{- end }}

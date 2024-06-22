@@ -65,7 +65,6 @@ func main() {
 
 	// Start server
 	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
-	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
 	if err = grpcServer.Serve(lis); err != nil {
 		logger.Fatal("Failed to serve", zap.Error(err))
 	}

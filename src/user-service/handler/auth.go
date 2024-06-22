@@ -90,7 +90,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 
 	if request.GetBase64Picture() != "" {
 		uploadImageCtx, uploadImageSpan := as.tracer.Start(ctx, "UploadImage")
-		as.logger.Info("Calling upstream imageClient.UploadImage...")
+		as.logger.Debugw("Uploading image to storage...", "username", request.GetUsername())
 		uploadImageResponse, err := as.imageClient.UploadImage(uploadImageCtx, &pbImage.UploadImageRequest{
 			Image:         request.GetBase64Picture(),
 			ContextString: request.GetUsername(),
@@ -103,9 +103,9 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 
 		environment := os.Getenv("ENVIRONMENT")
 		if environment == "local" {
-			imageUrl = fmt.Sprintf("http://localhost:8080/images?image=%s", uploadImageResponse.GetUrl())
+			imageUrl = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadImageResponse.GetUrl())
 		} else {
-			imageUrl = fmt.Sprintf("https://alpha.c930.net/images?image=%s", uploadImageResponse.GetUrl())
+			imageUrl = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadImageResponse.GetUrl())
 		}
 
 		imageWidth = 500  // replace with actual width

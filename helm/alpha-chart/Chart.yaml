@@ -1,0 +1,5 @@
+apiVersion: v2
+name: alpha-chart
+description: A Helm chart for deploying microservices
+version: 0.1.0
+
