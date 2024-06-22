@@ -21,7 +21,6 @@ spec:
               memory: 100Mi
           ports:
             - containerPort: 50053
-            - containerPort: 2112
           env:
             - name: PORT
               value: "50053"

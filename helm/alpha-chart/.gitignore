@@ -2,5 +2,8 @@
 !values.example.yaml
 !Chart.yaml
 !templates/
-
-
+!templates/*
+!.helmignore
+!files
+!files/*
+!init-script.sql
