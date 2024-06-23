@@ -160,8 +160,6 @@ func (n *NotificationService) DeleteNotification(ctx context.Context, request *p
 }
 
 func (n *NotificationService) SendNotification(ctx context.Context, request *pb.SendNotificationRequest) (*pbCommon.Empty, error) {
-	fmt.Println("Send Notification called")
-
 	tx, err := n.db.Begin(ctx)
 	if err != nil {
 		n.logger.Errorf("Error in n.db.Begin: %v", err)
@@ -178,11 +176,8 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		}
 	}()
 
-	fmt.Println("Transaction started")
-
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-	fmt.Println("Username fetched: " + authenticatedUsername)
 
 	query, args, _ := psql.Insert("notifications").
 		Columns("notification_id", "recipient_username", "sender_username", "timestamp", "notification_type").
@@ -193,10 +188,6 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		n.logger.Errorf("Error in tx.Exec: %v", err)
 		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
-
-	fmt.Println("Notification inserted")
-
-	fmt.Println("Request.sender: " + request.Recipient)
 
 	// Check if the authenticated user has any subscriptions
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
@@ -210,8 +201,6 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error executing query: %v", err)
 	}
 	defer subscriptionRows.Close()
-
-	fmt.Println("Subscription rows fetched")
 
 	// Iterate over the subscription rows
 	for subscriptionRows.Next() {
@@ -278,14 +267,10 @@ func sendExpoNotification(notificationType string, sender string, token string) 
 }
 
 func sendWebNotification(ctx context.Context, notificationType string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
-	fmt.Println("Send Web Notification called")
-
 	// Check if expiration time is in the past
 	if expirationTime.Time.Before(time.Now()) {
 		return status.Errorf(codes.InvalidArgument, "subscription expired")
 	}
-
-	fmt.Println("Expiration time ok")
 
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
@@ -300,8 +285,6 @@ func sendWebNotification(ctx context.Context, notificationType string, endpoint 
 		body = fmt.Sprintf("%s reposted your post", authenticatedUsername)
 	}
 
-	fmt.Println("Title and body set " + title + " " + body)
-
 	notificationPayload := map[string]string{
 		"title": title,
 		"body":  body,
@@ -311,8 +294,6 @@ func sendWebNotification(ctx context.Context, notificationType string, endpoint 
 		return status.Errorf(codes.Internal, "failed to marshal notification payload: %v", err)
 	}
 
-	fmt.Println("Notification payload marshalled")
-
 	sub := &webpush.Subscription{
 		Endpoint: endpoint,
 		Keys: webpush.Keys{
@@ -320,10 +301,6 @@ func sendWebNotification(ctx context.Context, notificationType string, endpoint 
 			Auth:   auth,
 		},
 	}
-
-	fmt.Println("Subscription created " + sub.Endpoint + " " + sub.Keys.P256dh + " " + sub.Keys.Auth)
-
-	fmt.Println("public key: " + vapidPublicKey)
 
 	resp, err := webpush.SendNotification(notificationPayloadBytes, sub, &webpush.Options{
 		TTL:             300,
@@ -334,8 +311,6 @@ func sendWebNotification(ctx context.Context, notificationType string, endpoint 
 		return status.Errorf(codes.Internal, "failed to send notification: %v", err)
 	}
 	defer resp.Body.Close()
-
-	fmt.Println("Notification sent")
 
 	return nil
 }

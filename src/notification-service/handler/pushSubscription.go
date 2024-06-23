@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -53,15 +52,9 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	}
 	defer p.db.Rollback(ctx, tx)
 
-	fmt.Println("Number#1")
-
 	subscriptionId := uuid.New()
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
-	fmt.Println("Number#2")
-	fmt.Println("subscriptionId: ", subscriptionId)
-	fmt.Println(request.Type)
 
 	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
 
@@ -100,14 +93,10 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 		return nil, err
 	}
 
-	fmt.Println("Number#3")
-
 	if err := p.db.Commit(ctx, tx); err != nil {
 		p.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
-
-	fmt.Println("Number#4")
 
 	return &pb.CreatePushSubscriptionResponse{
 		SubscriptionId: subscriptionId.String(),

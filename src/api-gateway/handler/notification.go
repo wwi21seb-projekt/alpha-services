@@ -57,9 +57,6 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 }
 
 func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
-	// Log to see if this function is called
-	n.logger.Info("CreatePushSubscription called")
-
 	var req schema.CreatePushSubscriptionRequest
 
 	// BindJSON will parse the JSON body and bind it to req struct
@@ -69,15 +66,6 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 	}
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
-
-	// Convert string to enum
-	typeStr := req.Type
-	subscriptionType, ok := pbNotification.PushSubscriptionType_value[typeStr]
-	if !ok {
-		subscriptionType = int32(pbNotification.PushSubscriptionType_WEB) // Default to WEB if typeStr is not recognized
-	}
-
-	n.logger.Info("step1 success", pbNotification.PushSubscriptionType(subscriptionType))
 
 	// Make gRPC call
 	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &pbNotification.CreatePushSubscriptionRequest{
@@ -90,7 +78,6 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 	})
 
 	if err != nil {
-		n.logger.Info("abcd " + err.Error())
 		returnErr := goerrors.InternalServerError
 		if status.Code(err) == codes.NotFound {
 			returnErr = goerrors.NotificationNotFound
@@ -99,8 +86,6 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
-
-	n.logger.Info("step3 success")
 
 	response := schema.CreatePushSubscriptionResponse{
 		SubscriptionID: createPushSubscriptionResponse.SubscriptionId,
