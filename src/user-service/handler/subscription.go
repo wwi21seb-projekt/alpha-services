@@ -157,6 +157,10 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	return response, nil
 }
 
+func addMetadataToContext(ctx context.Context, key, value string) context.Context {
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs(key, value))
+}
+
 func (ss subscriptionService) CreateSubscription(ctx context.Context, request *pb.CreateSubscriptionRequest) (*pb.CreateSubscriptionResponse, error) {
 	tx, err := ss.db.Begin(ctx)
 	if err != nil {
@@ -215,9 +219,10 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	// Send a notification to the user that they have been subscribed to
 	sendNotificationRequest := pbNotification.SendNotificationRequest{
 		NotificationType: "follow",
-		Sender:           request.GetFollowedUsername(),
+		Recipient:        request.GetFollowedUsername(),
 	}
 
+	ctx = addMetadataToContext(ctx, "sub", username) //Sending to different service, so adding of username is necessary
 	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {
 		ss.logger.Error("Error in ss.notificationClient.SendNotification", zap.Error(err))
 	}

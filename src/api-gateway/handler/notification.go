@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
@@ -56,24 +57,40 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 }
 
 func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
+	// Log to see if this function is called
+	n.logger.Info("CreatePushSubscription called")
+
+	var req schema.CreatePushSubscriptionRequest
+
+	// BindJSON will parse the JSON body and bind it to req struct
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
+	// Convert string to enum
+	typeStr := req.Type
+	subscriptionType, ok := pbNotification.PushSubscriptionType_value[typeStr]
+	if !ok {
+		subscriptionType = int32(pbNotification.PushSubscriptionType_WEB) // Default to WEB if typeStr is not recognized
+	}
+
+	n.logger.Info("step1 success", pbNotification.PushSubscriptionType(subscriptionType))
+
+	// Make gRPC call
 	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &pbNotification.CreatePushSubscriptionRequest{
-		// Convert string to enum
-		Type: func(s string) pbNotification.PushSubscriptionType {
-			if val, ok := pbNotification.PushSubscriptionType_value[s]; ok {
-				return pbNotification.PushSubscriptionType(val)
-			}
-			return pbNotification.PushSubscriptionType_WEB // web is returned by defualt
-		}(c.Param("type")),
-		Token:          c.Param("token"),
-		Endpoint:       c.Param("endpoint"),
-		ExpirationTime: c.Param("expirationTime"),
-		P256Dh:         c.Param("p256dh"),
-		Auth:           c.Param("auth"),
+		Type:           0,
+		Token:          req.Token,
+		Endpoint:       req.Endpoint,
+		ExpirationTime: req.ExpirationTime,
+		P256Dh:         req.P256Dh,
+		Auth:           req.Auth,
 	})
 
 	if err != nil {
+		n.logger.Info("abcd " + err.Error())
 		returnErr := goerrors.InternalServerError
 		if status.Code(err) == codes.NotFound {
 			returnErr = goerrors.NotificationNotFound
@@ -82,6 +99,9 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
+
+	n.logger.Info("step3 success")
+
 	response := schema.CreatePushSubscriptionResponse{
 		SubscriptionID: createPushSubscriptionResponse.SubscriptionId,
 	}

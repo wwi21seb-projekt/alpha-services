@@ -2,7 +2,11 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
@@ -49,24 +53,61 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	}
 	defer p.db.Rollback(ctx, tx)
 
+	fmt.Println("Number#1")
+
 	subscriptionId := uuid.New()
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
+	fmt.Println("Number#2")
+	fmt.Println("subscriptionId: ", subscriptionId)
+	fmt.Println(request.Type)
+
+	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
+
+	// Check if the authenticated user has any subscriptions with the same type and a future expiration time
+	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
+
+	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
+		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
+		From("push_subscriptions s").
+		Where("s.username = ?", authenticatedUsername).
+		Where("s.type = ?", "web").
+		Where("s.expiration_time > ?", time.Now()).
+		ToSql()
+
+	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
+	if err != nil {
+		p.logger.Errorf("Error executing query: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error executing query: %v", err)
+	}
+	defer subscriptionRows.Close()
+
+	if subscriptionRows.Next() {
+		p.logger.Info("A subscription with the same username and type already exists with a future expiration time.")
+		return nil, errors.New("subscription already exists")
+	}
+
 	p.logger.Info("Inserting subscription into database...")
+	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
+	typeLower := strings.ToLower(request.Type.String())
 	query, args, _ := psql.Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
-		Values(subscriptionId, authenticatedUsername, request.Type, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
+		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
 		ToSql()
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 
+	fmt.Println("Number#3")
+
 	if err := p.db.Commit(ctx, tx); err != nil {
 		p.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
+
+	fmt.Println("Number#4")
 
 	return &pb.CreatePushSubscriptionResponse{
 		SubscriptionId: subscriptionId.String(),
