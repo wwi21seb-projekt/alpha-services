@@ -1,9 +1,11 @@
 *
-!values.example.yaml
+!values.yaml
+!values-dev.yaml
+!values-prod.yaml
 !Chart.yaml
 !templates/
 !templates/*
 !.helmignore
 !files
 !files/*
-!init-script.sql
+!files/init-script.sql

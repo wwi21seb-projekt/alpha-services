@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $serviceName }}
+  name: {{ $.Release.Name }}-{{ $serviceName }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app: {{ $serviceName }}
+    app: {{ $.Release.Name }}-{{ $serviceName }}
 spec:
   {{- if $serviceConfig.port }}
   ports:
@@ -13,6 +13,6 @@ spec:
       targetPort: {{ $serviceConfig.port }}
   {{- end }}
   selector:
-    app: {{ $serviceName }}
+    app: {{ $.Release.Name }}-{{ $serviceName }}
 ---
 {{- end }}

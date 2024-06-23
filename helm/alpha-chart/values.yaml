@@ -1,39 +1,25 @@
-secret:
-  postgresName: "REPLACE_ME"
-  postgresUser: "REPLACE"
-  postgresPassword: "REPLACE_ME"
-  databaseUrl: "REPLACE_ME"
-  jwtPrivateKey: "REPLACE_ME"
-  jwtPublicKey: "REPLACE_ME"
-  mailgunApiKey: "REPLACE_ME"
-  vapidPublicKey: "REPLACE_ME"
-  vapidPrivateKey: "REPLACE_ME"
+overrideConfigMap:
+  ENVIRONMENT: development
+  OTEL_EXPORTER_OTLP_ENDPOINT:
+  POSTGRES_HOST:
+  POSTGRES_PORT:
+
+secretOverride:
+  POSTGRES_USER:
+  POSTGRES_PASSWORD:
+  DATABASE_URL:
+  MAILGUN_API_KEY: REPLACE_ME # (Ask Luca for the key)
+  VAPID_PUBLIC_KEY:
+  VAPID_PRIVATE_KEY:
+  JWT_PRIVATE_KEY_BASE64:
+  JWT_PUBLIC_KEY_BASE64:
 
 global:
   image:
     repository: ghcr.io/wwi21seb-projekt/alpha-services
     tag: latest
     pullPolicy: Always
-  env:
-    ENVIRONMENT: production
-    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-    POSTGRES_HOST: postgres
-    POSTGRES_PORT: "5432"
-    POSTGRES_DB:
-      valueFrom:
-        secretKeyRef:
-          key: POSTGRES_NAME
-          name: alpha-secrets
-    POSTGRES_USER:
-      valueFrom:
-        secretKeyRef:
-          key: POSTGRES_USER
-          name: alpha-secrets
-    POSTGRES_PASSWORD:
-      valueFrom:
-        secretKeyRef:
-          key: POSTGRES_PASSWORD
-          name: alpha-secrets
+  env: {} # (Optional) Add extra global environment variables here
   resources:
     limits:
       memory: 100Mi
@@ -42,27 +28,19 @@ services:
   api-gateway:
     replicaCount: 1
     image:
+      repository:         # (Optional) If you want to use a custom image, set the repository here
       name: api-gateway
+      tag:                # (Optional) If you want to use a custom image, set the tag here
     port: 8080
     service:
       port: 80
-    env:
-      CHAT_SERVICE_URL: chat-service:50051
-      IMAGE_SERVICE_URL: image-service:50052
-      NOTIFICATION_SERVICE_URL: notification-service:50054
-      POST_SERVICE_URL: post-service:50055
-      USER_SERVICE_URL: user-service:50056
-      JWT_PRIVATE_KEY:
-        valueFrom:
-          secretKeyRef:
-            key: JWT_PRIVATE_KEY
-            name: alpha-secrets
-      JWT_PUBLIC_KEY:
-        valueFrom:
-          secretKeyRef:
-            key: JWT_PUBLIC_KEY
-            name: alpha-secrets
-
+    connections:
+      - chat-service
+      - image-service
+      - notification-service
+      - post-service
+      - user-service
+    env: {} # (Optional) Add extra environment variables here
 
   chat-service:
     replicaCount: 1
@@ -71,9 +49,8 @@ services:
       port: 50051
     image:
       name: chat-service
-    env:
-      SCHEMA_NAME: chat_service
-      USER_SERVICE_URL: user-service:50056
+    connections:
+      - user-service
 
   image-service:
     replicaCount: 1
@@ -83,6 +60,7 @@ services:
     image:
       name: image-service
 
+
   mail-service:
     replicaCount: 1
     port: 50053
@@ -90,33 +68,16 @@ services:
       port: 50053
     image:
       name: mail-service
-    env:
-      MAILGUN_API_KEY:
-        valueFrom:
-          secretKeyRef:
-            key: MAILGUN_API_KEY
-            name: alpha-secrets
 
-  notification-service :
+  notification-service:
     replicaCount: 1
     port: 50054
     service:
       port: 50054
     image:
       name: notification-service
-    env:
-      SCHEMA_NAME: notification_service
-      USER_SERVICE_URL: user-service:50056
-      VAPID_PUBLIC_KEY:
-        valueFrom:
-          secretKeyRef:
-            name: alpha-secrets
-            key: VAPID_PUBLIC_KEY
-      VAPID_PRIVATE_KEY:
-        valueFrom:
-          secretKeyRef:
-            name: alpha-secrets
-            key: VAPID_PRIVATE_KEY
+    connections:
+      - user-service
 
   post-service:
     replicaCount: 1
@@ -125,9 +86,8 @@ services:
       port: 50055
     image:
       name: post-service
-    env:
-      SCHEMA_NAME: post_service
-      USER_SERVICE_URL: user-service:50056
+    connections:
+      - user-service
 
   user-service:
     replicaCount: 1
@@ -136,12 +96,11 @@ services:
       port: 50056
     image:
       name: user-service
-    env:
-      SCHEMA_NAME: post_service
-      IMAGE_SERVICE_URL: image-service:50052
-      MAIL_SERVICE_URL: mail-service:50053
-      NOTIFICATION_SERVICE_URL: notification-service:50054
-      POST_SERVICE_URL: post-service:50055
+    connections:
+      - image-service
+      - mail-service
+      - notification-service
+      - post-service
 
 postgresql:
   image:
@@ -152,7 +111,8 @@ postgresql:
     database: "mydatabase"  # CHANGE THIS
   primary:
     persistence:
-      enabled: false
+      enabled: true
+      size: 2Gi
     initdb:
       scriptsConfigMap: init-db-scripts
     resources:
