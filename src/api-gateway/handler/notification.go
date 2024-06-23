@@ -69,7 +69,12 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 
 	// Make gRPC call
 	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &pbNotification.CreatePushSubscriptionRequest{
-		Type:           0,
+		Type: func(s string) pbNotification.PushSubscriptionType {
+			if val, ok := pbNotification.PushSubscriptionType_value[s]; ok {
+				return pbNotification.PushSubscriptionType(val)
+			}
+			return pbNotification.PushSubscriptionType_WEB // web is returned by defualt
+		}(req.Type),
 		Token:          req.Token,
 		Endpoint:       req.Endpoint,
 		ExpirationTime: req.ExpirationTime,

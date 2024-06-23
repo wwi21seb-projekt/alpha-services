@@ -56,16 +56,17 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
-	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
-
 	// Check if the authenticated user has any subscriptions with the same type and a future expiration time
 	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
+
+	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
+	typeLower := strings.ToLower(request.Type.String())
 
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
 		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
 		From("push_subscriptions s").
 		Where("s.username = ?", authenticatedUsername).
-		Where("s.type = ?", "web").
+		Where("s.type = ?", typeLower).
 		Where("s.expiration_time > ?", time.Now()).
 		ToSql()
 
@@ -82,8 +83,6 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	}
 
 	p.logger.Info("Inserting subscription into database...")
-	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
-	typeLower := strings.ToLower(request.Type.String())
 	query, args, _ := psql.Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
 		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
