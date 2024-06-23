@@ -2,10 +2,8 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
@@ -61,26 +59,6 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 
 	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
 	typeLower := strings.ToLower(request.Type.String())
-
-	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
-		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
-		From("push_subscriptions s").
-		Where("s.username = ?", authenticatedUsername).
-		Where("s.type = ?", typeLower).
-		Where("s.expiration_time > ?", time.Now()).
-		ToSql()
-
-	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
-	if err != nil {
-		p.logger.Errorf("Error executing query: %v", err)
-		return nil, status.Errorf(codes.Internal, "Error executing query: %v", err)
-	}
-	defer subscriptionRows.Close()
-
-	if subscriptionRows.Next() {
-		p.logger.Info("A subscription with the same username and type already exists with a future expiration time.")
-		return nil, errors.New("subscription already exists")
-	}
 
 	p.logger.Info("Inserting subscription into database...")
 	query, args, _ := psql.Insert("push_subscriptions").

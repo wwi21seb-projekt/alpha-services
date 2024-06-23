@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
@@ -57,13 +56,7 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 }
 
 func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
-	var req schema.CreatePushSubscriptionRequest
-
-	// BindJSON will parse the JSON body and bind it to req struct
-	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.CreatePushSubscriptionRequest)
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 

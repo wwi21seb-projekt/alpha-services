@@ -165,16 +165,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		n.logger.Errorf("Error in n.db.Begin: %v", err)
 		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "could not start transaction: %v", err)
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			n.db.Rollback(ctx, tx)
-			panic(p) // re-throw panic after Rollback
-		} else if err != nil {
-			n.db.Rollback(ctx, tx) // err is non-nil; don't change it
-		} else {
-			err = n.db.Commit(ctx, tx) // err is nil; if Commit returns error update err
-		}
-	}()
+	defer n.db.Rollback(ctx, tx)
 
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
@@ -189,11 +180,11 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
-	// Check if the authenticated user has any subscriptions
+	// Check if the recipient of the notification has any subscriptions
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
 		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
 		From("push_subscriptions s").
-		Where("s.username = ?", authenticatedUsername).
+		Where("s.username = ?", request.Recipient).
 		ToSql()
 	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
 	if err != nil {
@@ -215,7 +206,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		switch deviceType.String {
 		case "expo":
 			// Send notification to Expo
-			err = sendExpoNotification(request.NotificationType, authenticatedUsername, token.String)
+			err = sendExpoNotification(ctx, request.NotificationType, token.String)
 			if err != nil {
 				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending Expo notification: %v", err)
 			}
@@ -233,13 +224,15 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 	return &pbCommon.Empty{}, nil
 }
 
-func sendExpoNotification(notificationType string, sender string, token string) error {
+func sendExpoNotification(ctx context.Context, notificationType string, token string) error {
 	// Send Expo notification
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
 	data := make(map[string]interface{})
 	switch notificationType {
 	case "follow":
 		title := "New Follower!"
-		body := fmt.Sprintf("%s started following you", sender)
+		body := fmt.Sprintf("%s started following you", authenticatedUsername)
 		data = map[string]interface{}{
 			"to":    token,
 			"title": title,
@@ -247,7 +240,7 @@ func sendExpoNotification(notificationType string, sender string, token string) 
 		}
 	case "repost":
 		title := "New Repost!"
-		body := fmt.Sprintf("%s reposted your post", sender)
+		body := fmt.Sprintf("%s reposted your post", authenticatedUsername)
 		data = map[string]interface{}{
 			"to":    token,
 			"title": title,
