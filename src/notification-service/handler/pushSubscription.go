@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
@@ -53,10 +54,16 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
+	// Check if the authenticated user has any subscriptions with the same type and a future expiration time
+	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
+
+	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
+	typeLower := strings.ToLower(request.Type.String())
+
 	p.logger.Info("Inserting subscription into database...")
 	query, args, _ := psql.Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
-		Values(subscriptionId, authenticatedUsername, request.Type, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
+		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
 		ToSql()
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {

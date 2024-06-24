@@ -30,12 +30,7 @@ func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pb
 	}
 }
 
-func (ps *postService) SearchPosts(ctx context.Context, empty *pb.SearchPostsRequest) (*pb.SearchPostsResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.SearchPostsResponse, error) {
+func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.ListPostsResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
