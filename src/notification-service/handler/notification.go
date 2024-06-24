@@ -171,8 +171,8 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
 	query, args, _ := psql.Insert("notifications").
-		Columns("notification_id", "recipient_username", "sender_username", "notification_type").
-		Values(uuid.New(), request.Sender, authenticatedUsername, request.NotificationType).
+		Columns("notification_id", "recipient_username", "sender_username", "timestamp", "notification_type").
+		Values(uuid.New(), request.Recipient, authenticatedUsername, time.Now(), request.NotificationType).
 		ToSql()
 
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
@@ -180,16 +180,11 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
-	if err = n.db.Commit(ctx, tx); err != nil {
-		n.logger.Errorf("Error in n.db.Commit: %v", err)
-		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in n.db.Commit: %v", err)
-	}
-
-	// Check if the authenticated user has any subscriptions
+	// Check if the recipient of the notification has any subscriptions
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
 		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
 		From("push_subscriptions s").
-		Where("s.username = ?", request.Sender).
+		Where("s.username = ?", request.Recipient).
 		ToSql()
 	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
 	if err != nil {
@@ -211,13 +206,13 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		switch deviceType.String {
 		case "expo":
 			// Send notification to Expo
-			err = sendExpoNotification(request.NotificationType, authenticatedUsername, token.String)
+			err = sendExpoNotification(ctx, request.NotificationType, token.String)
 			if err != nil {
 				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending Expo notification: %v", err)
 			}
 		case "web":
 			// Send notification to web
-			err = sendWebNotification(request.NotificationType, request.Sender, endpoint.String, expirationTime, p256dh.String, auth.String)
+			err = sendWebNotification(ctx, request.NotificationType, endpoint.String, expirationTime, p256dh.String, auth.String)
 			if err != nil {
 				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
 			}
@@ -227,16 +222,17 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 	}
 
 	return &pbCommon.Empty{}, nil
-
 }
 
-func sendExpoNotification(notificationType string, sender string, token string) error {
+func sendExpoNotification(ctx context.Context, notificationType string, token string) error {
 	// Send Expo notification
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
 	data := make(map[string]interface{})
 	switch notificationType {
 	case "follow":
 		title := "New Follower!"
-		body := fmt.Sprintf("%s started following you", sender)
+		body := fmt.Sprintf("%s started following you", authenticatedUsername)
 		data = map[string]interface{}{
 			"to":    token,
 			"title": title,
@@ -244,7 +240,7 @@ func sendExpoNotification(notificationType string, sender string, token string) 
 		}
 	case "repost":
 		title := "New Repost!"
-		body := fmt.Sprintf("%s reposted your post", sender)
+		body := fmt.Sprintf("%s reposted your post", authenticatedUsername)
 		data = map[string]interface{}{
 			"to":    token,
 			"title": title,
@@ -263,21 +259,23 @@ func sendExpoNotification(notificationType string, sender string, token string) 
 	return nil
 }
 
-func sendWebNotification(notificationType string, sender string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
+func sendWebNotification(ctx context.Context, notificationType string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
 	// Check if expiration time is in the past
 	if expirationTime.Time.Before(time.Now()) {
 		return status.Errorf(codes.InvalidArgument, "subscription expired")
 	}
+
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
 	var title, body string
 
 	switch notificationType {
 	case "follow":
 		title = "New Follower!"
-		body = fmt.Sprintf("%s started following you", sender)
+		body = fmt.Sprintf("%s started following you", authenticatedUsername)
 	case "repost":
 		title = "New Repost!"
-		body = fmt.Sprintf("%s reposted your post", sender)
+		body = fmt.Sprintf("%s reposted your post", authenticatedUsername)
 	}
 
 	notificationPayload := map[string]string{

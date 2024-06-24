@@ -108,10 +108,8 @@ github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.2.12 h1:9LC83zGrHhuUA9l16C9AHXAqEV/2wBQ4nkvumAE65EE=
 github.com/ugorji/go/codec v1.2.12/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
-github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618231347-e892211d51e0 h1:25IRrRaYlK/2X01IzSa9yU3MkMXvy/waYW6bsY8nM/U=
-github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240618231347-e892211d51e0/go.mod h1:iOxipJzNBMkwo5jHtNvyufuaOwjmMOpQQr4VJckEV4w=
-github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240619002058-ba1c8a89fdb3 h1:eT2Hm6gbSiN63G/r8JxhKX5g4FJxMGAXG6pIF+PWW3w=
-github.com/wwi21seb-projekt/alpha-shared v0.19.2-0.20240619002058-ba1c8a89fdb3/go.mod h1:iOxipJzNBMkwo5jHtNvyufuaOwjmMOpQQr4VJckEV4w=
+github.com/wwi21seb-projekt/alpha-shared v0.21.1 h1:omZ8Q9GJV9TYhZZvLz+6+cUoL7pks1ZE//45H6/FhNY=
+github.com/wwi21seb-projekt/alpha-shared v0.21.1/go.mod h1:xShoxxKywBEVSd6CsFINxm+DU1BAsdjSqm/BbKLGNYM=
 github.com/wwi21seb-projekt/errors-go v0.6.0 h1:0MKRG5m2ht/yA7Iab4EGJE30hF17ueRBf79ECzDpUoM=
 github.com/wwi21seb-projekt/errors-go v0.6.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
 go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.52.0 h1:vkioc4XBfqnZZ7u40wK3Kgbjj9JYkvW6FY1ghmM/Shk=
