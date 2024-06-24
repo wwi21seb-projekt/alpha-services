@@ -53,7 +53,7 @@ opentelemetry-collector:
             - otlp/jaeger
 
 prometheus:
-  enabled: true  # Turn this off if you dont want to deploy kube-prometheus-stack
+  enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack
 
 jaeger:
   enabled: true

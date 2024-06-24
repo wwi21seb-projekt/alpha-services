@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -19,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -37,23 +40,25 @@ type postService struct {
 	db            *db.DB
 	profileClient pbUser.UserServiceClient
 	subscription  pbUser.SubscriptionServiceClient
+	imageClient   pbImage.ImageServiceClient
 	pb.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient) pb.PostServiceServer {
+func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient, imageClient pbImage.ImageServiceClient) pb.PostServiceServer {
 	return &postService{
 		logger:        logger,
 		tracer:        otel.GetTracerProvider().Tracer("post-service"),
 		db:            db,
 		profileClient: profileClient,
 		subscription:  subscription,
+		imageClient:   imageClient,
 	}
 }
 
 func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.ListPostsResponse, error) {
 	conn, err := ps.db.Pool.Acquire(ctx)
 	if err != nil {
-		ps.logger.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
+		ps.logger.Error("Acquiring database connection failed", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
 	}
 	defer conn.Release()
@@ -65,6 +70,18 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 
 		if request.Username != nil && *request.Username == "" {
 			return nil, status.Error(codes.InvalidArgument, "Username cannot be empty")
+		}
+
+		// Check if user exists
+		resp, err := ps.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: []string{*request.Username}})
+		if err != nil {
+			ps.logger.Errorw("Error in profileClient.GetUser while checking if user exists", zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+		}
+
+		if len(resp.GetUsers()) == 0 || resp.GetUsers()[0].Username != *request.Username {
+			ps.logger.Debugw("User does not exist", zap.String("username", *request.Username))
+			return nil, status.Error(codes.NotFound, "user does not exist")
 		}
 
 		username := *request.Username
@@ -381,9 +398,12 @@ func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostReq
 
 	// Get Author Profile from User-Service
 	selectCtx, selectSpan := ps.tracer.Start(ctx, "SelectUserData")
-	users, err := ps.profileClient.ListUsers(selectCtx, &pbUser.ListUsersRequest{Usernames: []string{authenticatedUsername}})
+	user, err := ps.profileClient.GetUser(selectCtx, &pbUser.GetUserRequest{Username: authenticatedUsername})
 	if err != nil {
 		selectSpan.End()
+		if status.Code(err) == codes.PermissionDenied {
+			return nil, status.Error(codes.PermissionDenied, "User is not activated")
+		}
 		ps.logger.Errorf("Error in profileClient.GetUser: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to get author profile: %v", err)
 	}
@@ -392,17 +412,21 @@ func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostReq
 	post := &pb.Post{
 		PostId:       uuid.New().String(),
 		CreationDate: time.Now().Format(time.RFC3339),
-		Author:       users.Users[0],
-		Content:      request.Content,
-		Location:     request.Location,
-		Liked:        false,
-		Likes:        0,
+		Author: &pbUser.PublicUser{
+			Username: user.Username,
+			Nickname: user.Nickname,
+			Picture:  user.Picture,
+		},
+		Content:  request.Content,
+		Location: request.Location,
+		Liked:    false,
+		Likes:    0,
 	}
 
 	// Get repost if it exists
-	repostCTX, repostSpan := ps.tracer.Start(ctx, "GetRepost")
 	var repostID *string
 	if request.RepostedPostId != nil && *request.RepostedPostId != "" {
+		repostCTX, repostSpan := ps.tracer.Start(ctx, "GetRepost")
 		post.Repost, err = ps.GetPost(repostCTX, &pb.GetPostRequest{PostId: *request.RepostedPostId})
 		if err != nil {
 			repostSpan.SetAttributes(attribute.String("error", err.Error()))
@@ -416,7 +440,7 @@ func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostReq
 			return nil, status.Errorf(codes.Internal, "failed to get repost: %v", err)
 		}
 		repostID = &post.Repost.PostId
-		ps.logger.Infof("Repost: %v", post.Repost)
+		repostSpan.End()
 	}
 
 	// Start transaction
@@ -426,6 +450,28 @@ func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostReq
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
 	defer ps.db.Rollback(ctx, tx)
+
+	// Upload the image to image-service
+	if request.Picture != nil {
+		imageResp, err := ps.imageClient.UploadImage(ctx, &pbImage.UploadImageRequest{
+			Image:         *request.Picture,
+			ContextString: post.PostId,
+		})
+		if err != nil {
+			ps.logger.Errorw("Error in imageClient.UploadImage", zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
+		}
+		post.Picture = &pbCommon.Picture{
+			Width:  500,
+			Height: 500,
+		}
+		environment := os.Getenv("ENVIRONMENT")
+		if environment == "production" {
+			post.Picture.Url = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", imageResp.GetUrl())
+		} else {
+			post.Picture.Url = fmt.Sprintf("http://localhost:8080/api/images?image=%s", imageResp.GetUrl())
+		}
+	}
 
 	err = ps.insertPost(ctx, tx, post, repostID)
 	if err != nil {
@@ -473,7 +519,7 @@ func (ps *postService) DeletePost(ctx context.Context, req *pb.GetPostRequest) (
 	defer ps.db.Rollback(ctx, tx)
 
 	// Delete the post
-	queryString := "DELETE FROM post_service.posts WHERE post_id = $1"
+	queryString := "DELETE FROM posts WHERE post_id = $1"
 	if _, err := tx.Exec(ctx, queryString, post.PostId); err != nil {
 		ps.logger.Errorf("tx.Exec failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to delete post: %v", err)
@@ -488,9 +534,17 @@ func (ps *postService) DeletePost(ctx context.Context, req *pb.GetPostRequest) (
 }
 
 func (ps *postService) insertPost(ctx context.Context, tx pgx.Tx, post *pb.Post, repostID *string) error {
+	var pictureURL *string
+	var pictureWidth, pictureHeight *int32
+	if post.Picture != nil {
+		pictureURL = &post.Picture.Url
+		pictureWidth = &post.Picture.Width
+		pictureHeight = &post.Picture.Height
+	}
+
 	query := psql.Insert("posts").
-		Columns("post_id", "author_name", "content", "created_at", "longitude", "latitude", "accuracy", "repost_post_id").
-		Values(post.PostId, post.Author.Username, post.Content, post.CreationDate, &post.Location.Longitude, &post.Location.Latitude, &post.Location.Accuracy, &repostID)
+		Columns("post_id", "author_name", "content", "created_at", "longitude", "latitude", "accuracy", "repost_post_id", "picture_url", "picture_width", "picture_height").
+		Values(post.PostId, post.Author.Username, post.Content, post.CreationDate, &post.Location.Longitude, &post.Location.Latitude, &post.Location.Accuracy, &repostID, pictureURL, pictureWidth, pictureHeight)
 
 	queryString, args, _ := query.ToSql()
 	_, err := tx.Exec(ctx, queryString, args...)

@@ -5,7 +5,7 @@ go 1.22.3
 require (
 	github.com/mailgun/mailgun-go/v4 v4.12.0
 	github.com/matcornic/hermes/v2 v2.1.0
-	github.com/wwi21seb-projekt/alpha-shared v0.21.0
+	github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240623202328-d0d126727e30
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	google.golang.org/grpc v1.64.0

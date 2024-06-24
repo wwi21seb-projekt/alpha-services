@@ -84,7 +84,7 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 			returnErr = goerrors.EmailUnreachable
 		}
 
-		uh.logger.Errorf("Error in upstream call uh.authService.RegisterUser: %v", err)
+		uh.logger.Errorw("Error in upstream call uh.authService.RegisterUser", zap.Error(err))
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})
@@ -107,7 +107,7 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 		},
 	})
 	if err != nil {
-		uh.logger.Errorf("Error in upstream call uh.profileService.SearchUsers: %v", err)
+		uh.logger.Errorw("Error in upstream call uh.profileService.SearchUsers", zap.Error(err))
 		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
@@ -210,7 +210,7 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 			returnErr = goerrors.UserNotFound
 		}
 
-		uh.logger.Errorf("Error in upstream call uh.authService.LoginUser: %v", err)
+		uh.logger.Debugw("Error in upstream call uh.authService.LoginUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
 			Error: returnErr,
 		})

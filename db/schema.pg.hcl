@@ -200,7 +200,7 @@ table "posts" {
   }
   column "picture_url" {
     null = true
-    type = character_varying(64)
+    type = character_varying(96)
   }
   column "picture_width" {
     null = true

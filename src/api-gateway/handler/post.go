@@ -76,6 +76,8 @@ func (ph *PostHandler) CreatePost(c *gin.Context) {
 			returnErr = goerrors.PostNotFound
 		case codes.InvalidArgument:
 			returnErr = goerrors.BadRequest
+		case codes.PermissionDenied:
+			returnErr = goerrors.UserNotActivated
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.CreatePost: %v", err)
@@ -111,7 +113,12 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if status.Code(err) == codes.NotFound {
+			c.JSON(http.StatusNotFound, goerrors.UserNotFound)
+			return
+		}
+
+		c.AbortWithStatusJSON(http.StatusInternalServerError, goerrors.InternalServerError)
 		return
 	}
 
@@ -172,6 +179,8 @@ func (ph *PostHandler) DeletePost(c *gin.Context) {
 			returnErr = goerrors.PostNotFound
 		case codes.InvalidArgument:
 			returnErr = goerrors.BadRequest
+		case codes.PermissionDenied:
+			returnErr = goerrors.DeletePostForbidden
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.DeletePost: %v", err)

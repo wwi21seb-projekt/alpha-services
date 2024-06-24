@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
@@ -65,6 +66,7 @@ func main() {
 	// Create client stubs
 	userProfileClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
 	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
+	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
@@ -74,7 +76,7 @@ func main() {
 
 	// Register post service
 	pbPost.RegisterInteractionServiceServer(grpcServer, handler.NewInteractionService(logger, database, userProfileClient))
-	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	pbPost.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient, imageClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

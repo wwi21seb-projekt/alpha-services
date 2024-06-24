@@ -45,7 +45,6 @@ func main() {
 	if err != nil {
 		logger.Fatalf("failed to load configuration: %v", err)
 	}
-	logger.Infof("Loaded configuration: %+v", cfg)
 
 	ctx := context.Background()
 	// Initialize tracing
@@ -64,7 +63,7 @@ func main() {
 
 	// Initialize gRPC client connections
 	if err = cfg.InitializeClients(logger.Desugar()); err != nil {
-		logger.Fatal("Failed to initialize gRPC clients", zap.Error(err))
+		logger.Fatalw("Failed to initialize gRPC clients", "error", err)
 	}
 
 	// Create client stubs

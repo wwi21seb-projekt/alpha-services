@@ -24,6 +24,13 @@ global:
     limits:
       memory: 100Mi
 
+ingress:
+  enabled: false
+  host:
+  tls:
+    enabled: true
+    secretName:
+
 services:
   api-gateway:
     replicaCount: 1
@@ -88,6 +95,7 @@ services:
       name: post-service
     connections:
       - user-service
+      - image-service
 
   user-service:
     replicaCount: 1

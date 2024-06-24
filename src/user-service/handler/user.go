@@ -45,12 +45,24 @@ func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost
 func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (*pb.GetUserResponse, error) {
 	conn, err := us.db.Pool.Acquire(ctx)
 	if err != nil {
-		us.logger.Errorf("us.db.Pool.Acquire(ctx) failed: %v", err)
+		us.logger.Errorw("us.db.Pool.Acquire failed", "error", err)
 		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
 	}
 	defer conn.Release()
+
 	// Get authenticated user from metadata
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	// Check if user is activated
+	activated, err := us.isUserActivated(ctx, username)
+	if err != nil {
+		us.logger.Errorf("Error in us.db.IsUserActivated: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error in us.db.IsUserActivated: %v", err)
+	}
+	if !activated {
+		us.logger.Infof("User not activated")
+		return nil, status.Errorf(codes.PermissionDenied, "User not activated")
+	}
 
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
@@ -59,12 +71,10 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		Column("s1.subscription_id AS subscription_id").
 		Column("COUNT(s2.subscription_id) AS following_count").
 		Column("COUNT(s3.subscription_id) AS follower_count").
-		//Column("COUNT(p.post_id) AS post_count").
 		From("users u").
 		LeftJoin("subscriptions s1 ON s1.subscribee_name = u.username AND s1.subscriber_name = ?", username).
 		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username").
 		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
-		//LeftJoin("posts p ON p.author_name = u.username").
 		Where("u.username = ?", request.GetUsername()).
 		GroupBy("u.nickname", "u.status", "u.picture_url", "s1.subscription_id", "u.picture_width", "u.picture_height").
 		ToSql()
@@ -72,11 +82,9 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	var nickname, userStatus, pictureUrl, subscriptionID pgtype.Text
 	var followingCount, followerCount, pictureWidth, pictureHeight pgtype.Int4
 
-	us.logger.Info("Querying user data")
 	if err = conn.QueryRow(selectCtx, query, args...).Scan(
 		&nickname, &userStatus, &pictureUrl, &pictureWidth,
 		&pictureHeight, &subscriptionID, &followingCount, &followerCount,
-		//&response.PostCount,
 	); err != nil {
 		selectSpan.End()
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -333,6 +341,37 @@ func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 	return &pb.ListUsersResponse{
 		Users: users,
 	}, nil
+}
+
+func (us userService) isUserActivated(ctx context.Context, username string) (bool, error) {
+	conn, err := us.db.Pool.Acquire(ctx)
+	if err != nil {
+		us.logger.Errorf("us.db.Pool.Acquire failed: %v", err)
+		return false, err
+	}
+	defer conn.Release()
+
+	// Check if user is activated
+	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserStatus")
+	query, args, _ := psql.Select("activated_at").
+		From("users").
+		Where("username = ?", username).
+		ToSql()
+
+	var activatedAt pgtype.Timestamptz
+	if err = conn.QueryRow(selectCtx, query, args...).Scan(&activatedAt); err != nil {
+		selectSpan.End()
+		if errors.Is(err, pgx.ErrNoRows) {
+			us.logger.Infof("User not found")
+			return false, nil
+		}
+
+		us.logger.Errorf("Error in conn.QueryRow: %v", err)
+		return false, err
+	}
+	selectSpan.End()
+
+	return activatedAt.Valid, nil
 }
 
 func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {

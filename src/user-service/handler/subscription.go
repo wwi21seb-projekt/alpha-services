@@ -215,7 +215,7 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	// Send a notification to the user that they have been subscribed to
 	sendNotificationRequest := pbNotification.SendNotificationRequest{
 		NotificationType: "follow",
-		Sender:           request.GetFollowedUsername(),
+		Recipient:        request.GetFollowedUsername(),
 	}
 
 	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {

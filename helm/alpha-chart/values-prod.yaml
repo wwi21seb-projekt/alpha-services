@@ -4,6 +4,13 @@ overrideConfigMap:
 secretOverride:
   MAILGUN_API_KEY: ""
 
+ingress:
+  enabled: true
+  host: alpha.c930.net
+  tls:
+    enabled: true
+    secretName: alpha-c930-net-tls
+
 global:
   image:
     tag: pr-25
@@ -44,10 +51,10 @@ postgresql:
       scriptsConfigMap: init-db-scripts
     resources:
       limits:
-        memory: 1Gi
+        memory: 5Gi
 
 opentelemetry-collector:
-  mode: deployment
+  mode: daemonset
   ports:
     metrics:
       enabled: true
@@ -66,7 +73,7 @@ opentelemetry-collector:
       prometheus:
         endpoint: "0.0.0.0:8889"
       otlp/jaeger:
-        endpoint: "alpha-release-jaeger-collector:4317"
+        endpoint: "jaegertracing-collector.observability:4317"
         tls:
           insecure: true
     service:
@@ -81,6 +88,8 @@ opentelemetry-collector:
             - otlp
           exporters:
             - otlp/jaeger
+  service:
+    enabled: true
 
 prometheus:
   enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack

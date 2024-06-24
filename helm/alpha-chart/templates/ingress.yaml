@@ -1,0 +1,27 @@
+{{ if $.Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alpha-ingress
+  annotations:
+    traefik.frontend.rule.type: PathPrefixStrip
+    traefik.ingress.kubernetes.io/router.middlewares: default-secure-headers@kubernetescrd
+    cert-manager.io/cluster-issuer: letsencrypt-production
+spec:
+    ingressClassName: traefik
+    rules:
+      - host: {{ $.Values.ingress.host }}
+        http:
+            paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ $.Release.Name }}-api-gateway
+                  port:
+                    number: 8080
+    tls:
+      - hosts:
+          - {{ $.Values.ingress.host }}
+        secretName: {{ $.Values.ingress.tls.secretName }}
+{{ end }}

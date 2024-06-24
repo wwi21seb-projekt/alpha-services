@@ -172,7 +172,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 
 	query, args, _ := psql.Insert("notifications").
 		Columns("notification_id", "recipient_username", "sender_username", "notification_type").
-		Values(uuid.New(), request.Sender, authenticatedUsername, request.NotificationType).
+		Values(uuid.New(), request.Recipient, authenticatedUsername, request.NotificationType).
 		ToSql()
 
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
@@ -189,7 +189,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
 		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
 		From("push_subscriptions s").
-		Where("s.username = ?", request.Sender).
+		Where("s.username = ?", request.Recipient).
 		ToSql()
 	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
 	if err != nil {
@@ -217,7 +217,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 			}
 		case "web":
 			// Send notification to web
-			err = sendWebNotification(request.NotificationType, request.Sender, endpoint.String, expirationTime, p256dh.String, auth.String)
+			err = sendWebNotification(request.NotificationType, request.Recipient, endpoint.String, expirationTime, p256dh.String, auth.String)
 			if err != nil {
 				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
 			}
