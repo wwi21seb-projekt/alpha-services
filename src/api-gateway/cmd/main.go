@@ -192,7 +192,7 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, m *middleware.Middleware, chat
 	authRouter.GET("/notifications", notificationHandler.GetNotifications)
 	authRouter.DELETE("/notifications/:notificationId", notificationHandler.DeleteNotification)
 	authRouter.GET("/push/vapid", notificationHandler.GetPublicKey)
-	authRouter.POST("/push/register", notificationHandler.CreatePushSubscription)
+	authRouter.POST("/push/register", middleware.ValidateAndSanitizeStruct(&schema.CreatePushSubscriptionRequest{}), notificationHandler.CreatePushSubscription)
 }
 
 func HandleImprint(c *gin.Context) {

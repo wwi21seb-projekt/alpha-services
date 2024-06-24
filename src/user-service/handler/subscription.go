@@ -218,6 +218,7 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 		Recipient:        request.GetFollowedUsername(),
 	}
 
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("sub", username))
 	if _, err = ss.notificationClient.SendNotification(ctx, &sendNotificationRequest); err != nil {
 		ss.logger.Error("Error in ss.notificationClient.SendNotification", zap.Error(err))
 	}

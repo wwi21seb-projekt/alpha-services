@@ -56,21 +56,23 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 }
 
 func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.CreatePushSubscriptionRequest)
+
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
+	// Make gRPC call
 	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &pbNotification.CreatePushSubscriptionRequest{
-		// Convert string to enum
 		Type: func(s string) pbNotification.PushSubscriptionType {
 			if val, ok := pbNotification.PushSubscriptionType_value[s]; ok {
 				return pbNotification.PushSubscriptionType(val)
 			}
 			return pbNotification.PushSubscriptionType_WEB // web is returned by defualt
-		}(c.Param("type")),
-		Token:          c.Param("token"),
-		Endpoint:       c.Param("endpoint"),
-		ExpirationTime: c.Param("expirationTime"),
-		P256Dh:         c.Param("p256dh"),
-		Auth:           c.Param("auth"),
+		}(req.Type),
+		Token:          req.Token,
+		Endpoint:       req.Endpoint,
+		ExpirationTime: req.ExpirationTime,
+		P256Dh:         req.P256Dh,
+		Auth:           req.Auth,
 	})
 
 	if err != nil {
@@ -82,6 +84,7 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
+
 	response := schema.CreatePushSubscriptionResponse{
 		SubscriptionID: createPushSubscriptionResponse.SubscriptionId,
 	}
