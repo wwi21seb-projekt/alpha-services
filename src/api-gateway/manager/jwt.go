@@ -25,7 +25,8 @@ const (
 )
 
 type AlphaClaims struct {
-	IsRefreshToken bool `json:"irf"`
+	IsRefreshToken bool   `json:"irf"`
+	Username       string `json:"username"`
 	jwt.RegisteredClaims
 }
 
@@ -139,6 +140,7 @@ func generateJWT(username string, isRefreshToken bool, privateKey ed25519.Privat
 
 	claims := AlphaClaims{
 		IsRefreshToken: isRefreshToken,
+		Username:       username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Audience:  jwt.ClaimStrings{audience},

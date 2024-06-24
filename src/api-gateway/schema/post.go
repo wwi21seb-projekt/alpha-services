@@ -1,5 +1,7 @@
 package schema
 
+import serveralpha "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+
 // ------------------------------------------
 // ------------ Request DTOs ----------------
 // ------------------------------------------
@@ -22,4 +24,15 @@ type CreatePostRequest struct {
 
 type CreateCommentRequest struct {
 	Content string `json:"content" validate:"required,max=128"`
+}
+
+type FeedResponse struct {
+	Posts      []serveralpha.Post `json:"records"`
+	Pagination PostPagination     `json:"pagination"`
+}
+
+type PostPagination struct {
+	LastPostID string `json:"lastPostId"`
+	Limit      int32  `json:"limit"`
+	Records    int32  `json:"records"`
 }

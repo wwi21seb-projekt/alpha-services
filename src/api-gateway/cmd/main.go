@@ -140,6 +140,8 @@ func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
 
 // setupRoutes sets up the routes for the API Gateway
 func setupRoutes(apiRouter *gin.RouterGroup, m *middleware.Middleware, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
+	apiRouter.GET("/imprint", HandleImprint)
+
 	// Post routes
 	apiRouter.GET("/feed", postHandler.GetFeed)
 
@@ -191,4 +193,10 @@ func setupAuthRoutes(authRouter *gin.RouterGroup, m *middleware.Middleware, chat
 	authRouter.DELETE("/notifications/:notificationId", notificationHandler.DeleteNotification)
 	authRouter.GET("/push/vapid", notificationHandler.GetPublicKey)
 	authRouter.POST("/push/register", notificationHandler.CreatePushSubscription)
+}
+
+func HandleImprint(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"text": "This is the imprint",
+	})
 }

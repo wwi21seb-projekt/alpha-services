@@ -122,7 +122,33 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	// Convert list of posts pointers to list of posts
+	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
+	for _, post := range resp.GetPosts() {
+
+		posts = append(posts, pbPost.Post{
+			PostId:       post.GetPostId(),
+			Content:      post.GetContent(),
+			Location:     post.GetLocation(),
+			Picture:      post.GetPicture(),
+			CreationDate: post.GetCreationDate(),
+			Repost:       post.GetRepost(),
+			Author:       post.GetAuthor(),
+			Liked:        post.GetLiked(),
+			Likes:        post.GetLikes(),
+		})
+	}
+
+	feedResponse := &schema.FeedResponse{
+		Posts: posts,
+		Pagination: schema.PostPagination{
+			LastPostID: resp.GetPagination().GetLastPostId(),
+			Limit:      resp.GetPagination().GetLimit(),
+			Records:    resp.GetPagination().GetRecords(),
+		},
+	}
+
+	c.JSON(http.StatusOK, feedResponse)
 }
 
 func (ph *PostHandler) QueryPosts(c *gin.Context) {
@@ -154,7 +180,33 @@ func (ph *PostHandler) QueryPosts(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	// Convert list of posts pointers to list of posts
+	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
+	for _, post := range resp.GetPosts() {
+
+		posts = append(posts, pbPost.Post{
+			PostId:       post.GetPostId(),
+			Content:      post.GetContent(),
+			Location:     post.GetLocation(),
+			Picture:      post.GetPicture(),
+			CreationDate: post.GetCreationDate(),
+			Repost:       post.GetRepost(),
+			Author:       post.GetAuthor(),
+			Liked:        post.GetLiked(),
+			Likes:        post.GetLikes(),
+		})
+	}
+
+	feedResponse := &schema.FeedResponse{
+		Posts: posts,
+		Pagination: schema.PostPagination{
+			LastPostID: resp.GetPagination().GetLastPostId(),
+			Limit:      resp.GetPagination().GetLimit(),
+			Records:    resp.GetPagination().GetRecords(),
+		},
+	}
+
+	c.JSON(http.StatusOK, feedResponse)
 }
 
 func (ph *PostHandler) DeletePost(c *gin.Context) {
@@ -227,7 +279,33 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	// Convert list of posts pointers to list of posts
+	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
+	for _, post := range resp.GetPosts() {
+
+		posts = append(posts, pbPost.Post{
+			PostId:       post.GetPostId(),
+			Content:      post.GetContent(),
+			Location:     post.GetLocation(),
+			Picture:      post.GetPicture(),
+			CreationDate: post.GetCreationDate(),
+			Repost:       post.GetRepost(),
+			Author:       post.GetAuthor(),
+			Liked:        post.GetLiked(),
+			Likes:        post.GetLikes(),
+		})
+	}
+
+	feedResponse := &schema.FeedResponse{
+		Posts: posts,
+		Pagination: schema.PostPagination{
+			LastPostID: resp.GetPagination().GetLastPostId(),
+			Limit:      resp.GetPagination().GetLimit(),
+			Records:    resp.GetPagination().GetRecords(),
+		},
+	}
+
+	c.JSON(http.StatusOK, feedResponse)
 }
 
 func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
