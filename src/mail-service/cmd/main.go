@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
+	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
+	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/mail-service/handler"
@@ -10,8 +13,6 @@ import (
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -52,8 +53,9 @@ func main() {
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
 	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
-	pb.RegisterMailServiceServer(grpcServer, handler.NewMailService(logger))
+	healthSvc := health.NewHealthServer(logger)
+	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
+	mailv1.RegisterMailServiceServer(grpcServer, handler.NewMailService(logger))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

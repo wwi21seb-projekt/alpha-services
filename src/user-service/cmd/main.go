@@ -85,8 +85,9 @@ func main() {
 
 	// Check dependencies and update health status
 	grpcClients := map[string]*grpc.ClientConn{
-		"PostService": cfg.GRPCClients.PostService.(*grpc.ClientConn),
-		// "ImageService": cfg.GRPCClients.ImageService.(*grpc.ClientConn),
+		"PostService":  cfg.GRPCClients.PostService.(*grpc.ClientConn),
+		"ImageService": cfg.GRPCClients.ImageService.(*grpc.ClientConn),
+		"MailService":  cfg.GRPCClients.MailService.(*grpc.ClientConn),
 	}
 	healthSvc.CheckDependencies(ctx, database, grpcClients)
 
