@@ -3,6 +3,7 @@ package middleware
 import (
 	"errors"
 	"fmt"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	"go.uber.org/zap"
 	"net/http"
 	"reflect"
@@ -15,7 +16,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/truemail-rb/truemail-go"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
@@ -30,7 +30,7 @@ func (c *contextKey) String() string {
 }
 
 var SanitizedPayloadKey = &contextKey{"sanitizedPayload"}
-var badRequestError = &schema.ErrorDTO{Error: goerrors.BadRequest}
+var badRequestError = &dto.ErrorDTO{Error: goerrors.BadRequest}
 
 type Validator struct {
 	SanitizeData func(data interface{}) error

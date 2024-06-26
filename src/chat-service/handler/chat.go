@@ -489,6 +489,9 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 		default:
 			// Receive message from the client
 			message, err := stream.Recv()
+
+			// Add created_at
+
 			chatCtx, chatSpan := cs.tracer.Start(handleCtx, "ReceiveMessage")
 			if err != nil {
 				chatSpan.AddEvent("Failed to receive message from client")

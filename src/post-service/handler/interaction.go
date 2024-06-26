@@ -2,35 +2,34 @@ package handler
 
 import (
 	"context"
-	"errors"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
+	"github.com/wwi21seb-projekt/alpha-services/src/post-service/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"strconv"
 	"time"
 )
 
 type interactionService struct {
+	postv1.UnimplementedInteractionServiceServer
 	logger        *zap.SugaredLogger
 	tracer        trace.Tracer
 	db            *db.DB
-	profileClient pbUser.UserServiceClient
-	pb.UnimplementedInteractionServiceServer
+	profileClient userv1.UserServiceClient
 }
 
-func NewInteractionService(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient) pb.InteractionServiceServer {
+func NewInteractionService(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient) postv1.InteractionServiceServer {
 	return &interactionService{
 		logger:        logger,
 		tracer:        otel.GetTracerProvider().Tracer("post-service"),
@@ -39,112 +38,94 @@ func NewInteractionService(logger *zap.SugaredLogger, db *db.DB, profileClient p
 	}
 }
 
-func (is *interactionService) LikePost(ctx context.Context, req *pb.LikePostRequest) (*pbCommon.Empty, error) {
+func (is *interactionService) LikePost(ctx context.Context, req *postv1.LikePostRequest) (*postv1.LikePostResponse, error) {
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
-	queryBuilder := psql.Insert("likes").Columns("post_id", "liked_at", "username").Values(req.PostId, time.Now().Format(time.RFC3339), authenticatedUsername)
+	queryBuilder := psql.
+		Insert("likes").
+		Columns("post_id", "liked_at", "username").
+		Values(req.PostId, time.Now().Format(time.RFC3339), authenticatedUsername)
 
 	query, args, err := queryBuilder.ToSql()
 	if err != nil {
 		is.logger.Errorw("Error building SQL query", "error", err)
-		return nil, err
+		return nil, status.Error(codes.Internal, "Error building SQL query")
 	}
 
-	conn, err := is.db.Pool.Acquire(ctx)
+	conn, err := is.db.Acquire(ctx)
 	if err != nil {
-		is.logger.Errorf("is.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
-	_, err = conn.Exec(ctx, query, args...)
+	_, err = is.db.Exec(ctx, conn, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case pgerrcode.UniqueViolation:
-				return nil, status.Errorf(codes.AlreadyExists, "User already liked this post")
-			case pgerrcode.ForeignKeyViolation:
-				return nil, status.Errorf(codes.NotFound, "Post not found")
-			default:
-				is.logger.Errorw("Error executing SQL query", "error", err)
-			}
-			return nil, status.Errorf(codes.InvalidArgument, "Syntax error in query: %v", err)
-		}
+		return nil, err
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &postv1.LikePostResponse{}, nil
 }
 
-func (is *interactionService) UnlikePost(ctx context.Context, req *pb.UnlikePostRequest) (*pbCommon.Empty, error) {
+func (is *interactionService) UnlikePost(ctx context.Context, req *postv1.UnlikePostRequest) (*postv1.UnlikePostResponse, error) {
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
-	queryBuilder := psql.Delete("likes").Where(sq.Eq{"post_id": req.PostId, "username": authenticatedUsername})
+	queryBuilder := psql.
+		Delete("likes").
+		Where(sq.Eq{"post_id": req.PostId, "username": authenticatedUsername})
 
 	query, args, err := queryBuilder.ToSql()
 	if err != nil {
 		is.logger.Errorw("Error building SQL query", "error", err)
-		return nil, err
+		return nil, status.Error(codes.Internal, "Error building SQL query")
 	}
 
-	conn, err := is.db.Pool.Acquire(ctx)
+	conn, err := is.db.Acquire(ctx)
 	if err != nil {
-		is.logger.Errorf("is.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
-	commandTag, err := conn.Exec(ctx, query, args...)
+	commandTag, err := is.db.Exec(ctx, conn, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case pgerrcode.ForeignKeyViolation:
-				return nil, status.Errorf(codes.NotFound, "Post not found")
-			default:
-				is.logger.Errorw("Error executing SQL query", "error", err)
-			}
-		}
-		return nil, status.Errorf(codes.Internal, "Error executing SQL query: %v", err)
+		return nil, err
 	}
 
 	// Check if any rows were affected
 	if commandTag.RowsAffected() == 0 {
-		return nil, status.Errorf(codes.NotFound, "User has not liked this post")
+		return nil, status.Errorf(codes.NotFound, "like not found")
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &postv1.UnlikePostResponse{}, nil
 }
 
-func (is *interactionService) CreateComment(ctx context.Context, req *pb.CreateCommentRequest) (*pb.Comment, error) {
+func (is *interactionService) CreateComment(ctx context.Context, req *postv1.CreateCommentRequest) (*postv1.CreateCommentResponse, error) {
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
-	// Get user data
-	profiles, err := is.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: []string{authenticatedUsername}})
+	// Fetch user data
+	userCTX, userSpan := is.tracer.Start(ctx, "Fetch user data")
+	profiles, err := is.profileClient.ListUsers(userCTX, &userv1.ListUsersRequest{Usernames: []string{authenticatedUsername}})
 	if err != nil {
+		userSpan.End()
 		is.logger.Errorw("Error getting user data", "error", err)
 		return nil, status.Errorf(codes.Internal, "Error getting user data: %v", err)
 	}
+	userSpan.End()
 
-	comment := &pb.Comment{
-		CommentId: uuid.New().String(),
-		Author: &pbUser.User{
-			Username: profiles.GetUsers()[0].GetUsername(),
-			Nickname: profiles.GetUsers()[0].GetNickname(),
-			Picture:  profiles.GetUsers()[0].GetPicture(),
-		},
-		Content:      req.Content,
-		CreationDate: time.Now().Format(time.RFC3339),
+	comment := &schema.Comment{
+		CommentID:  uuid.New().String(),
+		Content:    req.GetContent(),
+		CreatedAt:  time.Now(),
+		AuthorName: profiles.GetUsers()[0].GetUsername(),
+		PostID:     req.GetPostId(),
 	}
 
-	queryBuilder := psql.Insert("comments").Columns("comment_id", "post_id", "created_at", "author_name", "content").
-		Values(comment.CommentId, req.GetPostId(), comment.GetCreationDate(), authenticatedUsername, comment.GetContent())
+	queryBuilder := psql.
+		Insert("comments").
+		Columns("comment_id", "content", "created_at", "author_name", "post_id").
+		Values(comment.CommentID, comment.Content, comment.CreatedAt, comment.AuthorName, comment.PostID)
 
 	query, args, err := queryBuilder.ToSql()
 	if err != nil {
@@ -152,62 +133,64 @@ func (is *interactionService) CreateComment(ctx context.Context, req *pb.CreateC
 		return nil, err
 	}
 
-	conn, err := is.db.Pool.Acquire(ctx)
+	conn, err := is.db.Acquire(ctx)
 	if err != nil {
-		is.logger.Errorf("is.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
-	_, err = conn.Exec(ctx, query, args...)
+	_, err = is.db.Exec(ctx, conn, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case pgerrcode.ForeignKeyViolation:
-				return nil, status.Errorf(codes.NotFound, "Post not found")
-			default:
-				is.logger.Errorw("Error executing SQL query", "error", err)
-
-			}
-			return nil, status.Errorf(codes.InvalidArgument, "Syntax error in query: %v", err)
-		}
-
-		is.logger.Errorw("Error executing SQL query", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error executing SQL query: %v", err)
+		return nil, err
 	}
 
-	return comment, nil
+	return &postv1.CreateCommentResponse{
+		CommentId:    comment.CommentID,
+		Author:       profiles.GetUsers()[0],
+		Content:      comment.Content,
+		CreationDate: comment.CreatedAt.Format(time.RFC3339),
+	}, nil
 }
 
-func (is *interactionService) ListComments(ctx context.Context, req *pb.ListCommentsRequest) (*pb.ListCommentsResponse, error) {
-	// Base query builder
-	baseQueryBuilder := psql.Select().From("comments").
+func (is *interactionService) ListComments(ctx context.Context, req *postv1.ListCommentsRequest) (*postv1.ListCommentsResponse, error) {
+	baseQueryBuilder := psql.
+		Select().
+		From("comments").
 		Where(sq.Eq{"post_id": req.GetPostId()})
 
-	// Count query builder
 	countQueryBuilder := baseQueryBuilder.Columns("COUNT(*)")
+
 	countQuery, countArgs, err := countQueryBuilder.ToSql()
 	if err != nil {
 		is.logger.Errorw("Error building count SQL query", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error building count SQL query: %v", err)
+		return nil, status.Error(codes.Internal, "Error building count SQL query")
+	}
+
+	limit := int(req.Pagination.GetPageSize())
+	if limit <= 0 {
+		limit = 10
+	}
+	offset, err := strconv.Atoi(req.Pagination.GetPageToken())
+	if err != nil {
+		is.logger.Debugw("Error parsing page token", "error", err)
+		offset = 0
 	}
 
 	// Data query builder with pagination
 	dataQueryBuilder := baseQueryBuilder.Columns("comment_id", "created_at", "author_name", "content").
-		Limit(uint64(req.Pagination.GetLimit())).
-		Offset(uint64(req.Pagination.GetOffset())).
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
 		OrderBy("created_at DESC")
+
 	dataQuery, dataArgs, err := dataQueryBuilder.ToSql()
 	if err != nil {
 		is.logger.Errorw("Error building data SQL query", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error building data SQL query: %v", err)
+		return nil, status.Error(codes.Internal, "Error building data SQL query")
 	}
 
-	conn, err := is.db.Pool.Acquire(ctx)
+	conn, err := is.db.Acquire(ctx)
 	if err != nil {
-		is.logger.Errorf("is.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
@@ -216,74 +199,58 @@ func (is *interactionService) ListComments(ctx context.Context, req *pb.ListComm
 	err = conn.QueryRow(ctx, countQuery, countArgs...).Scan(&totalRecords)
 	if err != nil {
 		is.logger.Errorw("Error executing count SQL query", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error executing count SQL query: %v", err)
+		return nil, status.Error(codes.Internal, "Error executing count SQL query")
 	}
 
 	// Execute data query to get comments
 	rows, err := conn.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		is.logger.Errorw("Error executing data SQL query", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error executing data SQL query: %v", err)
+		return nil, status.Error(codes.Internal, "Error executing data SQL query")
 	}
 	defer rows.Close()
 
-	comments := make([]*pb.Comment, 0)
-	commentToAuthor := make(map[string]string)
-	for rows.Next() {
-		comment := &pb.Comment{
-			Author: &pbUser.User{}, // Ensure Author is not nil
-		}
-		var creationDate pgtype.Timestamptz
-		err = rows.Scan(&comment.CommentId, &creationDate, &comment.Author.Username, &comment.Content)
-		if err != nil {
-			is.logger.Errorw("Error scanning row", "error", err)
-			return nil, status.Errorf(codes.Internal, "Error scanning row: %v", err)
-		}
-		comment.CreationDate = creationDate.Time.Format(time.RFC3339)
-		commentToAuthor[comment.CommentId] = comment.Author.Username
-
-		comments = append(comments, comment)
-	}
-
-	uniqueProfiles := make(map[string]struct{})
-	for _, author := range commentToAuthor {
-		uniqueProfiles[author] = struct{}{}
-	}
-
-	ids := make([]string, 0, len(uniqueProfiles))
-	for id := range uniqueProfiles {
-		ids = append(ids, id)
-	}
-
-	profiles, err := is.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: ids})
+	comments, err := pgx.CollectRows(rows, pgx.RowToStructByName[schema.Comment])
 	if err != nil {
-		is.logger.Errorw("Error getting user data", "error", err)
-		return nil, status.Errorf(codes.Internal, "Error getting user data: %v", err)
+		is.logger.Errorw("Error scanning rows", "error", err)
+		return nil, status.Error(codes.Internal, "Error scanning rows")
 	}
 
-	profileMap := make(map[string]*pbUser.User)
-	for _, profile := range profiles.Users {
-		profileMap[profile.Username] = &pbUser.User{
-			Username: profile.GetUsername(),
-			Nickname: profile.GetNickname(),
-			Picture:  profile.GetPicture(),
-		}
+	authorNames := make([]string, 0, len(comments))
+	for _, comment := range comments {
+		authorNames = append(authorNames, comment.AuthorName)
+	}
+
+	authorsCTX, authorsSpan := is.tracer.Start(ctx, "Fetch author data")
+	authorProfiles, err := is.profileClient.ListUsers(authorsCTX, &userv1.ListUsersRequest{Usernames: authorNames})
+	if err != nil {
+		authorsSpan.End()
+		is.logger.Errorw("Error getting user data", "error", err)
+		return nil, status.Error(codes.Internal, "Error getting user data")
+	}
+	authorsSpan.End()
+
+	authorMap := make(map[string]*userv1.User)
+	for _, profile := range authorProfiles.GetUsers() {
+		authorMap[profile.GetUsername()] = profile
+	}
+
+	resp := &postv1.ListCommentsResponse{
+		Comments: make([]*postv1.CreateCommentResponse, 0, len(comments)),
+		Pagination: &commonv1.PaginationResponse{
+			NextPageToken: strconv.Itoa(offset + limit),
+			TotalSize:     int32(totalRecords),
+		},
 	}
 
 	for _, comment := range comments {
-		if profile, exists := profileMap[comment.Author.Username]; exists {
-			comment.Author = profile
-		} else {
-			is.logger.Warnw("No profile found for user", "username", comment.Author.Username)
-		}
+		resp.Comments = append(resp.Comments, &postv1.CreateCommentResponse{
+			CommentId:    comment.CommentID,
+			Author:       authorMap[comment.AuthorName],
+			Content:      comment.Content,
+			CreationDate: comment.CreatedAt.Format(time.RFC3339),
+		})
 	}
 
-	return &pb.ListCommentsResponse{
-		Comments: comments,
-		Pagination: &pbCommon.Pagination{
-			Offset:  req.Pagination.GetOffset(),
-			Limit:   req.Pagination.GetLimit(),
-			Records: int32(totalRecords),
-		},
-	}, nil
+	return resp, nil
 }

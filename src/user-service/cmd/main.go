@@ -3,8 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
@@ -13,10 +18,6 @@ import (
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
-	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -40,7 +41,7 @@ func main() {
 
 	// Initialize the database
 	ctx := context.Background()
-	database, err := db.NewDB(ctx, cfg.DatabaseConfig)
+	database, err := db.NewDB(ctx, cfg.DatabaseConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to the database", zap.Error(err))
 	}
@@ -66,21 +67,28 @@ func main() {
 	}
 
 	// Create client stubs
-	mailClient := pbMail.NewMailServiceClient(cfg.GRPCClients.MailService)
-	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
-	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
-	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
+	mailClient := mailv1.NewMailServiceClient(cfg.GRPCClients.MailService)
+	notificationClient := notificationv1.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
+	imageClient := imagev1.NewImageServiceClient(cfg.GRPCClients.ImageService)
+	postClient := postv1.NewPostServiceClient(cfg.GRPCClients.PostService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
-	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
+	healthSvc := health.NewHealthServer(logger)
+	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
 
 	// Register user services
-	pbUser.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient, imageClient))
-	pbUser.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
-	pbUser.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
+	userv1.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient, imageClient))
+	userv1.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
+	userv1.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
+
+	// Check dependencies and update health status
+	grpcClients := map[string]*grpc.ClientConn{
+		"PostService": cfg.GRPCClients.PostService.(*grpc.ClientConn),
+		// "ImageService": cfg.GRPCClients.ImageService.(*grpc.ClientConn),
+	}
+	healthSvc.CheckDependencies(ctx, database, grpcClients)
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

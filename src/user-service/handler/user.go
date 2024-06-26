@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"os"
+	"strconv"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -27,12 +28,12 @@ type userService struct {
 	logger      *zap.SugaredLogger
 	tracer      trace.Tracer
 	db          *db.DB
-	postClient  pbPost.PostServiceClient
-	imageClient pbImage.ImageServiceClient
-	pb.UnimplementedUserServiceServer
+	postClient  postv1.PostServiceClient
+	imageClient imagev1.ImageServiceClient
+	userv1.UnimplementedUserServiceServer
 }
 
-func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost.PostServiceClient, imageClient pbImage.ImageServiceClient) pb.UserServiceServer {
+func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient postv1.PostServiceClient, imageClient imagev1.ImageServiceClient) userv1.UserServiceServer {
 	return &userService{
 		logger:      logger,
 		tracer:      otel.GetTracerProvider().Tracer("user-service"),
@@ -42,11 +43,10 @@ func NewUserServer(logger *zap.SugaredLogger, database *db.DB, postClient pbPost
 	}
 }
 
-func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (*pb.GetUserResponse, error) {
-	conn, err := us.db.Pool.Acquire(ctx)
+func (us userService) GetUser(ctx context.Context, request *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+	conn, err := us.db.Acquire(ctx)
 	if err != nil {
-		us.logger.Errorw("us.db.Pool.Acquire failed", "error", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
@@ -103,7 +103,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 		return nil, err
 	}
 
-	response := &pb.GetUserResponse{
+	response := &userv1.GetUserResponse{
 		Username:       request.Username,
 		Nickname:       nickname.String,
 		Status:         userStatus.String,
@@ -114,7 +114,7 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 	}
 
 	if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-		response.Picture = &pbCommon.Picture{
+		response.Picture = &imagev1.Picture{
 			Url:    pictureUrl.String,
 			Width:  pictureWidth.Int32,
 			Height: pictureHeight.Int32,
@@ -125,20 +125,20 @@ func (us userService) GetUser(ctx context.Context, request *pb.GetUserRequest) (
 }
 
 func (us userService) getPostCount(ctx context.Context, username string) (int32, error) {
-	resp, err := us.postClient.ListPosts(ctx, &pbPost.ListPostsRequest{
+	resp, err := us.postClient.ListPosts(ctx, &postv1.ListPostsRequest{
 		Username:   &username,
-		FeedType:   pbPost.FeedType_FEED_TYPE_USER,
-		Pagination: &pbPost.PostPagination{Limit: 0},
+		FeedType:   postv1.FeedType_FEED_TYPE_USER,
+		Pagination: &commonv1.PaginationRequest{PageSize: 0},
 	})
 	if err != nil {
 		us.logger.Errorf("Error in postClient.ListPosts: %v", err)
 		return -1, status.Errorf(codes.Internal, "Error in postClient.ListPosts: %v", err)
 	}
 
-	return resp.Pagination.Records, nil
+	return resp.GetPagination().GetTotalSize(), nil
 }
 
-func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
+func (us userService) UpdateUser(ctx context.Context, request *userv1.UpdateUserRequest) (*userv1.UpdateUserResponse, error) {
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
 	queryBuilder := psql.Update("users").Where(sq.Eq{"username": username})
@@ -160,9 +160,9 @@ func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 	if request.GetBase64Picture() != "" {
 		uploadImageCtx, uploadImageSpan := us.tracer.Start(ctx, "UploadImage")
 		us.logger.Debugw("Uploading image to storage...", "username", username)
-		uploadImageResponse, err := us.imageClient.UploadImage(uploadImageCtx, &pbImage.UploadImageRequest{
-			Image:         request.GetBase64Picture(),
-			ContextString: username,
+		uploadImageResponse, err := us.imageClient.UploadImage(uploadImageCtx, &imagev1.UploadImageRequest{
+			Image: request.GetBase64Picture(),
+			Name:  username,
 		})
 		if err != nil {
 			us.logger.Errorf("Error in upstream call imageClient.UploadImage: %v", err)
@@ -190,12 +190,18 @@ func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 	// Update user data
 	query, args, _ := queryBuilder.ToSql()
 
-	tx, err := us.db.Begin(ctx)
+	conn, err := us.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	tx, err := us.db.BeginTx(ctx, conn)
 	if err != nil {
 		us.logger.Errorf("us.db.Pool.Begin failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to begin transaction: %v", err)
 	}
-	defer us.db.Rollback(ctx, tx)
+	defer us.db.RollbackTx(ctx, tx)
 
 	us.logger.Info("Updating user data")
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
@@ -203,24 +209,28 @@ func (us userService) UpdateUser(ctx context.Context, request *pb.UpdateUserRequ
 		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
-	if err = us.db.Commit(ctx, tx); err != nil {
+	if err = us.db.CommitTx(ctx, tx); err != nil {
 		us.logger.Errorf("Error in us.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in us.db.Commit: %v", err)
 	}
 
-	return &pb.UpdateUserResponse{
+	return &userv1.UpdateUserResponse{
 		Nickname: request.GetNickname(),
 		Status:   request.GetStatus(),
 	}, nil
 }
 
-func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRequest) (*pb.SearchUsersResponse, error) {
-	conn, err := us.db.Pool.Acquire(ctx)
+func (us userService) SearchUsers(ctx context.Context, request *userv1.SearchUsersRequest) (*userv1.SearchUsersResponse, error) {
+	conn, err := us.db.Acquire(ctx)
 	if err != nil {
-		us.logger.Errorf("us.db.Pool.Acquire failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
+
+	offset, err := strconv.Atoi(request.GetPagination().GetPageToken())
+	if err != nil {
+		offset = 0
+	}
 
 	// Select user data
 	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
@@ -230,8 +240,8 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 		From("users").
 		Where("levenshtein(username, ?) <= 5", request.GetQuery()).
 		OrderBy("distance").
-		Limit(uint64(request.GetPagination().GetLimit())).
-		Offset(uint64(request.GetPagination().GetOffset())).
+		Limit(uint64(request.GetPagination().GetPageSize())).
+		Offset(uint64(offset)).
 		ToSql()
 
 	countQuery, countArgs, _ := psql.Select("COUNT(*)").
@@ -257,10 +267,10 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 
 	// Scan users
 	_, scanUserSpan := us.tracer.Start(ctx, "ScanUsersFromRows")
-	users := make([]*pb.PublicUser, 0)
+	users := make([]*userv1.User, 0)
 	levenshteinDistance := 0
 	for rows.Next() {
-		user := &pb.PublicUser{}
+		user := &userv1.User{}
 		var nickname, pictureUrl pgtype.Text
 		var pictureWidth, pictureHeight pgtype.Int4
 
@@ -274,7 +284,7 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 			user.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			user.Picture = &pbCommon.Picture{
+			user.Picture = &imagev1.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,
@@ -295,21 +305,19 @@ func (us userService) SearchUsers(ctx context.Context, request *pb.SearchUsersRe
 	}
 	scanRecordSpan.End()
 
-	return &pb.SearchUsersResponse{
+	return &userv1.SearchUsersResponse{
 		Users: users,
-		Pagination: &pbCommon.Pagination{
-			Records: int32(records),
-			Offset:  request.GetPagination().GetOffset(),
-			Limit:   request.GetPagination().GetLimit(),
+		Pagination: &commonv1.PaginationResponse{
+			TotalSize:     int32(records),
+			NextPageToken: request.GetPagination().GetPageToken(),
 		},
 	}, nil
 }
 
-func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
-	conn, err := us.db.Pool.Acquire(ctx)
+func (us userService) ListUsers(ctx context.Context, request *userv1.ListUsersRequest) (*userv1.ListUsersResponse, error) {
+	conn, err := us.db.Acquire(ctx)
 	if err != nil {
-		us.logger.Errorf("us.db.Pool.Acquire failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
@@ -338,15 +346,14 @@ func (us userService) ListUsers(ctx context.Context, request *pb.ListUsersReques
 		return nil, err
 	}
 
-	return &pb.ListUsersResponse{
+	return &userv1.ListUsersResponse{
 		Users: users,
 	}, nil
 }
 
 func (us userService) isUserActivated(ctx context.Context, username string) (bool, error) {
-	conn, err := us.db.Pool.Acquire(ctx)
+	conn, err := us.db.Acquire(ctx)
 	if err != nil {
-		us.logger.Errorf("us.db.Pool.Acquire failed: %v", err)
 		return false, err
 	}
 	defer conn.Release()
@@ -374,10 +381,10 @@ func (us userService) isUserActivated(ctx context.Context, username string) (boo
 	return activatedAt.Valid, nil
 }
 
-func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {
-	var users []*pb.PublicUser
+func scanUsers(rows pgx.Rows) ([]*userv1.User, error) {
+	var users []*userv1.User
 	for rows.Next() {
-		user := &pb.PublicUser{}
+		user := &userv1.User{}
 		var nickname, pictureUrl pgtype.Text
 		var pictureWidth, pictureHeight pgtype.Int4
 
@@ -389,7 +396,7 @@ func scanUsers(rows pgx.Rows) ([]*pb.PublicUser, error) {
 			user.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			user.Picture = &pbCommon.Picture{
+			user.Picture = &imagev1.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,

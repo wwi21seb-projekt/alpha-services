@@ -221,6 +221,12 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 		}
 	}
 
+	// Commit transaction
+	if err = n.db.Commit(ctx, tx); err != nil {
+		n.logger.Errorf("Error in n.db.Commit: %v", err)
+		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in n.db.Commit: %v", err)
+	}
+
 	return &pbCommon.Empty{}, nil
 }
 

@@ -2,15 +2,17 @@ package handler
 
 import (
 	"context"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -40,13 +42,13 @@ type UserHdlr interface {
 type UserHandler struct {
 	logger              *zap.SugaredLogger
 	tracer              trace.Tracer
-	authService         pb.AuthenticationServiceClient
-	profileService      pb.UserServiceClient
-	subscriptionService pb.SubscriptionServiceClient
+	authService         userv1.AuthenticationServiceClient
+	profileService      userv1.UserServiceClient
+	subscriptionService userv1.SubscriptionServiceClient
 	jwtManager          manager.JWTManager
 }
 
-func NewUserHandler(logger *zap.SugaredLogger, authService pb.AuthenticationServiceClient, profileService pb.UserServiceClient, subscriptionService pb.SubscriptionServiceClient, jwtManager manager.JWTManager) *UserHandler {
+func NewUserHandler(logger *zap.SugaredLogger, authService userv1.AuthenticationServiceClient, profileService userv1.UserServiceClient, subscriptionService userv1.SubscriptionServiceClient, jwtManager manager.JWTManager) *UserHandler {
 	return &UserHandler{
 		logger:              logger,
 		tracer:              otel.GetTracerProvider().Tracer("user-handler"),
@@ -61,12 +63,12 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RegistrationRequest)
 	ctx := c.Request.Context()
 
-	user, err := uh.authService.RegisterUser(ctx, &pb.RegisterUserRequest{
-		Username:      req.Username,
-		Password:      req.Password,
-		Nickname:      req.Nickname,
-		Email:         req.Email,
-		Base64Picture: req.Picture,
+	user, err := uh.authService.RegisterUser(ctx, &userv1.RegisterUserRequest{
+		Username: req.Username,
+		Password: req.Password,
+		Nickname: req.Nickname,
+		Email:    req.Email,
+		Image:    req.Picture,
 	})
 	if err != nil {
 		rpcStatus := status.Convert(err)
@@ -85,7 +87,7 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		}
 
 		uh.logger.Errorw("Error in upstream call uh.authService.RegisterUser", zap.Error(err))
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -99,16 +101,16 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	offset, limit := helper.ExtractPaginationFromContext(c)
 	ctx := c.Request.Context()
 
-	users, err := uh.profileService.SearchUsers(ctx, &pb.SearchUsersRequest{
+	users, err := uh.profileService.SearchUsers(ctx, &userv1.SearchUsersRequest{
 		Query: username,
-		Pagination: &pbCommon.PaginationRequest{
-			Offset: int32(offset),
-			Limit:  int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: strconv.FormatInt(offset, 10),
+			PageSize:  limit,
 		},
 	})
 	if err != nil {
 		uh.logger.Errorw("Error in upstream call uh.profileService.SearchUsers", zap.Error(err))
-		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
@@ -117,9 +119,9 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	response := &schema.SearchUsersResponse{
 		Users: make([]schema.Author, len(users.Users)),
 		Pagination: &schema.PaginationResponse{
-			Records: users.Pagination.Records,
-			Offset:  users.Pagination.Offset,
-			Limit:   users.Pagination.Limit,
+			Records: users.GetPagination().GetTotalSize(),
+			Offset:  offset,
+			Limit:   limit,
 		},
 	}
 
@@ -145,7 +147,7 @@ func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := uh.profileService.UpdateUser(ctx, &pb.UpdateUserRequest{
+	_, err := uh.profileService.UpdateUser(ctx, &userv1.UpdateUserRequest{
 		Nickname:      req.NewNickname,
 		Status:        req.Status,
 		Base64Picture: &req.Picture,
@@ -168,7 +170,7 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := uh.authService.UpdatePassword(ctx, &pb.ChangePasswordRequest{
+	_, err := uh.authService.UpdatePassword(ctx, &userv1.UpdatePasswordRequest{
 		OldPassword: req.OldPassword,
 		NewPassword: req.NewPassword,
 	})
@@ -181,7 +183,7 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.authService.UpdatePassword: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -194,7 +196,7 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.LoginRequest)
 	ctx := c.Request.Context()
 
-	_, err := uh.authService.LoginUser(ctx, &pb.LoginUserRequest{
+	_, err := uh.authService.LoginUser(ctx, &userv1.LoginUserRequest{
 		Username: req.Username,
 		Password: req.Password,
 	})
@@ -211,7 +213,7 @@ func (uh *UserHandler) LoginUser(c *gin.Context) {
 		}
 
 		uh.logger.Debugw("Error in upstream call uh.authService.LoginUser: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -239,7 +241,7 @@ func (uh *UserHandler) RefreshToken(c *gin.Context) {
 		verifySpan.AddEvent("Error in jwtManager.Verify")
 		verifySpan.End()
 		uh.logger.Errorf("Error in jwtManager.Verify: %v", err)
-		c.JSON(goerrors.InvalidToken.HttpStatus, &schema.ErrorDTO{
+		c.JSON(goerrors.InvalidToken.HttpStatus, &dto.ErrorDTO{
 			Error: goerrors.InvalidToken,
 		})
 		return
@@ -252,7 +254,7 @@ func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	if err != nil {
 		refreshSpan.AddEvent("Error in jwtManager.Refresh")
 		uh.logger.Errorf("Error in jwtManager.Refresh: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
@@ -266,9 +268,9 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	uh.logger.Infof("Calling upstream service uh.authService.ActivateUser with username %s and token %s", username, req.Token)
-	_, err := uh.authService.ActivateUser(ctx, &pb.ActivateUserRequest{
-		Username: username,
-		Token:    req.Token,
+	_, err := uh.authService.ActivateUser(ctx, &userv1.ActivateUserRequest{
+		Username:       username,
+		ActivationCode: req.Token,
 	})
 	if err != nil {
 		rpcStatus := status.Convert(err)
@@ -287,7 +289,7 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.authService.ActivateUser: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -299,7 +301,7 @@ func (uh *UserHandler) ActivateUser(c *gin.Context) {
 	if err != nil {
 		generateSpan.AddEvent("Error in jwtManager.Generate")
 		uh.logger.Errorf("Error in jwtManager.Generate: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, &schema.ErrorDTO{
+		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
@@ -314,7 +316,7 @@ func (uh *UserHandler) ResendToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	uh.logger.Infof("Calling upstream service uh.authService.ResendToken with username %s", username)
-	_, err := uh.authService.ResendActivationEmail(ctx, &pb.ResendActivationEmailRequest{
+	_, err := uh.authService.ResendActivationEmail(ctx, &userv1.ResendActivationEmailRequest{
 		Username: username,
 	})
 	if err != nil {
@@ -328,7 +330,7 @@ func (uh *UserHandler) ResendToken(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.authService.ResendToken: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -347,7 +349,7 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	user, err := uh.profileService.GetUser(ctx, &pb.GetUserRequest{
+	user, err := uh.profileService.GetUser(ctx, &userv1.GetUserRequest{
 		Username: username,
 	})
 	if err != nil {
@@ -359,7 +361,7 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.profileService.GetUser: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -389,7 +391,7 @@ func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	res, err := uh.subscriptionService.CreateSubscription(ctx, &pb.CreateSubscriptionRequest{
+	res, err := uh.subscriptionService.CreateSubscription(ctx, &userv1.CreateSubscriptionRequest{
 		FollowedUsername: req.Following,
 	})
 	if err != nil {
@@ -405,7 +407,7 @@ func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.subscriptionService.CreateSubscription: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -427,7 +429,7 @@ func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := uh.subscriptionService.DeleteSubscription(ctx, &pb.DeleteSubscriptionRequest{
+	_, err := uh.subscriptionService.DeleteSubscription(ctx, &userv1.DeleteSubscriptionRequest{
 		SubscriptionId: subscriptionId,
 	})
 	if err != nil {
@@ -441,7 +443,7 @@ func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.subscriptionService.DeleteSubscription: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -457,17 +459,17 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	subType := pb.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWER
+	subType := userv1.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWER
 	if c.Query("type") == "following" {
-		subType = pb.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING
+		subType = userv1.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING
 	}
 
-	subscriptions, err := uh.subscriptionService.ListSubscriptions(ctx, &pb.ListSubscriptionsRequest{
+	subscriptions, err := uh.subscriptionService.ListSubscriptions(ctx, &userv1.ListSubscriptionsRequest{
 		Username:         username,
 		SubscriptionType: subType,
-		Pagination: &pbCommon.PaginationRequest{
-			Offset: int32(offset),
-			Limit:  int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: strconv.FormatInt(offset, 10),
+			PageSize:  limit,
 		},
 	})
 	if err != nil {
@@ -479,7 +481,7 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.subscriptionService.GetSubscriptions: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -488,9 +490,9 @@ func (uh *UserHandler) GetSubscriptions(c *gin.Context) {
 	response := &schema.GetSubscriptionsResponse{
 		Subscriptions: make([]schema.UserSubscription, len(subscriptions.Subscriptions)),
 		Pagination: &schema.PaginationResponse{
-			Records: subscriptions.Pagination.Records,
-			Offset:  subscriptions.Pagination.Offset,
-			Limit:   subscriptions.Pagination.Limit,
+			Records: subscriptions.GetPagination().GetTotalSize(),
+			Offset:  offset,
+			Limit:   limit,
 		},
 	}
 
@@ -508,7 +510,7 @@ func (uh *UserHandler) ResetPassword(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	uh.logger.Infof("Calling upstream service uh.authService.ResetPassword with username %s", username)
-	res, err := uh.authService.ResetPassword(ctx, &pb.ResetPasswordRequest{Username: username})
+	res, err := uh.authService.ResetPassword(ctx, &userv1.ResetPasswordRequest{Username: username})
 	if err != nil {
 		code := status.Code(err)
 		returnErr := goerrors.InternalServerError
@@ -518,7 +520,7 @@ func (uh *UserHandler) ResetPassword(c *gin.Context) {
 		}
 
 		uh.logger.Error("Error in upstream call uh.authService.ResetPassword", zap.Error(err))
-		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -535,7 +537,7 @@ func (uh *UserHandler) SetPassword(c *gin.Context) {
 	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.SetPasswordRequest)
 	username := c.Param("username")
 
-	_, err := uh.authService.SetPassword(c, &pb.SetPasswordRequest{
+	_, err := uh.authService.SetPassword(c, &userv1.SetPasswordRequest{
 		Username:    username,
 		NewPassword: req.NewPassword,
 		Token:       req.Token,
@@ -552,7 +554,7 @@ func (uh *UserHandler) SetPassword(c *gin.Context) {
 		}
 
 		uh.logger.Error("Error in upstream call uh.authService.SetPassword", zap.Error(err))
-		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{Error: returnErr})
 		return
 	}
 

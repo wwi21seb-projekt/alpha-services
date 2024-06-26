@@ -3,8 +3,12 @@ package handler
 import (
 	"context"
 	"errors"
+	"github.com/gin-gonic/gin"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -14,12 +18,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/gin-gonic/gin"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
 )
 
 type PostHdlr interface {
@@ -38,12 +36,12 @@ type PostHandler struct {
 	logger             *zap.SugaredLogger
 	tracer             trace.Tracer
 	jwtManager         manager.JWTManager
-	postService        pbPost.PostServiceClient
-	interactionService pbPost.InteractionServiceClient
+	postService        postv1.PostServiceClient
+	interactionService postv1.InteractionServiceClient
 	middleware         middleware.Middleware
 }
 
-func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, jwtManager manager.JWTManager, interactionClient pbPost.InteractionServiceClient, middleware middleware.Middleware) PostHdlr {
+func NewPostHandler(logger *zap.SugaredLogger, client postv1.PostServiceClient, jwtManager manager.JWTManager, interactionClient postv1.InteractionServiceClient, middleware middleware.Middleware) PostHdlr {
 	return &PostHandler{
 		logger:             logger,
 		tracer:             otel.GetTracerProvider().Tracer("post-handler"),
@@ -55,42 +53,132 @@ func NewPostHandler(logger *zap.SugaredLogger, client pbPost.PostServiceClient, 
 }
 
 func (ph *PostHandler) CreatePost(c *gin.Context) {
-	createPostRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*schema.CreatePostRequest)
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+	createPostRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*dto.CreatePostRequest)
 
-	req := &pbPost.CreatePostRequest{
+	req := &postv1.CreatePostRequest{
 		Content:        createPostRequest.Content,
-		Location:       helper.LocationToProto(createPostRequest.Location),
 		Picture:        createPostRequest.Picture,
 		RepostedPostId: createPostRequest.RepostedPostID,
 	}
 
-	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+	if createPostRequest.Location != nil {
+		loc := createPostRequest.Location
+		req.Location = &postv1.Location{
+			Latitude:  loc.Latitude,
+			Longitude: loc.Longitude,
+			Accuracy:  loc.Accuracy,
+		}
+	}
 
 	rsp, err := ph.postService.CreatePost(ctx, req)
 	if err != nil {
-		rpcStatus := status.Convert(err)
-		returnErr := goerrors.InternalServerError
-
-		switch rpcStatus.Code() {
+		var returnErr *goerrors.CustomError
+		switch status.Convert(err).Code() {
 		case codes.NotFound:
 			returnErr = goerrors.PostNotFound
 		case codes.InvalidArgument:
 			returnErr = goerrors.BadRequest
 		case codes.PermissionDenied:
 			returnErr = goerrors.UserNotActivated
+		default:
+			returnErr = goerrors.InternalServerError
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.CreatePost: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
-	c.JSON(http.StatusCreated, rsp)
+	postDTO := dto.Post{
+		PostID: rsp.GetPostId(),
+		Author: dto.User{
+			Username: rsp.GetAuthor().Username,
+			Nickname: rsp.GetAuthor().Nickname,
+			Picture:  nil,
+		},
+		CreationDate: rsp.GetCreationDate(),
+		Content:      rsp.GetContent(),
+		Picture:      nil,
+		Location:     nil,
+		Likes:        rsp.GetLikes(),
+		Liked:        rsp.GetLiked(),
+		Repost:       nil,
+	}
+
+	if rsp.GetAuthor().GetPicture() != nil {
+		postDTO.Author.Picture = &dto.Picture{
+			URL:    rsp.GetAuthor().GetPicture().GetUrl(),
+			Width:  rsp.GetAuthor().GetPicture().GetWidth(),
+			Height: rsp.GetAuthor().GetPicture().GetHeight(),
+		}
+	}
+
+	if rsp.GetLocation() != nil {
+		postDTO.Location = &dto.Location{
+			Latitude:  rsp.GetLocation().GetLatitude(),
+			Longitude: rsp.GetLocation().GetLongitude(),
+			Accuracy:  rsp.GetLocation().GetAccuracy(),
+		}
+	}
+
+	if rsp.GetPicture() != nil {
+		postDTO.Picture = &dto.Picture{
+			URL:    rsp.GetPicture().GetUrl(),
+			Width:  rsp.GetPicture().GetWidth(),
+			Height: rsp.GetPicture().GetHeight(),
+		}
+	}
+
+	if rsp.GetRepost() != nil {
+		repost := rsp.GetRepost()
+		postDTO.Repost = &dto.Repost{
+			PostID: repost.GetPostId(),
+			Author: dto.User{
+				Username: repost.GetAuthor().GetUsername(),
+				Nickname: repost.GetAuthor().GetNickname(),
+				Picture:  nil,
+			},
+			CreationDate: repost.GetCreationDate(),
+			Content:      repost.GetContent(),
+			Picture:      nil,
+			Location:     nil,
+		}
+
+		if repost.GetAuthor().GetPicture() != nil {
+			postDTO.Repost.Author.Picture = &dto.Picture{
+				URL:    repost.GetAuthor().GetPicture().GetUrl(),
+				Width:  repost.GetAuthor().GetPicture().GetWidth(),
+				Height: repost.GetAuthor().GetPicture().GetHeight(),
+			}
+		}
+
+		if repost.GetLocation() != nil {
+			postDTO.Repost.Location = &dto.Location{
+				Latitude:  repost.GetLocation().GetLatitude(),
+				Longitude: repost.GetLocation().GetLongitude(),
+				Accuracy:  repost.GetLocation().GetAccuracy(),
+			}
+		}
+
+		if repost.GetPicture() != nil {
+			postDTO.Repost.Picture = &dto.Picture{
+				URL:    repost.GetPicture().GetUrl(),
+				Width:  repost.GetPicture().GetWidth(),
+				Height: repost.GetPicture().GetHeight(),
+			}
+
+		}
+	}
+
+	c.JSON(http.StatusCreated, postDTO)
 }
 
 func (ph *PostHandler) GetUserFeed(c *gin.Context) {
+	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+
 	user := c.Param("username")
-	lastPostId := c.Query("postId")
+	offset := c.Query("offset")
 	limit, err := strconv.Atoi(c.Query("limit"))
 	if err != nil {
 		limit = 10
@@ -101,14 +189,12 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 		return
 	}
 
-	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
-
-	resp, err := ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
-		FeedType: pbPost.FeedType_FEED_TYPE_USER,
+	resp, err := ph.postService.ListPosts(ctx, &postv1.ListPostsRequest{
+		FeedType: postv1.FeedType_FEED_TYPE_USER,
 		Username: &user,
-		Pagination: &pbPost.PostPagination{
-			LastPostId: lastPostId,
-			Limit:      int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: offset,
+			PageSize:  int32(limit),
 		},
 	})
 
@@ -122,29 +208,20 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 		return
 	}
 
-	// Convert list of posts pointers to list of posts
-	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
-	for _, post := range resp.GetPosts() {
-
-		posts = append(posts, pbPost.Post{
-			PostId:       post.GetPostId(),
-			Content:      post.GetContent(),
-			Location:     post.GetLocation(),
-			Picture:      post.GetPicture(),
-			CreationDate: post.GetCreationDate(),
-			Repost:       post.GetRepost(),
-			Author:       post.GetAuthor(),
-			Liked:        post.GetLiked(),
-			Likes:        post.GetLikes(),
-		})
+	offsetInt, err := strconv.Atoi(offset)
+	if err != nil {
+		ph.logger.Warnw("error converting offset to int", "error", err)
+		offsetInt = 0
 	}
 
-	feedResponse := &schema.FeedResponse{
+	posts := transformListPostsResponse(resp)
+
+	feedResponse := &dto.GetUserFeedResponse{
 		Posts: posts,
-		Pagination: schema.PostPagination{
-			LastPostID: resp.GetPagination().GetLastPostId(),
-			Limit:      resp.GetPagination().GetLimit(),
-			Records:    resp.GetPagination().GetRecords(),
+		PaginationResponse: dto.PaginationResponse{
+			Offset:  int32(offsetInt + limit),
+			Limit:   int32(limit),
+			Records: resp.GetPagination().GetTotalSize(),
 		},
 	}
 
@@ -154,74 +231,57 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 func (ph *PostHandler) QueryPosts(c *gin.Context) {
 	query := c.Query("q")
 	lastPostId := c.Query("postId")
-	limit, err := strconv.Atoi(c.Query("limit"))
-	if err != nil {
-		limit = 10
-	}
 
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
-		return
+	var limit int32
+	l, err := strconv.Atoi(c.Query("limit"))
+	if err != nil {
+		l = 10
 	}
+	limit = int32(l)
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	resp, err := ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
-		FeedType: pbPost.FeedType_FEED_TYPE_GLOBAL,
+	req := &postv1.ListPostsRequest{
+		FeedType: postv1.FeedType_FEED_TYPE_GLOBAL,
 		Hashtag:  &query,
-		Pagination: &pbPost.PostPagination{
-			LastPostId: lastPostId,
-			Limit:      int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: lastPostId,
+			PageSize:  limit,
 		},
-	})
+	}
 
+	resp, err := ph.postService.ListPosts(ctx, req)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err)
 		return
 	}
 
-	// Convert list of posts pointers to list of posts
-	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
-	for _, post := range resp.GetPosts() {
+	posts := transformListPostsResponse(resp)
 
-		posts = append(posts, pbPost.Post{
-			PostId:       post.GetPostId(),
-			Content:      post.GetContent(),
-			Location:     post.GetLocation(),
-			Picture:      post.GetPicture(),
-			CreationDate: post.GetCreationDate(),
-			Repost:       post.GetRepost(),
-			Author:       post.GetAuthor(),
-			Liked:        post.GetLiked(),
-			Likes:        post.GetLikes(),
-		})
-	}
-
-	feedResponse := &schema.FeedResponse{
+	feedResponse := &dto.GetFeedResponse{
 		Posts: posts,
-		Pagination: schema.PostPagination{
-			LastPostID: resp.GetPagination().GetLastPostId(),
-			Limit:      resp.GetPagination().GetLimit(),
-			Records:    resp.GetPagination().GetRecords(),
+		Pagination: dto.PostPaginationResponse{
+			LastPostID: resp.GetPagination().GetNextPageToken(),
+			Limit:      limit,
+			Records:    resp.GetPagination().GetTotalSize(),
 		},
 	}
 
 	c.JSON(http.StatusOK, feedResponse)
 }
 
+func transformListPostsResponse(resp *postv1.ListPostsResponse) []dto.Post {
+	posts := make([]dto.Post, 0, len(resp.GetPosts()))
+	for _, post := range resp.GetPosts() {
+		posts = append(posts, *dto.TransformProtoPostToDTO(post))
+	}
+	return posts
+}
+
 func (ph *PostHandler) DeletePost(c *gin.Context) {
-	postID := c.Param("postId")
-	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
-	}
-
-	req := &pbPost.GetPostRequest{
-		PostId: postID,
-	}
-
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := ph.postService.DeletePost(ctx, req)
+	_, err := ph.postService.DeletePost(ctx, &postv1.DeletePostRequest{PostId: c.Param("postId")})
 	if err != nil {
 		rpcStatus := status.Convert(err)
 		returnErr := goerrors.InternalServerError
@@ -236,7 +296,7 @@ func (ph *PostHandler) DeletePost(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.DeletePost: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -252,56 +312,36 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 		limit = 10
 	}
 
-	var resp *pbPost.ListPostsResponse
+	feedType := postv1.FeedType_FEED_TYPE_GLOBAL
 
-	if publicFeedWanted {
-		resp, err = ph.postService.ListPosts(c, &pbPost.ListPostsRequest{
-			FeedType: pbPost.FeedType_FEED_TYPE_GLOBAL,
-			Pagination: &pbPost.PostPagination{
-				LastPostId: lastPostID,
-				Limit:      int32(limit),
-			},
-		})
-	} else {
-		ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
-
-		resp, err = ph.postService.ListPosts(ctx, &pbPost.ListPostsRequest{
-			FeedType: pbPost.FeedType_FEED_TYPE_PERSONAL,
-			Pagination: &pbPost.PostPagination{
-				LastPostId: lastPostID,
-				Limit:      int32(limit),
-			},
-		})
+	var ctx context.Context
+	ctx = c
+	if !publicFeedWanted {
+		feedType = postv1.FeedType_FEED_TYPE_PERSONAL
+		ctx = c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 	}
 
+	resp, err := ph.postService.ListPosts(ctx, &postv1.ListPostsRequest{
+		FeedType: feedType,
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: lastPostID,
+			PageSize:  int32(limit),
+		},
+	})
+
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": goerrors.InternalServerError})
 		return
 	}
 
-	// Convert list of posts pointers to list of posts
-	posts := make([]pbPost.Post, 0, len(resp.GetPosts()))
-	for _, post := range resp.GetPosts() {
+	posts := transformListPostsResponse(resp)
 
-		posts = append(posts, pbPost.Post{
-			PostId:       post.GetPostId(),
-			Content:      post.GetContent(),
-			Location:     post.GetLocation(),
-			Picture:      post.GetPicture(),
-			CreationDate: post.GetCreationDate(),
-			Repost:       post.GetRepost(),
-			Author:       post.GetAuthor(),
-			Liked:        post.GetLiked(),
-			Likes:        post.GetLikes(),
-		})
-	}
-
-	feedResponse := &schema.FeedResponse{
+	feedResponse := &dto.GetFeedResponse{
 		Posts: posts,
-		Pagination: schema.PostPagination{
-			LastPostID: resp.GetPagination().GetLastPostId(),
-			Limit:      resp.GetPagination().GetLimit(),
-			Records:    resp.GetPagination().GetRecords(),
+		Pagination: dto.PostPaginationResponse{
+			LastPostID: resp.GetPagination().GetNextPageToken(),
+			Limit:      int32(limit),
+			Records:    resp.GetPagination().GetTotalSize(),
 		},
 	}
 
@@ -337,13 +377,13 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 }
 
 func (ph *PostHandler) CreateComment(c *gin.Context) {
-	createCommentRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*schema.CreateCommentRequest)
+	createCommentRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*dto.CreateCommentRequest)
 	postID := c.Param("postId")
 	if postID == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
 	}
 
-	req := &pbPost.CreateCommentRequest{
+	req := &postv1.CreateCommentRequest{
 		PostId:  postID,
 		Content: createCommentRequest.Content,
 	}
@@ -363,11 +403,11 @@ func (ph *PostHandler) CreateComment(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.CreateComment: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
-	c.JSON(http.StatusCreated, rsp)
+	c.JSON(http.StatusCreated, *dto.TransformProtoCommentToDTO(rsp))
 }
 
 func (ph *PostHandler) GetComments(c *gin.Context) {
@@ -388,11 +428,11 @@ func (ph *PostHandler) GetComments(c *gin.Context) {
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	req := &pbPost.ListCommentsRequest{
+	req := &postv1.ListCommentsRequest{
 		PostId: postID,
-		Pagination: &pbCommon.PaginationRequest{
-			Offset: int32(offset),
-			Limit:  int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: strconv.Itoa(offset),
+			PageSize:  int32(limit),
 		},
 	}
 
@@ -409,11 +449,25 @@ func (ph *PostHandler) GetComments(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.ListComments: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
-	c.JSON(http.StatusOK, rsp)
+	comments := make([]dto.Comment, 0, len(rsp.GetComments()))
+	for _, comment := range rsp.GetComments() {
+		comments = append(comments, *dto.TransformProtoCommentToDTO(comment))
+	}
+
+	listCommentsDTO := &dto.ListCommentsResponse{
+		Comments: comments,
+		Pagination: dto.PaginationResponse{
+			Offset:  int32(offset),
+			Limit:   int32(limit),
+			Records: rsp.GetPagination().GetTotalSize(),
+		},
+	}
+
+	c.JSON(http.StatusOK, listCommentsDTO)
 }
 
 func (ph *PostHandler) CreateLike(c *gin.Context) {
@@ -423,7 +477,7 @@ func (ph *PostHandler) CreateLike(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
 	}
 
-	req := &pbPost.LikePostRequest{
+	req := &postv1.LikePostRequest{
 		PostId: postID,
 	}
 
@@ -442,7 +496,7 @@ func (ph *PostHandler) CreateLike(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.LikePost: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -456,7 +510,7 @@ func (ph *PostHandler) DeleteLike(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
 	}
 
-	req := &pbPost.UnlikePostRequest{
+	req := &postv1.UnlikePostRequest{
 		PostId: postID,
 	}
 
@@ -475,7 +529,7 @@ func (ph *PostHandler) DeleteLike(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.UnlikePost: %v", err)
-		c.JSON(returnErr.HttpStatus, &schema.ErrorDTO{Error: returnErr})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 

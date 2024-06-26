@@ -1,10 +1,10 @@
 package middleware
 
 import (
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	"net/http"
 	"strings"
 
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	"google.golang.org/grpc/metadata"
 
@@ -12,7 +12,7 @@ import (
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
-var unauthorizedError = &schema.ErrorDTO{Error: goerrors.Unauthorized}
+var unauthorizedError = &dto.ErrorDTO{Error: goerrors.Unauthorized}
 var GRPCMetadataKey = "grpc-metadata" // to be added to shared keys
 
 func (m *Middleware) SetClaimsMiddleware() gin.HandlerFunc {
@@ -44,8 +44,7 @@ func (m *Middleware) SetClaimsMiddleware() gin.HandlerFunc {
 		c.Set(string(keys.TokenKey), tokenString)
 		// Create initial gRPC metadata with the username
 		ctx := metadata.AppendToOutgoingContext(c.Request.Context(), string(keys.SubjectKey), username)
-		c.Set(string(GRPCMetadataKey), ctx)
+		c.Set(GRPCMetadataKey, ctx)
 		c.Next()
 	}
-
 }

@@ -3,6 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"os/signal"
 	"syscall"
 	"time"
@@ -21,11 +27,6 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pbChat "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
-	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
-	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbPost "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -67,15 +68,15 @@ func main() {
 	}
 
 	// Create client stubs
-	userClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
-	subscriptionClient := pbUser.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
-	authClient := pbUser.NewAuthenticationServiceClient(cfg.GRPCClients.UserService)
-	chatClient := pbChat.NewChatServiceClient(cfg.GRPCClients.ChatService)
-	postClient := pbPost.NewPostServiceClient(cfg.GRPCClients.PostService)
-	interactionClient := pbPost.NewInteractionServiceClient(cfg.GRPCClients.PostService)
-	notificationClient := pbNotification.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
-	pushSubscriptionClient := pbNotification.NewPushServiceClient(cfg.GRPCClients.NotificationService)
-	imageClient := pbImage.NewImageServiceClient(cfg.GRPCClients.ImageService)
+	userClient := userv1.NewUserServiceClient(cfg.GRPCClients.UserService)
+	subscriptionClient := userv1.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
+	authClient := userv1.NewAuthenticationServiceClient(cfg.GRPCClients.UserService)
+	chatClient := chatv1.NewChatServiceClient(cfg.GRPCClients.ChatService)
+	postClient := postv1.NewPostServiceClient(cfg.GRPCClients.PostService)
+	interactionClient := postv1.NewInteractionServiceClient(cfg.GRPCClients.PostService)
+	notificationClient := notificationv1.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
+	pushSubscriptionClient := notificationv1.NewPushServiceClient(cfg.GRPCClients.NotificationService)
+	imageClient := imagev1.NewImageServiceClient(cfg.GRPCClients.ImageService)
 
 	// Create JWT manager
 	jwtManager := manager.NewJWTManager(logger)
@@ -139,60 +140,60 @@ func setupCommonMiddleware(r *graceful.Graceful, logger *zap.Logger) {
 }
 
 // setupRoutes sets up the routes for the API Gateway
-func setupRoutes(apiRouter *gin.RouterGroup, m *middleware.Middleware, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, imageHandler handler.ImageHdlr) {
-	apiRouter.GET("/imprint", HandleImprint)
+func setupRoutes(r *gin.RouterGroup, m *middleware.Middleware, ch handler.ChatHdlr, ph handler.PostHdlr, uh handler.UserHdlr, ih handler.ImageHdlr) {
+	r.GET("/imprint", HandleImprint)
 
 	// Post routes
-	apiRouter.GET("/feed", postHandler.GetFeed)
+	r.GET("/feed", ph.GetFeed)
 
 	// Image routes
-	apiRouter.GET("/images", imageHandler.GetImage)
+	r.GET("/images", ih.GetImage)
 
 	// User routes
-	apiRouter.POST("/users", m.ValidateAndSanitizeStruct(schema.RegistrationRequest{}), userHandler.RegisterUser)
-	apiRouter.POST("/users/login", m.ValidateAndSanitizeStruct(schema.LoginRequest{}), userHandler.LoginUser)
-	apiRouter.POST("users/refresh", m.ValidateAndSanitizeStruct(schema.RefreshTokenRequest{}), userHandler.RefreshToken)
-	apiRouter.POST("/users/:username/activate", m.ValidateAndSanitizeStruct(schema.ActivationRequest{}), userHandler.ActivateUser)
-	apiRouter.DELETE("/users/:username/activate", userHandler.ResendToken)
-	apiRouter.POST("/users/:username/reset-password", userHandler.ResetPassword)
-	apiRouter.PATCH("/users/:username/reset-password", m.ValidateAndSanitizeStruct(schema.SetPasswordRequest{}), userHandler.SetPassword)
+	r.POST("/users", m.ValidateAndSanitizeStruct(schema.RegistrationRequest{}), uh.RegisterUser)
+	r.POST("/users/login", m.ValidateAndSanitizeStruct(schema.LoginRequest{}), uh.LoginUser)
+	r.POST("users/refresh", m.ValidateAndSanitizeStruct(schema.RefreshTokenRequest{}), uh.RefreshToken)
+	r.POST("/users/:username/activate", m.ValidateAndSanitizeStruct(schema.ActivationRequest{}), uh.ActivateUser)
+	r.DELETE("/users/:username/activate", uh.ResendToken)
+	r.POST("/users/:username/reset-password", uh.ResetPassword)
+	r.PATCH("/users/:username/reset-password", m.ValidateAndSanitizeStruct(schema.SetPasswordRequest{}), uh.SetPassword)
 
 	// Chat routes
 	// In theory this is an authorized endpoint as well, but our middleware does not support
 	// the workaround we use here, hence we declare it as unauthorized and handle it in the method.
-	apiRouter.GET("/chat", chatHandler.Chat)
+	r.GET("/chat", ch.Chat)
 }
 
-func setupAuthRoutes(authRouter *gin.RouterGroup, m *middleware.Middleware, chatHandler handler.ChatHdlr, postHandler handler.PostHdlr, userHandler handler.UserHdlr, notificationHandler handler.NotificationHdlr) {
+func setupAuthRoutes(r *gin.RouterGroup, m *middleware.Middleware, ch handler.ChatHdlr, ph handler.PostHdlr, uh handler.UserHdlr, nh handler.NotificationHdlr) {
 	// Set user routes
-	authRouter.GET("/users", userHandler.SearchUsers)
-	authRouter.PUT("/users", m.ValidateAndSanitizeStruct(schema.ChangeTrivialInformationRequest{}), userHandler.ChangeTrivialInfo)
-	authRouter.PATCH("/users", m.ValidateAndSanitizeStruct(schema.ChangePasswordRequest{}), userHandler.ChangePassword)
-	authRouter.GET("/users/:username", userHandler.GetUser)
-	authRouter.GET("/users/:username/feed", postHandler.GetUserFeed)
-	authRouter.POST("/subscriptions", m.ValidateAndSanitizeStruct(schema.SubscriptionRequest{}), userHandler.CreateSubscription)
-	authRouter.DELETE("/subscriptions/:subscriptionId", userHandler.DeleteSubscription)
-	authRouter.GET("/subscriptions/:username", userHandler.GetSubscriptions)
+	r.GET("/users", uh.SearchUsers)
+	r.PUT("/users", m.ValidateAndSanitizeStruct(schema.ChangeTrivialInformationRequest{}), uh.ChangeTrivialInfo)
+	r.PATCH("/users", m.ValidateAndSanitizeStruct(schema.ChangePasswordRequest{}), uh.ChangePassword)
+	r.GET("/users/:username", uh.GetUser)
+	r.GET("/users/:username/feed", ph.GetUserFeed)
+	r.POST("/subscriptions", m.ValidateAndSanitizeStruct(schema.SubscriptionRequest{}), uh.CreateSubscription)
+	r.DELETE("/subscriptions/:subscriptionId", uh.DeleteSubscription)
+	r.GET("/subscriptions/:username", uh.GetSubscriptions)
 
 	// Set post routes
-	authRouter.POST("posts", m.ValidateAndSanitizeStruct(schema.CreatePostRequest{}), postHandler.CreatePost)
-	authRouter.GET("/posts", postHandler.QueryPosts)
-	authRouter.DELETE("/posts/:postId", postHandler.DeletePost)
-	authRouter.POST("/posts/:postId/comments", m.ValidateAndSanitizeStruct(schema.CreateCommentRequest{}), postHandler.CreateComment)
-	authRouter.GET("/posts/:postId/comments", postHandler.GetComments)
-	authRouter.POST("/posts/:postId/likes", postHandler.CreateLike)
-	authRouter.DELETE("/posts/:postId/likes", postHandler.DeleteLike)
+	r.POST("posts", m.ValidateAndSanitizeStruct(dto.CreatePostRequest{}), ph.CreatePost)
+	r.GET("/posts", ph.QueryPosts)
+	r.DELETE("/posts/:postId", ph.DeletePost)
+	r.POST("/posts/:postId/comments", m.ValidateAndSanitizeStruct(dto.CreateCommentRequest{}), ph.CreateComment)
+	r.GET("/posts/:postId/comments", ph.GetComments)
+	r.POST("/posts/:postId/likes", ph.CreateLike)
+	r.DELETE("/posts/:postId/likes", ph.DeleteLike)
 
 	// Set chat routes
-	authRouter.GET("/chats", chatHandler.GetChats)
-	authRouter.GET("/chats/:chatId", chatHandler.GetChat)
-	authRouter.POST("/chats", m.ValidateAndSanitizeStruct(schema.CreateChatRequest{}), chatHandler.CreateChat)
+	r.GET("/chats", ch.GetChats)
+	r.GET("/chats/:chatId", ch.GetChat)
+	r.POST("/chats", m.ValidateAndSanitizeStruct(schema.CreateChatRequest{}), ch.CreateChat)
 
 	// Set notification routes
-	authRouter.GET("/notifications", notificationHandler.GetNotifications)
-	authRouter.DELETE("/notifications/:notificationId", notificationHandler.DeleteNotification)
-	authRouter.GET("/push/vapid", notificationHandler.GetPublicKey)
-	authRouter.POST("/push/register", middleware.ValidateAndSanitizeStruct(&schema.CreatePushSubscriptionRequest{}), notificationHandler.CreatePushSubscription)
+	r.GET("/notifications", nh.GetNotifications)
+	r.DELETE("/notifications/:notificationId", nh.DeleteNotification)
+	r.GET("/push/vapid", nh.GetPublicKey)
+	r.POST("/push/register", m.ValidateAndSanitizeStruct(schema.CreatePushSubscriptionRequest{}), nh.CreatePushSubscription)
 }
 
 func HandleImprint(c *gin.Context) {

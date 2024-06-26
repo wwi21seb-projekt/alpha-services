@@ -2,20 +2,20 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/asaskevich/govalidator"
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/wwi21seb-projekt/alpha-services/src/post-service/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -23,28 +23,28 @@ import (
 	"google.golang.org/grpc/status"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
-
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/post"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
-var hashtagRegex = regexp.MustCompile(`#\w+`)
-var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+var (
+	hashtagRegex  = regexp.MustCompile(`#\w+`)
+	psql          = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	basePostQuery = psql.Select().From("posts p")
+)
 
 type postService struct {
 	logger        *zap.SugaredLogger
 	tracer        trace.Tracer
 	db            *db.DB
-	profileClient pbUser.UserServiceClient
-	subscription  pbUser.SubscriptionServiceClient
-	imageClient   pbImage.ImageServiceClient
-	pb.UnimplementedPostServiceServer
+	profileClient userv1.UserServiceClient
+	subscription  userv1.SubscriptionServiceClient
+	imageClient   imagev1.ImageServiceClient
+	postv1.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscription pbUser.SubscriptionServiceClient, imageClient pbImage.ImageServiceClient) pb.PostServiceServer {
+func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscription userv1.SubscriptionServiceClient, imageClient imagev1.ImageServiceClient) postv1.PostServiceServer {
 	return &postService{
 		logger:        logger,
 		tracer:        otel.GetTracerProvider().Tracer("post-service"),
@@ -55,59 +55,55 @@ func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pb
 	}
 }
 
-func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsRequest) (*pb.ListPostsResponse, error) {
-	conn, err := ps.db.Pool.Acquire(ctx)
-	if err != nil {
-		ps.logger.Error("Acquiring database connection failed", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsRequest) (*postv1.ListPostsResponse, error) {
+	queryBuilder := basePostQuery
+
+	if len(req.GetPostIds()) > 0 {
+		queryBuilder = queryBuilder.Where(sq.Eq{"p.post_id": req.GetPostIds()})
 	}
-	defer conn.Release()
 
-	baseQueryBuilder := psql.Select().
-		From("posts p")
-
-	if request.FeedType == pb.FeedType_FEED_TYPE_USER {
-
-		if request.Username != nil && *request.Username == "" {
-			return nil, status.Error(codes.InvalidArgument, "Username cannot be empty")
+	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_USER {
+		if req.GetUsername() == "" {
+			return nil, status.Error(codes.InvalidArgument, "username cannot be empty")
 		}
 
 		// Check if user exists
-		resp, err := ps.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: []string{*request.Username}})
+		userCTX, userSpan := ps.tracer.Start(ctx, "GetUser")
+		resp, err := ps.profileClient.ListUsers(userCTX, &userv1.ListUsersRequest{Usernames: []string{*req.Username}})
 		if err != nil {
+			userSpan.End()
 			ps.logger.Errorw("Error in profileClient.GetUser while checking if user exists", zap.Error(err))
-			return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+			return nil, status.Error(codes.Internal, "failed to check if user exists")
 		}
+		userSpan.End()
 
-		if len(resp.GetUsers()) == 0 || resp.GetUsers()[0].Username != *request.Username {
-			ps.logger.Debugw("User does not exist", zap.String("username", *request.Username))
+		if len(resp.GetUsers()) == 0 {
+			ps.logger.Debugw("User does not exist", zap.String("username", *req.Username))
 			return nil, status.Error(codes.NotFound, "user does not exist")
 		}
 
-		username := *request.Username
-		likedByUser := sq.Eq{"l.username": username}
-		commentedByUser := sq.Eq{"c.author_name": username}
-		authoredByUser := sq.Eq{"p.author_name": username}
-		baseQueryBuilder = baseQueryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
+		likedByUser := sq.Eq{"l.username": req.GetUsername()}
+		commentedByUser := sq.Eq{"c.author_name": req.GetUsername()}
+		authoredByUser := sq.Eq{"p.author_name": req.GetUsername()}
+		queryBuilder = queryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
 			LeftJoin("comments c ON p.post_id = c.post_id").
 			Where(sq.Or{likedByUser, commentedByUser, authoredByUser})
-
 	}
 
-	if request.FeedType == pb.FeedType_FEED_TYPE_PERSONAL {
+	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_PERSONAL {
 		authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 		newCTX := metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
-		subCtx, subSpan := ps.tracer.Start(newCTX, "GetSubscriptions")
-		subscriptions, err := ps.subscription.ListSubscriptions(subCtx, &pbUser.ListSubscriptionsRequest{
+		subCtx, subSpan := ps.tracer.Start(newCTX, "ListSubscriptions")
+		subscriptions, err := ps.subscription.ListSubscriptions(subCtx, &userv1.ListSubscriptionsRequest{
 			Username:         authenticatedUsername,
-			SubscriptionType: pbUser.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING,
-			Pagination:       &pbCommon.PaginationRequest{Limit: 1000},
+			SubscriptionType: userv1.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING,
+			Pagination:       &commonv1.PaginationRequest{PageSize: 1000},
 		})
 		if err != nil {
 			subSpan.End()
-			ps.logger.Errorf("Error in subscriptionClient.ListSubscriptions: %v", err)
-			return nil, status.Errorf(codes.Internal, "failed to get subscriptions: %v", err)
+			ps.logger.Errorw("Error while getting subscriptions", zap.Error(err))
+			return nil, err
 		}
 		subSpan.End()
 
@@ -121,438 +117,348 @@ func (ps *postService) ListPosts(ctx context.Context, request *pb.ListPostsReque
 		likedCondition := sq.Eq{"l.username": peopleIFollow}
 		commentedCondition := sq.Eq{"c.author_name": peopleIFollow}
 
-		baseQueryBuilder = baseQueryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
+		queryBuilder = queryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
 			LeftJoin("comments c ON p.post_id = c.post_id").
 			Where(sq.Or{authoredCondition, likedCondition, commentedCondition})
 	}
 
-	if request.Hashtag != nil {
-		baseQueryBuilder = baseQueryBuilder.Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
+	if req.GetHashtag() != "" {
+		queryBuilder = queryBuilder.
+			Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
 			Join("hashtags h2 ON h.hashtag_id_hashtags = h2.hashtag_id").
-			Where(sq.Eq{"h2.content": request.Hashtag})
+			Where(sq.Eq{"h2.content": req.Hashtag})
 	}
 
 	// Create the count query
-	countQueryBuilder := baseQueryBuilder.
+	countQueryBuilder := queryBuilder.
 		Columns("COUNT(DISTINCT p.post_id)")
 
 	countQueryString, countArgs, err := countQueryBuilder.ToSql()
 	if err != nil {
-		ps.logger.Errorf("countQueryBuilder.ToSql() failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to build count query: %v", err)
+		ps.logger.Errorw("Error building count query", "error", err)
+		return nil, status.Error(codes.Internal, "failed to build count query")
 	}
 
-	var totalRecords int
-	err = conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords)
-	if err != nil {
-		ps.logger.Errorf("conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to execute count query: %v", err)
-	}
-
-	if request.GetPagination() != nil && request.Pagination.GetLastPostId() != "" {
-		baseQueryBuilder = baseQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", request.Pagination.LastPostId)
-	}
-
-	dataQueryBuilder := baseQueryBuilder.
-		Columns("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
+	dataQueryBuilder := queryBuilder.
+		Columns("p.*").
 		OrderBy("p.created_at DESC").
-		Limit(uint64(request.Pagination.Limit))
+		Limit(uint64(req.Pagination.GetPageSize()))
 
-	dataQueryString, dataArgs, err := dataQueryBuilder.ToSql()
+	if req.Pagination.GetPageToken() != "" {
+		offset, err := strconv.Atoi(req.Pagination.GetPageToken())
+		if err != nil {
+			dataQueryBuilder = dataQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", req.Pagination.GetPageToken())
+		} else {
+			dataQueryBuilder = dataQueryBuilder.Offset(uint64(offset))
+		}
+	}
+
+	conn, err := ps.db.Acquire(ctx)
 	if err != nil {
-		ps.logger.Errorf("baseQueryBuilder.ToSql() failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to build query: %v", err)
-	}
-
-	rows, err := conn.Query(ctx, dataQueryString, dataArgs...)
-	if err != nil {
-		ps.logger.Errorf("conn.Query(ctx, dataQueryString, dataArgs...) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to query data: %v", err)
-	}
-
-	var posts []*pb.Post
-	repostIDs := make(map[string]string) // Map of post_id -> repost_post_id
-	for rows.Next() {
-		post := &pb.Post{
-			Author:   &pbUser.PublicUser{},
-			Location: &pb.Location{},
-		}
-		var creationDate pgtype.Timestamptz
-		var repostID *string
-		if err = rows.Scan(&post.PostId, &post.Author.Username, &post.Content, &creationDate, &post.Location.Longitude, &post.Location.Latitude, &post.Location.Accuracy, &repostID); err != nil {
-			ps.logger.Errorf("rows.Scan failed: %v", err)
-			return nil, status.Errorf(codes.Internal, "Failed to scan row: %v", err)
-		}
-		post.CreationDate = creationDate.Time.Format(time.RFC3339)
-
-		if repostID != nil {
-			repostIDs[post.PostId] = *repostID
-		}
-
-		if post.Location.Longitude == nil || post.Location.Latitude == nil || post.Location.Accuracy == nil {
-			post.Location = nil
-		}
-
-		posts = append(posts, post)
-	}
-
-	// Get the reposts (one level) if they exist and populate the posts
-	err = ps.populateReposts(ctx, conn, posts, repostIDs)
-	if err != nil {
-		ps.logger.Errorf("ps.populateReposts failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to populate reposts: %v", err)
-	}
-
-	// Get the author profile for each post
-	err = ps.populateAuthors(ctx, posts)
-	if err != nil {
-		ps.logger.Errorf("ps.populateAuthors failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to populate author profiles: %v", err)
-	}
-
-	resp := &pb.ListPostsResponse{
-		Posts: posts,
-		Pagination: &pb.PostPagination{
-			LastPostId: request.Pagination.LastPostId,
-			Limit:      request.Pagination.Limit,
-			Records:    int32(totalRecords),
-		},
-	}
-
-	return resp, nil
-}
-
-func (ps *postService) populateReposts(ctx context.Context, conn *pgxpool.Conn, posts []*pb.Post, repostIDs map[string]string) error {
-	// Create a set to hold unique repost IDs
-	uniqueIDs := make(map[string]struct{})
-
-	// Iterate over the repostIDs map and add each value to the set
-	for _, id := range repostIDs {
-		uniqueIDs[id] = struct{}{}
-	}
-
-	// Convert the set keys to a slice
-	ids := make([]string, 0, len(uniqueIDs))
-	for id := range uniqueIDs {
-		ids = append(ids, id)
-	}
-
-	repostQueryBuilder := psql.Select("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy").
-		From("posts p").
-		Where(sq.Eq{"p.post_id": ids})
-
-	repostQueryString, repostArgs, err := repostQueryBuilder.ToSql()
-	if err != nil {
-		ps.logger.Errorf("repostQueryBuilder.ToSql() failed: %v", err)
-		return status.Errorf(codes.Internal, "Failed to build query: %v", err)
-	}
-
-	rows, err := conn.Query(ctx, repostQueryString, repostArgs...)
-	if err != nil {
-		ps.logger.Errorf("conn.Query(ctx, repostQueryString, repostArgs...) failed: %v", err)
-		return status.Errorf(codes.Internal, "Failed to query data: %v", err)
-	}
-
-	reposts := make(map[string]*pb.Post) // Map of repost_post_id -> repost
-	for rows.Next() {
-		repost := &pb.Post{Author: &pbUser.PublicUser{}}
-		location := &pb.Location{}
-		var creationDate pgtype.Timestamptz
-		if err = rows.Scan(&repost.PostId, &repost.Author.Username, &repost.Content, &creationDate, &location.Longitude, &location.Latitude, &location.Accuracy); err != nil {
-			ps.logger.Errorf("rows.Scan failed: %v", err)
-			return status.Errorf(codes.Internal, "Failed to scan row: %v", err)
-		}
-
-		repost.CreationDate = creationDate.Time.Format(time.RFC3339)
-		reposts[repost.PostId] = repost
-
-		if location.Longitude != nil && location.Latitude != nil && location.Accuracy != nil {
-			repost.Location = location
-		}
-	}
-
-	// Iterate through the posts and populate the reposts
-	for _, post := range posts {
-		if repostID, ok := repostIDs[post.PostId]; ok {
-			post.Repost = reposts[repostID]
-		}
-	}
-
-	return nil
-}
-
-func (ps *postService) populateAuthors(ctx context.Context, posts []*pb.Post) error {
-	// Create a set to hold unique author usernames
-	uniqueAuthors := make(map[string]struct{})
-
-	// Collect all unique author usernames
-	for _, post := range posts {
-		if post.Author != nil && post.Author.Username != "" {
-			uniqueAuthors[post.Author.Username] = struct{}{}
-		}
-	}
-
-	// Convert the set keys to a slice
-	usernames := make([]string, 0, len(uniqueAuthors))
-	for username := range uniqueAuthors {
-		usernames = append(usernames, username)
-	}
-
-	// Make a gRPC call to fetch user details
-	profiles, err := ps.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: usernames})
-	if err != nil {
-		ps.logger.Errorf("ps.profileClient.ListUsers failed: %v", err)
-		return status.Errorf(codes.Internal, "Failed to get user profiles: %v", err)
-	}
-
-	// Create a map from username to profile for quick lookup
-	profileMap := make(map[string]*pbUser.PublicUser)
-	for _, profile := range profiles.Users {
-		profileMap[profile.Username] = &pbUser.PublicUser{
-			Username: profile.GetUsername(),
-			Nickname: profile.GetNickname(),
-			Picture:  profile.GetPicture(),
-		}
-	}
-
-	// Populate the author details in the posts
-	for _, post := range posts {
-		if profile, exists := profileMap[post.Author.Username]; exists {
-			post.Author = profile
-		}
-	}
-
-	return nil
-}
-
-func (ps *postService) GetPost(ctx context.Context, request *pb.GetPostRequest) (*pb.Post, error) {
-	conn, err := ps.db.Pool.Acquire(ctx)
-	if err != nil {
-		ps.logger.Errorf("ps.db.Pool.Acquire(ctx) failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
-	post, repostId, err := ps.retrievePost(ctx, request, conn)
-	if err != nil {
-		ps.logger.Errorf("ps.retrievePost failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to retrieve post: %v", err)
-	}
-
-	// Get the repost (one level) if it exists
-	if repostId != nil {
-		post.Repost, _, err = ps.retrievePost(ctx, &pb.GetPostRequest{PostId: *repostId}, conn)
+	var totalRecords int
+	if len(req.GetPostIds()) == 0 {
+		err = conn.QueryRow(ctx, countQueryString, countArgs...).Scan(&totalRecords)
 		if err != nil {
-			ps.logger.Errorf("ps.GetPost failed: %v", err)
-			return nil, status.Errorf(codes.Internal, "Failed to get repost: %v", err)
+			ps.logger.Errorw("Error executing count query", "error", err)
+			return nil, status.Error(codes.Internal, "failed to get total records")
 		}
 	}
 
-	return post, nil
-}
-
-func (ps *postService) retrievePost(ctx context.Context, request *pb.GetPostRequest, conn *pgxpool.Conn) (*pb.Post, *string, error) {
-	query := psql.Select("p.post_id", "p.author_name", "p.content", "p.created_at", "p.longitude", "p.latitude", "p.accuracy", "p.repost_post_id").
-		From("posts p").
-		Where(sq.Eq{"p.post_id": request.PostId})
-
-	queryString, args, err := query.ToSql()
+	posts, authorMap, repostMap, err := ps.retrievePosts(ctx, conn, dataQueryBuilder)
 	if err != nil {
-		ps.logger.Errorf("query.ToSql() failed: %v", err)
-		return nil, nil, status.Errorf(codes.Internal, "Failed to build query: %v", err)
+		return nil, err
 	}
 
-	row := conn.QueryRow(ctx, queryString, args...)
-
-	ps.logger.Infof("Row: %v", row)
-
-	post := &pb.Post{Author: &pbUser.PublicUser{}}
-	var createdAt time.Time
-	location := &pb.Location{}
-	var repostID *string
-	if err = row.Scan(&post.PostId, &post.Author.Username, &post.Content, &createdAt, &location.Longitude, &location.Latitude, &location.Accuracy, &repostID); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && (pgerrcode.IsSyntaxErrororAccessRuleViolation(pgErr.Code) || pgerrcode.IsDataException(pgErr.Code)) {
-			return nil, nil, status.Errorf(codes.InvalidArgument, "Syntax error in query: %v", err)
-		}
-
-		ps.logger.Errorf("row.Scan failed: %v", err)
-		return nil, nil, status.Errorf(codes.Internal, "Failed to scan row: %v", err)
+	protoPosts := make([]*postv1.Post, 0, len(posts))
+	for _, post := range posts {
+		protoPosts = append(protoPosts, post.ToProto(authorMap, repostMap))
 	}
 
-	ps.logger.Infof("Post: %v", post)
-
-	post.CreationDate = createdAt.Format(time.RFC3339)
-
-	if location.Longitude != nil && location.Latitude != nil && location.Accuracy != nil {
-		post.Location = location
+	protoPagination := &commonv1.PaginationResponse{
+		TotalSize: int32(totalRecords),
 	}
 
-	return post, repostID, nil
+	if req.FeedType != postv1.FeedType_FEED_TYPE_USER || govalidator.IsUUIDv4(req.Pagination.GetPageToken()) {
+		protoPagination.NextPageToken = protoPosts[len(protoPosts)-1].PostId
+	} else {
+		offset, _ := strconv.Atoi(req.Pagination.GetPageToken())
+		protoPagination.NextPageToken = fmt.Sprintf("%d", offset+len(protoPosts))
+	}
+
+	return &postv1.ListPostsResponse{
+		Posts:      protoPosts,
+		Pagination: protoPagination,
+	}, nil
 }
 
-func (ps *postService) CreatePost(ctx context.Context, request *pb.CreatePostRequest) (*pb.Post, error) {
+func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePostRequest) (*postv1.CreatePostResponse, error) {
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
 	// Get Author Profile from User-Service
 	selectCtx, selectSpan := ps.tracer.Start(ctx, "SelectUserData")
-	user, err := ps.profileClient.GetUser(selectCtx, &pbUser.GetUserRequest{Username: authenticatedUsername})
+	users, err := ps.profileClient.ListUsers(selectCtx, &userv1.ListUsersRequest{Usernames: []string{authenticatedUsername}})
 	if err != nil {
 		selectSpan.End()
 		if status.Code(err) == codes.PermissionDenied {
-			return nil, status.Error(codes.PermissionDenied, "User is not activated")
+			return nil, err
 		}
-		ps.logger.Errorf("Error in profileClient.GetUser: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to get author profile: %v", err)
+		ps.logger.Errorw("Error in GetUser", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to get user data")
 	}
 	selectSpan.End()
 
-	post := &pb.Post{
-		PostId:       uuid.New().String(),
-		CreationDate: time.Now().Format(time.RFC3339),
-		Author: &pbUser.PublicUser{
-			Username: user.Username,
-			Nickname: user.Nickname,
-			Picture:  user.Picture,
-		},
-		Content:  request.Content,
-		Location: request.Location,
-		Liked:    false,
-		Likes:    0,
+	post := &schema.Post{
+		PostID:       uuid.New().String(),
+		Content:      request.Content,
+		CreatedAt:    time.Now(),
+		AuthorName:   authenticatedUsername,
+		RepostPostID: request.RepostedPostId,
 	}
+
+	if request.Location != nil {
+		post.Latitude = &request.Location.Latitude
+		post.Longitude = &request.Location.Longitude
+		post.Accuracy = &request.Location.Accuracy
+	}
+
+	conn, err := ps.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
 
 	// Get repost if it exists
-	var repostID *string
-	if request.RepostedPostId != nil && *request.RepostedPostId != "" {
-		repostCTX, repostSpan := ps.tracer.Start(ctx, "GetRepost")
-		post.Repost, err = ps.GetPost(repostCTX, &pb.GetPostRequest{PostId: *request.RepostedPostId})
+	var repost *postv1.Post
+	if request.GetRepostedPostId() != "" {
+		queryBuilder := basePostQuery.Columns("p.*").Where(sq.Eq{"p.post_id": request.GetRepostedPostId()})
+		posts, authorMap, repostMap, err := ps.retrievePosts(ctx, conn, queryBuilder)
 		if err != nil {
-			repostSpan.SetAttributes(attribute.String("error", err.Error()))
-			repostSpan.End()
-
-			if status.Code(err) == codes.NotFound {
-				return nil, status.Errorf(codes.InvalidArgument, "repost does not exist: %v", err)
-			}
-
-			ps.logger.Errorf("Error in GetPost: %v", err)
-			return nil, status.Errorf(codes.Internal, "failed to get repost: %v", err)
+			return nil, err
 		}
-		repostID = &post.Repost.PostId
-		repostSpan.End()
+		repost = posts[0].ToProto(authorMap, repostMap)
 	}
-
-	// Start transaction
-	tx, err := ps.db.Begin(ctx)
-	if err != nil {
-		ps.logger.Errorf("Error in db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
-	}
-	defer ps.db.Rollback(ctx, tx)
 
 	// Upload the image to image-service
+	var picture *imagev1.Picture
 	if request.Picture != nil {
-		imageResp, err := ps.imageClient.UploadImage(ctx, &pbImage.UploadImageRequest{
-			Image:         *request.Picture,
-			ContextString: post.PostId,
+		uploadResponse, err := ps.imageClient.UploadImage(ctx, &imagev1.UploadImageRequest{
+			Image: *request.Picture,
+			Name:  post.PostID,
 		})
 		if err != nil {
-			ps.logger.Errorw("Error in imageClient.UploadImage", zap.Error(err))
-			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
+			ps.logger.Errorw("Error in imageClient.UploadImage", "error", err)
+			return nil, status.Error(codes.Internal, "failed to upload image")
 		}
-		post.Picture = &pbCommon.Picture{
+
+		picture = &imagev1.Picture{
 			Width:  500,
 			Height: 500,
 		}
+
 		environment := os.Getenv("ENVIRONMENT")
-		if environment == "production" {
-			post.Picture.Url = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", imageResp.GetUrl())
+		if strings.ToLower(environment) == "production" {
+			picture.Url = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadResponse.GetUrl())
 		} else {
-			post.Picture.Url = fmt.Sprintf("http://localhost:8080/api/images?image=%s", imageResp.GetUrl())
+			picture.Url = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadResponse.GetUrl())
 		}
 	}
 
-	err = ps.insertPost(ctx, tx, post, repostID)
+	tx, err := ps.db.BeginTx(ctx, conn)
 	if err != nil {
-		ps.logger.Errorf("Error in insertPost: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to insert post: %v", err)
+		return nil, err
+	}
+	defer ps.db.RollbackTx(ctx, tx)
+
+	queryString, args, _ := psql.Insert("posts").
+		Columns("post_id", "author_name", "content", "created_at", "longitude",
+			"latitude", "accuracy", "repost_post_id", "picture_url", "picture_width", "picture_height").
+		Values(post.PostID, post.AuthorName, post.Content, post.CreatedAt, post.Longitude,
+			post.Latitude, &post.Accuracy, post.RepostPostID, post.PictureURL, post.PictureWidth, post.PictureHeight).ToSql()
+
+	_, err = tx.Exec(ctx, queryString, args...)
+	if err != nil {
+		ps.logger.Errorw("Error while inserting post", "error", err)
+		return nil, status.Error(codes.Internal, "failed to insert post")
 	}
 
 	err = ps.insertHashtags(ctx, tx, post)
 	if err != nil {
-		ps.logger.Errorf("Error in insertHashtags: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to insert hashtags: %v", err)
+		return nil, status.Error(codes.Internal, "failed to insert hashtags")
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		ps.logger.Errorf("Error in tx.Commit: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	if err = ps.db.CommitTx(ctx, tx); err != nil {
+		return nil, err
 	}
 
-	return post, nil
+	return &postv1.CreatePostResponse{
+		PostId:       post.PostID,
+		Author:       users.GetUsers()[0],
+		CreationDate: post.CreatedAt.Format(time.RFC3339),
+		Content:      post.Content,
+		Likes:        0,
+		Liked:        false,
+		Repost:       repost,
+		Location:     request.Location,
+		Picture:      picture,
+	}, nil
 }
 
-func (ps *postService) DeletePost(ctx context.Context, req *pb.GetPostRequest) (*pbCommon.Empty, error) {
+func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostRequest) (*postv1.DeletePostResponse, error) {
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
 	// Get the post
-	post, err := ps.GetPost(ctx, req)
+	posts, err := ps.ListPosts(ctx, &postv1.ListPostsRequest{PostIds: []string{req.GetPostId()}})
 	if err != nil {
-		ps.logger.Errorf("ps.GetPost failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to get post: %v", err)
+		return nil, err
+	}
+
+	if len(posts.GetPosts()) == 0 {
+		return nil, status.Error(codes.NotFound, "post not found")
 	}
 
 	// Check if the authenticated user is the author of the post
+	post := posts.GetPosts()[0]
 	if post.Author.Username != authenticatedUsername {
-		return nil, status.Error(codes.PermissionDenied, "You are not the author of this post")
+		return nil, status.Error(codes.PermissionDenied, "user is not the author")
 	}
 
-	// Start transaction
-	tx, err := ps.db.Begin(ctx)
+	conn, err := ps.db.Acquire(ctx)
 	if err != nil {
-		ps.logger.Errorf("Error in db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+		return nil, err
 	}
-	defer ps.db.Rollback(ctx, tx)
+
+	tx, err := ps.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer ps.db.RollbackTx(ctx, tx)
 
 	// Delete the post
-	queryString := "DELETE FROM posts WHERE post_id = $1"
-	if _, err := tx.Exec(ctx, queryString, post.PostId); err != nil {
-		ps.logger.Errorf("tx.Exec failed: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to delete post: %v", err)
+	queryString, args, _ := psql.Delete("posts").Where(sq.Eq{"post_id": req.GetPostId()}).ToSql()
+	if _, err := tx.Exec(ctx, queryString, args); err != nil {
+		ps.logger.Errorw("Error in tx.Exec", "error", err)
+		return nil, status.Error(codes.Internal, "failed to delete post")
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		ps.logger.Errorf("Error in tx.Commit: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	if err = ps.db.CommitTx(ctx, tx); err != nil {
+		return nil, err
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &postv1.DeletePostResponse{}, nil
 }
 
-func (ps *postService) insertPost(ctx context.Context, tx pgx.Tx, post *pb.Post, repostID *string) error {
-	var pictureURL *string
-	var pictureWidth, pictureHeight *int32
-	if post.Picture != nil {
-		pictureURL = &post.Picture.Url
-		pictureWidth = &post.Picture.Width
-		pictureHeight = &post.Picture.Height
+// ----------------- Helper Functions -----------------
+
+func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, query sq.SelectBuilder) ([]schema.Post, map[string]*userv1.User, map[string]*postv1.Post, error) {
+	queryString, args, err := query.ToSql()
+	if err != nil {
+		ps.logger.Errorw("Error building SQL query", "error", err)
+		return nil, nil, nil, status.Error(codes.Internal, "Failed to build query")
 	}
 
-	query := psql.Insert("posts").
-		Columns("post_id", "author_name", "content", "created_at", "longitude", "latitude", "accuracy", "repost_post_id", "picture_url", "picture_width", "picture_height").
-		Values(post.PostId, post.Author.Username, post.Content, post.CreationDate, &post.Location.Longitude, &post.Location.Latitude, &post.Location.Accuracy, &repostID, pictureURL, pictureWidth, pictureHeight)
+	ps.logger.Debugw("Querying data", "query", queryString, "args", args)
 
-	queryString, args, _ := query.ToSql()
-	_, err := tx.Exec(ctx, queryString, args...)
+	rows, err := conn.Query(ctx, queryString, args...)
+	if err != nil {
+		ps.logger.Errorw("Error querying data", "error", err)
+		return nil, nil, nil, status.Error(codes.Internal, "Failed to query data")
+	}
 
-	return err
+	posts, err := pgx.CollectRows(rows, pgx.RowToStructByName[schema.Post])
+	if err != nil {
+		ps.logger.Errorw("Failed to scan rows", "error", err)
+		return nil, nil, nil, status.Error(codes.Internal, "Failed to scan rows")
+	}
+
+	authorMap, err := ps.getAuthorMap(ctx, posts)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	repostMap, err := ps.getRepostMap(ctx, conn, posts)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return posts, authorMap, repostMap, nil
 }
 
-func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *pb.Post) error {
+func (ps *postService) getAuthorMap(ctx context.Context, posts []schema.Post) (map[string]*userv1.User, error) {
+	authorNames := make([]string, 0, len(posts))
+	for _, post := range posts {
+		authorNames = append(authorNames, post.AuthorName)
+	}
+
+	authorsCTX, authorsSpan := ps.tracer.Start(ctx, "Fetch author data")
+	authorProfiles, err := ps.profileClient.ListUsers(authorsCTX, &userv1.ListUsersRequest{Usernames: authorNames})
+	if err != nil {
+		authorsSpan.End()
+		ps.logger.Errorw("Error getting user data", "error", err)
+		return nil, status.Error(codes.Internal, "Error getting user data")
+	}
+	authorsSpan.End()
+
+	authorMap := make(map[string]*userv1.User)
+	for _, profile := range authorProfiles.GetUsers() {
+		authorMap[profile.GetUsername()] = profile
+	}
+
+	return authorMap, nil
+}
+
+func (ps *postService) getRepostMap(ctx context.Context, conn *pgxpool.Conn, posts []schema.Post) (map[string]*postv1.Post, error) {
+	repostIDs := make([]string, 0, len(posts))
+	for _, post := range posts {
+		if post.RepostPostID != nil {
+			repostIDs = append(repostIDs, *post.RepostPostID)
+		}
+	}
+
+	if len(repostIDs) == 0 {
+		return nil, nil
+	}
+
+	baseQueryBuilder := basePostQuery.Columns("*").
+		Where(sq.Eq{"p.post_id": repostIDs})
+
+	repostQueryString, repostArgs, err := baseQueryBuilder.ToSql()
+	if err != nil {
+		ps.logger.Errorw("Error building query", "error", err)
+		return nil, status.Error(codes.Internal, "failed to build query")
+	}
+
+	rows, err := conn.Query(ctx, repostQueryString, repostArgs...)
+	if err != nil {
+		ps.logger.Errorw("Error querying data", "error", err)
+		return nil, status.Error(codes.Internal, "failed to query data")
+	}
+
+	reposts, err := pgx.CollectRows(rows, pgx.RowToStructByName[schema.Post])
+	if err != nil {
+		ps.logger.Errorw("Error scanning rows", "error", err)
+		return nil, status.Error(codes.Internal, "failed to scan rows")
+	}
+
+	authorMap, err := ps.getAuthorMap(ctx, []schema.Post{reposts[0]})
+	if err != nil {
+		return nil, err
+	}
+
+	repostMap := make(map[string]*postv1.Post)
+	for _, post := range reposts {
+		repostMap[post.PostID] = post.ToProto(authorMap, nil)
+	}
+
+	return repostMap, nil
+}
+
+func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *schema.Post) error {
 	hashtags := hashtagRegex.FindAllString(post.Content, -1)
 	for _, hashtag := range hashtags {
 		hashtagId := uuid.New()
@@ -561,11 +467,13 @@ func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *pb.P
 					ON CONFLICT (content) DO UPDATE SET content=hashtags.content 
 					RETURNING hashtag_id`
 		if err := tx.QueryRow(ctx, queryString, hashtagId, strings.ToLower(hashtag)).Scan(&hashtagId); err != nil {
+			ps.logger.Errorw("Error while inserting hashtags", "error", err)
 			return err
 		}
 
 		queryString = "INSERT INTO post_service.many_posts_has_many_hashtags (post_id_posts, hashtag_id_hashtags) VALUES($1, $2)"
-		if _, err := tx.Exec(ctx, queryString, post.PostId, hashtagId); err != nil {
+		if _, err := tx.Exec(ctx, queryString, post.PostID, hashtagId); err != nil {
+			ps.logger.Errorw("Error while inserting many_posts_has_many_hashtags", "error", err)
 			return err
 		}
 	}
