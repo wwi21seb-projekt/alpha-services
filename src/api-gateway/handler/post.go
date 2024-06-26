@@ -273,7 +273,10 @@ func (ph *PostHandler) QueryPosts(c *gin.Context) {
 func transformListPostsResponse(resp *postv1.ListPostsResponse) []dto.Post {
 	posts := make([]dto.Post, 0, len(resp.GetPosts()))
 	for _, post := range resp.GetPosts() {
-		posts = append(posts, *dto.TransformProtoPostToDTO(post))
+		postDTO := dto.TransformProtoPostToDTO(post)
+		if postDTO != nil {
+			posts = append(posts, *dto.TransformProtoPostToDTO(post))
+		}
 	}
 	return posts
 }

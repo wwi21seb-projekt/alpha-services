@@ -1,6 +1,8 @@
 package dto
 
-import postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+import (
+	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+)
 
 // ======================================== //
 // =========== Shared DTOs ================ //
@@ -32,11 +34,11 @@ type Post struct {
 	Author       User      `json:"author"`
 	CreationDate string    `json:"creationDate"`
 	Content      string    `json:"content"`
-	Picture      *Picture  `json:"picture"`
-	Location     *Location `json:"location"`
+	Picture      *Picture  `json:"picture,omitempty"`
+	Location     *Location `json:"location,omitempty"`
 	Likes        uint32    `json:"likes"`
 	Liked        bool      `json:"liked"`
-	Repost       *Repost   `json:"repost"`
+	Repost       *Repost   `json:"repost,omitempty"`
 }
 
 type Repost struct {
@@ -44,8 +46,8 @@ type Repost struct {
 	Author       User      `json:"author"`
 	CreationDate string    `json:"creationDate"`
 	Content      string    `json:"content"`
-	Picture      *Picture  `json:"picture"`
-	Location     *Location `json:"location"`
+	Picture      *Picture  `json:"picture,omitempty"`
+	Location     *Location `json:"location,omitempty"`
 }
 
 type GetUserFeedResponse struct {
@@ -88,6 +90,7 @@ func TransformProtoPostToDTO(post *postv1.Post) *Post {
 	if post == nil {
 		return nil
 	}
+
 	return &Post{
 		PostID:       post.GetPostId(),
 		Author:       *TransformProtoUserToDTO(post.GetAuthor()),
