@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
@@ -73,10 +71,6 @@ func main() {
 	// Register notification service
 	notificationv1.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 	notificationv1.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
-
-	// Register health service
-	healthSvc := health.NewHealthServer(logger)
-	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
 
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+cfg.Port)

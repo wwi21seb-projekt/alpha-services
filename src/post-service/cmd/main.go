@@ -3,18 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/post-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
-	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
+	"github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.uber.org/zap"
@@ -27,32 +25,28 @@ var (
 )
 
 func main() {
-	// Initialize logger
-	logger, cleanup := sharedLogging.InitializeLogger(name)
+	ctx := context.Background()
+
+	logger, cleanup := logging.InitializeLogger(name)
 	defer cleanup()
 
-	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
 
-	// Initialize the database
-	ctx := context.Background()
 	database, err := db.NewDB(ctx, cfg.DatabaseConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to the database", zap.Error(err))
 	}
 	defer database.Close()
 
-	// Initialize tracing
 	tracingShutdown, err := tracing.InitializeTracing(ctx, name, version)
 	if err != nil {
 		logger.Fatal("Failed to initialize telemetry", zap.Error(err))
 	}
 	defer tracingShutdown()
 
-	// Initialize metrics
 	metricShutdown, err := metrics.InitializeMetrics(ctx, name, version)
 	if err != nil {
 		logger.Fatal("Failed to initialize metrics", zap.Error(err))
@@ -72,19 +66,9 @@ func main() {
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
-	healthSvc := health.NewHealthServer(logger)
-	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
-
 	// Register post service
 	postv1.RegisterInteractionServiceServer(grpcServer, handler.NewInteractionService(logger, database, userProfileClient))
 	postv1.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient, imageClient))
-
-	// Check dependencies and update health status
-	grpcClients := map[string]*grpc.ClientConn{
-		"UserService":  cfg.GRPCClients.UserService.(*grpc.ClientConn),
-		"ImageService": cfg.GRPCClients.ImageService.(*grpc.ClientConn),
-	}
-	healthSvc.CheckDependencies(ctx, database, grpcClients)
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

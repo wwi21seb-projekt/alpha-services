@@ -112,7 +112,6 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 		for _, sub := range subscriptions.Subscriptions {
 			peopleIFollow = append(peopleIFollow, sub.Username)
 		}
-		peopleIFollow = append(peopleIFollow, authenticatedUsername)
 
 		authoredCondition := sq.Eq{"p.author_name": peopleIFollow}
 		likedCondition := sq.Eq{"l.username": peopleIFollow}
@@ -124,10 +123,15 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	if req.GetHashtag() != "" {
+		queryHashtag := req.GetHashtag()
+		// If there is a # in the hashtag, keep it, if not, add it
+		if !strings.HasPrefix(req.GetHashtag(), "#") {
+			queryHashtag = "#" + req.GetHashtag()
+		}
 		queryBuilder = queryBuilder.
 			Join("many_posts_has_many_hashtags h ON p.post_id = h.post_id_posts").
 			Join("hashtags h2 ON h.hashtag_id_hashtags = h2.hashtag_id").
-			Where(sq.Eq{"h2.content": req.Hashtag})
+			Where(sq.Eq{"h2.content": queryHashtag})
 	}
 
 	// Create the count query
@@ -398,9 +402,14 @@ func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, qu
 		return nil, err
 	}
 
+	commentsMap, err := ps.getCommentsMap(ctx, conn, posts)
+	if err != nil {
+		return nil, err
+	}
+
 	protoPosts := make([]*postv1.Post, 0, len(posts))
 	for _, post := range posts {
-		protoPosts = append(protoPosts, post.ToProto(authorMap, repostMap, likesMap, likedMap))
+		protoPosts = append(protoPosts, post.ToProto(authorMap, repostMap, likesMap, likedMap, commentsMap))
 	}
 
 	return protoPosts, nil
@@ -469,7 +478,7 @@ func (ps *postService) getRepostMap(ctx context.Context, conn *pgxpool.Conn, pos
 
 	repostMap := make(map[string]*postv1.Post)
 	for _, post := range reposts {
-		repostMap[post.PostID] = post.ToProto(authorMap, nil, nil, nil)
+		repostMap[post.PostID] = post.ToProto(authorMap, nil, nil, nil, nil)
 	}
 
 	return repostMap, nil
@@ -575,4 +584,45 @@ func (ps *postService) getLikedMap(ctx context.Context, conn *pgxpool.Conn, post
 	}
 
 	return likedMap, nil
+}
+
+func (ps *postService) getCommentsMap(ctx context.Context, conn *pgxpool.Conn, posts []schema.Post) (map[string]uint32, error) {
+	postIDs := make([]string, 0, len(posts))
+	for _, post := range posts {
+		postIDs = append(postIDs, post.PostID)
+	}
+
+	if len(postIDs) == 0 {
+		return nil, nil
+	}
+
+	queryBuilder := psql.Select("post_id", "COUNT(*) AS comments").
+		From("comments").
+		Where(sq.Eq{"post_id": postIDs}).
+		GroupBy("post_id")
+
+	queryString, args, err := queryBuilder.ToSql()
+	if err != nil {
+		ps.logger.Errorw("Error building query", "error", err)
+		return nil, status.Error(codes.Internal, "failed to build query")
+	}
+
+	rows, err := conn.Query(ctx, queryString, args...)
+	if err != nil {
+		ps.logger.Errorw("Error querying data", "error", err)
+		return nil, status.Error(codes.Internal, "failed to query data")
+	}
+
+	commentsMap := make(map[string]uint32)
+	for rows.Next() {
+		var postID string
+		var comments uint32
+		if err := rows.Scan(&postID, &comments); err != nil {
+			ps.logger.Errorw("Error scanning rows", "error", err)
+			return nil, status.Error(codes.Internal, "failed to scan rows")
+		}
+		commentsMap[postID] = comments
+	}
+
+	return commentsMap, nil
 }

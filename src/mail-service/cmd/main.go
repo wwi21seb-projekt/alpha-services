@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
 	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
-	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/mail-service/handler"
@@ -52,9 +50,6 @@ func main() {
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
-	// Register health service
-	healthSvc := health.NewHealthServer(logger)
-	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
 	mailv1.RegisterMailServiceServer(grpcServer, handler.NewMailService(logger))
 
 	// Create listener

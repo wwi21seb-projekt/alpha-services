@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
-	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/chat-service/handler"
@@ -68,10 +66,6 @@ func main() {
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
-
-	// Register health service
-	healthSvc := health.NewHealthServer(logger)
-	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
 
 	// Register services
 	chatv1.RegisterChatServiceServer(grpcServer, handler.NewChatService(logger, database, userClient))
