@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
@@ -75,21 +73,10 @@ func main() {
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
-	healthSvc := health.NewHealthServer(logger)
-	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
-
 	// Register user services
 	userv1.RegisterUserServiceServer(grpcServer, handler.NewUserServer(logger, database, postClient, imageClient))
 	userv1.RegisterSubscriptionServiceServer(grpcServer, handler.NewSubscriptionServer(logger, database, notificationClient))
 	userv1.RegisterAuthenticationServiceServer(grpcServer, handler.NewAuthenticationServer(logger, database, mailClient, imageClient))
-
-	// Check dependencies and update health status
-	grpcClients := map[string]*grpc.ClientConn{
-		"PostService":  cfg.GRPCClients.PostService.(*grpc.ClientConn),
-		"ImageService": cfg.GRPCClients.ImageService.(*grpc.ClientConn),
-		"MailService":  cfg.GRPCClients.MailService.(*grpc.ClientConn),
-	}
-	healthSvc.CheckDependencies(ctx, database, grpcClients)
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

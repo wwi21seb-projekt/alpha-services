@@ -177,7 +177,7 @@ func (is *interactionService) ListComments(ctx context.Context, req *postv1.List
 	}
 
 	// Data query builder with pagination
-	dataQueryBuilder := baseQueryBuilder.Columns("comment_id", "created_at", "author_name", "content").
+	dataQueryBuilder := baseQueryBuilder.Columns("comment_id", "created_at", "author_name", "content", "post_id").
 		Limit(uint64(limit)).
 		Offset(uint64(offset)).
 		OrderBy("created_at DESC")

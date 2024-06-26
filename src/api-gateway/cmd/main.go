@@ -55,7 +55,7 @@ func main() {
 	}
 	defer tracingShutdown()
 
-	// Intialize metrics
+	// Initialize metrics
 	metricShutdown, err := metrics.InitializeMetrics(ctx, name, version)
 	if err != nil {
 		logger.Fatal("Failed to initialize metrics", zap.Error(err))

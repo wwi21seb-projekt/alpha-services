@@ -110,6 +110,8 @@ github.com/ugorji/go/codec v1.2.12 h1:9LC83zGrHhuUA9l16C9AHXAqEV/2wBQ4nkvumAE65E
 github.com/ugorji/go/codec v1.2.12/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
 github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc h1:3pLF3Tz3XYuX4uL8MZrLDKIwmffRp6WUsYZETntwsPU=
 github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc/go.mod h1:8agPrREk1bF2TZZUoarHavI4swecC1Kb7mFy1qNAg2U=
+github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626205222-37eede7a86b6 h1:gcxho6Ud4lPXBYoFCC4hkqhtVkKWykUNKOWCxXno9Xs=
+github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626205222-37eede7a86b6/go.mod h1:LQPx6fv9UB9FI1bix4McEbNivCW2X9zqLzSODi9yNTo=
 github.com/wwi21seb-projekt/errors-go v0.6.0 h1:0MKRG5m2ht/yA7Iab4EGJE30hF17ueRBf79ECzDpUoM=
 github.com/wwi21seb-projekt/errors-go v0.6.0/go.mod h1:PWCPplYjGwrfrp+arG5WmfFA0ElenW/yRwV72iBawcM=
 go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.52.0 h1:vkioc4XBfqnZZ7u40wK3Kgbjj9JYkvW6FY1ghmM/Shk=

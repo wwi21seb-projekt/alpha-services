@@ -38,6 +38,7 @@ type Post struct {
 	Location     *Location `json:"location,omitempty"`
 	Likes        uint32    `json:"likes"`
 	Liked        bool      `json:"liked"`
+	Comments     uint32    `json:"comments"`
 	Repost       *Repost   `json:"repost,omitempty"`
 }
 
@@ -51,8 +52,8 @@ type Repost struct {
 }
 
 type GetUserFeedResponse struct {
-	Posts              []Post             `json:"records"`
-	PaginationResponse PaginationResponse `json:"pagination"`
+	Posts      []Post             `json:"records"`
+	Pagination PaginationResponse `json:"pagination"`
 }
 
 type GetFeedResponse struct {
@@ -61,8 +62,8 @@ type GetFeedResponse struct {
 }
 
 type SearchPostsResponse struct {
-	Posts              []Post                 `json:"records"`
-	PaginationResponse PostPaginationResponse `json:"pagination"`
+	Posts      []Post                 `json:"records"`
+	Pagination PostPaginationResponse `json:"pagination"`
 }
 
 type PostPaginationResponse struct {
@@ -100,6 +101,7 @@ func TransformProtoPostToDTO(post *postv1.Post) *Post {
 		Location:     TransformProtoLocationToDTO(post.GetLocation()),
 		Likes:        post.GetLikes(),
 		Liked:        post.GetLiked(),
+		Comments:     post.GetComments(),
 		Repost:       TransformProtoRepostToDTO(post.GetRepost()),
 	}
 }

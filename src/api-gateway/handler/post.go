@@ -218,7 +218,7 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 
 	feedResponse := &dto.GetUserFeedResponse{
 		Posts: posts,
-		PaginationResponse: dto.PaginationResponse{
+		Pagination: dto.PaginationResponse{
 			Offset:  int32(offsetInt + limit),
 			Limit:   int32(limit),
 			Records: resp.GetPagination().GetTotalSize(),
@@ -499,6 +499,8 @@ func (ph *PostHandler) CreateLike(c *gin.Context) {
 			returnErr = goerrors.PostNotFound
 		case codes.InvalidArgument:
 			returnErr = goerrors.BadRequest
+		case codes.AlreadyExists:
+			returnErr = goerrors.AlreadyLiked
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.LikePost: %v", err)

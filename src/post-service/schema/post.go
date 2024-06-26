@@ -21,7 +21,7 @@ type Post struct {
 	RepostPostID  *string   `db:"repost_post_id,omitempty"`
 }
 
-func (post *Post) ToProto(authorMap map[string]*userv1.User, repostMap map[string]*postv1.Post, likesMap map[string]uint32, likedMap map[string]bool) *postv1.Post {
+func (post *Post) ToProto(authorMap map[string]*userv1.User, repostMap map[string]*postv1.Post, likesMap map[string]uint32, likedMap map[string]bool, commentsMap map[string]uint32) *postv1.Post {
 	proto := &postv1.Post{
 		PostId:       post.PostID,
 		CreationDate: post.CreatedAt.Format(time.RFC3339),
@@ -38,6 +38,12 @@ func (post *Post) ToProto(authorMap map[string]*userv1.User, repostMap map[strin
 	if likedMap != nil {
 		if liked, exists := likedMap[post.PostID]; exists {
 			proto.Liked = liked
+		}
+	}
+
+	if commentsMap != nil {
+		if comments, exists := commentsMap[post.PostID]; exists {
+			proto.Comments = comments
 		}
 	}
 
