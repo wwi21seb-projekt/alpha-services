@@ -13,7 +13,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	// Create client stubs
-	userClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
+	userClient := userv1.NewUserServiceClient(cfg.GRPCClients.UserService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)

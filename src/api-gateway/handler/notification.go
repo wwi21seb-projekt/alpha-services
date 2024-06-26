@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 
 	"github.com/gin-gonic/gin"
@@ -109,26 +110,7 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 		return
 	}
 
-	response := schema.GetNotificationsResponse{}
-	for _, notification := range notifications.Notifications {
-		responseUser := schema.Author{
-			Username: notification.User.Username,
-			Nickname: notification.User.Nickname,
-			Picture: &schema.Picture{
-				Url:    notification.User.GetPicture().GetUrl(),
-				Width:  notification.User.GetPicture().GetWidth(),
-				Height: notification.User.GetPicture().GetHeight(),
-			},
-		}
-		responseNotification := schema.Notification{
-			NotificationID:   notification.NotificationId,
-			Timestamp:        notification.Timestamp,
-			NotificationType: notification.NotificationType.String(),
-			User:             responseUser,
-		}
-		response.Records = append(response.Records, responseNotification)
-	}
-	c.JSON(200, response)
+	c.JSON(200, dto.TransformNotificationProtoToDTO(notifications))
 }
 
 func (n *NotificationHandler) DeleteNotification(c *gin.Context) {

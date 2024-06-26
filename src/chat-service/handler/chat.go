@@ -24,7 +24,7 @@ import (
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
@@ -33,13 +33,13 @@ type chatService struct {
 	logger     *zap.SugaredLogger
 	tracer     trace.Tracer
 	db         *db.DB
-	userClient pbUser.UserServiceClient
+	userClient userv1.UserServiceClient
 	streams    map[string]*chatStream
 	mu         sync.RWMutex
 	pb.UnimplementedChatServiceServer
 }
 
-func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient pbUser.UserServiceClient) pb.ChatServiceServer {
+func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient userv1.UserServiceClient) pb.ChatServiceServer {
 	return &chatService{
 		logger:     logger,
 		tracer:     otel.GetTracerProvider().Tracer("chat-service"),
@@ -279,7 +279,7 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 	var usernames []string
 	for rows.Next() {
 		var chat = pb.Chat{
-			User: &pbUser.User{},
+			User: &userv1.User{},
 		}
 
 		if err := rows.Scan(&chat.Id, &chat.User.Username); err != nil {
@@ -302,7 +302,7 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 
 	// Get user information for each chat
 	upstreamCtx, upstreamSpan := cs.tracer.Start(ctx, "UpstreamListUsers")
-	resp, err := cs.userClient.ListUsers(upstreamCtx, &pbUser.ListUsersRequest{Usernames: usernames})
+	resp, err := cs.userClient.ListUsers(upstreamCtx, &userv1.ListUsersRequest{Usernames: usernames})
 	if err != nil {
 		upstreamSpan.End()
 		cs.logger.Errorf("Error in cs.userClient.ListUsers: %v", err)

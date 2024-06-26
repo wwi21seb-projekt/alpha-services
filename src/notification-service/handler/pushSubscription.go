@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"os"
 	"strings"
 
@@ -12,21 +14,17 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
 type pushSubscriptionService struct {
 	logger             *zap.SugaredLogger
 	db                 *db.DB
-	profileClient      pbUser.UserServiceClient
-	subscriptionClient pbUser.SubscriptionServiceClient
-	pb.UnimplementedPushServiceServer
+	profileClient      userv1.UserServiceClient
+	subscriptionClient userv1.SubscriptionServiceClient
+	notificationv1.UnimplementedPushServiceServer
 }
 
-func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscriptionClient pbUser.SubscriptionServiceClient) pb.PushServiceServer {
+func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscriptionClient userv1.SubscriptionServiceClient) notificationv1.PushServiceServer {
 	return &pushSubscriptionService{
 		logger:             logger,
 		db:                 db,
@@ -35,20 +33,24 @@ func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, prof
 	}
 }
 
-func (p *pushSubscriptionService) GetPublicKey(context.Context, *pbCommon.Empty) (*pb.PublicKeyResponse, error) {
+func (p *pushSubscriptionService) GetPublicKey(context.Context, *notificationv1.GetPublicKeyRequest) (*notificationv1.GetPublicKeyResponse, error) {
 	vapidPulicKey := os.Getenv("VAPID_PUBLIC_KEY")
-	return &pb.PublicKeyResponse{
+	return &notificationv1.GetPublicKeyResponse{
 		PublicKey: vapidPulicKey,
 	}, nil
 }
 
-func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, request *pb.CreatePushSubscriptionRequest) (*pb.CreatePushSubscriptionResponse, error) {
-	tx, err := p.db.Begin(ctx)
+func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, request *notificationv1.CreatePushSubscriptionRequest) (*notificationv1.CreatePushSubscriptionResponse, error) {
+	conn, err := p.db.Acquire(ctx)
 	if err != nil {
-		p.logger.Errorf("Error in db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+		return nil, err
 	}
-	defer p.db.Rollback(ctx, tx)
+
+	tx, err := p.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer p.db.RollbackTx(ctx, tx)
 
 	subscriptionId := uuid.New()
 	// Fetch the username of the authenticated user
@@ -70,12 +72,12 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 		return nil, err
 	}
 
-	if err := p.db.Commit(ctx, tx); err != nil {
+	if err := p.db.CommitTx(ctx, tx); err != nil {
 		p.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pb.CreatePushSubscriptionResponse{
+	return &notificationv1.CreatePushSubscriptionResponse{
 		SubscriptionId: subscriptionId.String(),
 	}, nil
 }

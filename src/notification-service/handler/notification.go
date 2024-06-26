@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"net/http"
 	"os"
 	"time"
@@ -20,9 +22,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 )
@@ -34,12 +33,12 @@ var vapidPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 type NotificationService struct {
 	logger             *zap.SugaredLogger
 	db                 *db.DB
-	profileClient      pbUser.UserServiceClient
-	subscriptionClient pbUser.SubscriptionServiceClient
-	pb.UnimplementedNotificationServiceServer
+	profileClient      userv1.UserServiceClient
+	subscriptionClient userv1.SubscriptionServiceClient
+	notificationv1.UnimplementedNotificationServiceServer
 }
 
-func NewNotificationServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscriptionClient pbUser.SubscriptionServiceClient) pb.NotificationServiceServer {
+func NewNotificationServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscriptionClient userv1.SubscriptionServiceClient) notificationv1.NotificationServiceServer {
 	return &NotificationService{
 		logger:             logger,
 		db:                 db,
@@ -48,8 +47,8 @@ func NewNotificationServiceServer(logger *zap.SugaredLogger, db *db.DB, profileC
 	}
 }
 
-func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.Empty) (*pb.GetNotificationsResponse, error) {
-	conn, err := n.db.Pool.Acquire(ctx)
+func (n *NotificationService) ListNotifications(ctx context.Context, req *notificationv1.ListNotificationsRequest) (*notificationv1.ListNotificationsResponse, error) {
+	conn, err := n.db.Acquire(ctx)
 	if err != nil {
 		n.logger.Errorf("Error in n.db.Pool.Acquire: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
@@ -74,7 +73,7 @@ func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.
 
 	var usernames []string
 
-	notificationsResponse := &pb.GetNotificationsResponse{}
+	notificationsResponse := &notificationv1.ListNotificationsResponse{}
 	for rows.Next() {
 		var username, notificationId, notificationType pgtype.Text
 		var timestamp pgtype.Timestamptz
@@ -85,35 +84,35 @@ func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.
 		}
 		usernames = append(usernames, username.String)
 
-		var notificationTypeResponse pb.NotificationType
+		var notificationTypeResponse notificationv1.NotificationType
 		if notificationType.String == "follow" {
-			notificationTypeResponse = pb.NotificationType_FOLLOW
+			notificationTypeResponse = notificationv1.NotificationType_NOTIFICATION_TYPE_FOLLOW
 		} else {
-			notificationTypeResponse = pb.NotificationType_REPOST
+			notificationTypeResponse = notificationv1.NotificationType_NOTIFICATION_TYPE_REPOST
 		}
-		user := &pbUser.User{
+		user := &userv1.User{
 			Username: username.String,
 		}
 
-		notification := &pb.Notification{
-			NotificationId:  notificationId.String,
-			Timestamp:       timestamp.Time.Format(time.RFC3339),
-			NotficationType: notificationTypeResponse,
-			User:            user,
+		notification := &notificationv1.Notification{
+			NotificationId:   notificationId.String,
+			Timestamp:        timestamp.Time.Format(time.RFC3339),
+			NotificationType: notificationTypeResponse,
+			User:             user,
 		}
 
 		notificationsResponse.Notifications = append(notificationsResponse.Notifications, notification)
 	}
 
-	userdata, err := n.profileClient.ListUsers(ctx, &pbUser.ListUsersRequest{Usernames: usernames})
+	userdata, err := n.profileClient.ListUsers(ctx, &userv1.ListUsersRequest{Usernames: usernames})
 	if err != nil {
 		n.logger.Errorf("Error in n.profileClient.ListUsers: %v", err)
 		return nil, status.Errorf(codes.Internal, "Failed to get users: %v", err)
 	}
 
-	userMap := make(map[string]*pbUser.User)
+	userMap := make(map[string]*userv1.User)
 	for _, user := range userdata.Users {
-		userMap[user.Username] = &pbUser.User{
+		userMap[user.Username] = &userv1.User{
 			Nickname: user.Nickname,
 			Picture:  user.Picture,
 		}
@@ -127,13 +126,17 @@ func (n *NotificationService) GetNotifications(ctx context.Context, _ *pbCommon.
 	return notificationsResponse, nil
 }
 
-func (n *NotificationService) DeleteNotification(ctx context.Context, request *pb.DeleteNotificationRequest) (*pbCommon.Empty, error) {
-	tx, err := n.db.Begin(ctx)
+func (n *NotificationService) DeleteNotification(ctx context.Context, request *notificationv1.DeleteNotificationRequest) (*notificationv1.DeleteNotificationResponse, error) {
+	conn, err := n.db.Acquire(ctx)
 	if err != nil {
-		n.logger.Errorf("Error in n.db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
+		return nil, err
 	}
-	defer n.db.Rollback(ctx, tx)
+
+	tx, err := n.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer n.db.RollbackTx(ctx, tx)
 
 	query, args, _ := psql.Delete("notifications").
 		Where("notification_id = ?", request.GetNotificationId()).
@@ -152,44 +155,48 @@ func (n *NotificationService) DeleteNotification(ctx context.Context, request *p
 		n.logger.Errorf("Error in tx.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.QueryRow: %v", err)
 	}
-	if err = n.db.Commit(ctx, tx); err != nil {
+	if err = n.db.CommitTx(ctx, tx); err != nil {
 		n.logger.Errorf("Error in n.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in n.db.Commit: %v", err)
 	}
-	return &pbCommon.Empty{}, nil
+	return &notificationv1.DeleteNotificationResponse{}, nil
 }
 
-func (n *NotificationService) SendNotification(ctx context.Context, request *pb.SendNotificationRequest) (*pbCommon.Empty, error) {
-	tx, err := n.db.Begin(ctx)
+func (n *NotificationService) SendNotification(ctx context.Context, request *notificationv1.SendNotificationRequest) (*notificationv1.SendNotificationResponse, error) {
+	conn, err := n.db.Acquire(ctx)
 	if err != nil {
-		n.logger.Errorf("Error in n.db.Begin: %v", err)
-		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "could not start transaction: %v", err)
+		return nil, err
 	}
-	defer n.db.Rollback(ctx, tx)
+
+	tx, err := n.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer n.db.RollbackTx(ctx, tx)
 
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
 	query, args, _ := psql.Insert("notifications").
 		Columns("notification_id", "recipient_username", "sender_username", "timestamp", "notification_type").
-		Values(uuid.New(), request.Recipient, authenticatedUsername, time.Now(), request.NotificationType).
+		Values(uuid.New(), request.GetSender(), authenticatedUsername, time.Now(), request.NotificationType).
 		ToSql()
 
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
 		n.logger.Errorf("Error in tx.Exec: %v", err)
-		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
 	// Check if the recipient of the notification has any subscriptions
 	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
 		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
 		From("push_subscriptions s").
-		Where("s.username = ?", request.Recipient).
+		Where("s.username = ?", request.GetSender()).
 		ToSql()
 	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
 	if err != nil {
 		n.logger.Errorf("Error executing query: %v", err)
-		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error executing query: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error executing query: %v", err)
 	}
 	defer subscriptionRows.Close()
 
@@ -200,7 +207,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 
 		if err = subscriptionRows.Scan(&subscriptionID, &deviceType, &token, &endpoint, &expirationTime, &p256dh, &auth); err != nil {
 			n.logger.Errorf("Error in subscriptionRows.Scan: %v", err)
-			return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in subscriptionRows.Scan: %v", err)
+			return nil, status.Errorf(codes.Internal, "Error in subscriptionRows.Scan: %v", err)
 		}
 		// Send notification based on device type
 		switch deviceType.String {
@@ -208,26 +215,26 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *pb.
 			// Send notification to Expo
 			err = sendExpoNotification(ctx, request.NotificationType, token.String)
 			if err != nil {
-				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending Expo notification: %v", err)
+				return nil, status.Errorf(codes.Internal, "Error sending Expo notification: %v", err)
 			}
 		case "web":
 			// Send notification to web
 			err = sendWebNotification(ctx, request.NotificationType, endpoint.String, expirationTime, p256dh.String, auth.String)
 			if err != nil {
-				return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
+				return nil, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
 			}
 		default:
-			return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Unknown device type: %s", deviceType.String)
+			return nil, status.Errorf(codes.Internal, "Unknown device type: %s", deviceType.String)
 		}
 	}
 
 	// Commit transaction
-	if err = n.db.Commit(ctx, tx); err != nil {
+	if err = n.db.CommitTx(ctx, tx); err != nil {
 		n.logger.Errorf("Error in n.db.Commit: %v", err)
-		return &pbCommon.Empty{}, status.Errorf(codes.Internal, "Error in n.db.Commit: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error in n.db.Commit: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return nil, nil
 }
 
 func sendExpoNotification(ctx context.Context, notificationType string, token string) error {

@@ -1,12 +1,5 @@
 package schema
 
-type Notification struct {
-	NotificationID   string `json:"notificationId"`
-	Timestamp        string `json:"timestamp"`
-	NotificationType string `json:"notificationType"`
-	User             Author `json:"user"`
-}
-
 // ----------------- Request Schemas -----------------
 
 type CreatePushSubscriptionRequest struct {
@@ -16,10 +9,6 @@ type CreatePushSubscriptionRequest struct {
 	Type           string `json:"type"`
 	Token          string `json:"token"`
 	ExpirationTime string `json:"expirationTime"`
-}
-
-type GetNotificationsResponse struct {
-	Records []Notification `json:"records"`
 }
 
 // ----------------- Response Schemas -----------------
