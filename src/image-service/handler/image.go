@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	"image"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 
 	_ "golang.org/x/image/webp"
 
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"go.uber.org/zap"
 )
 
@@ -27,16 +27,16 @@ const (
 
 type imageService struct {
 	logger *zap.SugaredLogger
-	pb.UnimplementedImageServiceServer
+	imagev1.UnimplementedImageServiceServer
 }
 
-func NewImageServiceServer(logger *zap.SugaredLogger) pb.ImageServiceServer {
+func NewImageServiceServer(logger *zap.SugaredLogger) imagev1.ImageServiceServer {
 	return &imageService{
 		logger: logger,
 	}
 }
 
-func (s *imageService) UploadImage(ctx context.Context, request *pb.UploadImageRequest) (*pb.UploadImageResponse, error) {
+func (s *imageService) UploadImage(ctx context.Context, request *imagev1.UploadImageRequest) (*imagev1.UploadImageResponse, error) {
 	// Decode the base64 image into bytes
 	imageBytes, err := s.decodeBase64Image(request.GetImage())
 	if err != nil {
@@ -52,9 +52,9 @@ func (s *imageService) UploadImage(ctx context.Context, request *pb.UploadImageR
 	}
 
 	// Upload the image to the storage
-	filename := s.uploadImage(imageBytes, imageType, request.GetContextString())
+	filename := s.uploadImage(imageBytes, imageType, request.GetName())
 
-	response := &pb.UploadImageResponse{
+	response := &imagev1.UploadImageResponse{
 		Url:    filename,
 		Width:  int32(im.Bounds().Dx()),
 		Height: int32(im.Bounds().Dy()),
@@ -63,9 +63,9 @@ func (s *imageService) UploadImage(ctx context.Context, request *pb.UploadImageR
 	return response, nil
 }
 
-func (s *imageService) GetImage(ctx context.Context, request *pb.GetImageRequest) (*pb.Image, error) {
+func (s *imageService) GetImage(ctx context.Context, request *imagev1.GetImageRequest) (*imagev1.GetImageResponse, error) {
 	// Read the image from the file
-	filePath := filepath.Join(ImageDir, request.GetImageName())
+	filePath := filepath.Join(ImageDir, request.GetName())
 	imageBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		s.logger.Error("Failed to read image from file", zap.Error(err))
@@ -74,9 +74,9 @@ func (s *imageService) GetImage(ctx context.Context, request *pb.GetImageRequest
 
 	// Encode the image to base64
 	base64Image := encodeBase64Image(imageBytes)
-	return &pb.Image{
-		Base64Image: base64Image,
-		ImageType:   filepath.Ext(filePath)[1:],
+	return &imagev1.GetImageResponse{
+		Image: base64Image,
+		Type:  filepath.Ext(filePath)[1:],
 	}, nil
 }
 

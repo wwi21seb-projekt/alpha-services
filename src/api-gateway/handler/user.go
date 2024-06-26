@@ -59,7 +59,7 @@ func NewUserHandler(logger *zap.SugaredLogger, authService userv1.Authentication
 }
 
 func (uh *UserHandler) RegisterUser(c *gin.Context) {
-	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(dto.RegistrationRequest)
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*dto.RegistrationRequest)
 	ctx := c.Request.Context()
 
 	user, err := uh.authService.RegisterUser(ctx, &userv1.RegisterUserRequest{
