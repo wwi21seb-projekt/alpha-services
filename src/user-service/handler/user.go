@@ -65,28 +65,29 @@ func (us userService) GetUser(ctx context.Context, request *userv1.GetUserReques
 	}
 
 	// Select user data
-	selectCtx, selectSpan := us.tracer.Start(ctx, "SelectUserData")
-	query, args, _ := psql.Select().
+	queryBuilder := psql.Select().
 		Columns("u.nickname", "u.status", "u.picture_url", "u.picture_width", "u.picture_height").
 		Column("s1.subscription_id AS subscription_id").
-		Column("COUNT(s2.subscription_id) AS following_count").
-		Column("COUNT(s3.subscription_id) AS follower_count").
+		Column("(SELECT COUNT(DISTINCT s2.subscription_id) FROM subscriptions s2 WHERE s2.subscriber_name = u.username) AS following_count").
+		Column("(SELECT COUNT(DISTINCT s3.subscription_id) FROM subscriptions s3 WHERE s3.subscribee_name = u.username) AS follower_count").
 		From("users u").
 		LeftJoin("subscriptions s1 ON s1.subscribee_name = u.username AND s1.subscriber_name = ?", username).
-		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username").
-		LeftJoin("subscriptions s3 ON s3.subscribee_name = u.username").
-		Where("u.username = ?", request.GetUsername()).
-		GroupBy("u.nickname", "u.status", "u.picture_url", "s1.subscription_id", "u.picture_width", "u.picture_height").
-		ToSql()
+		Where("u.username = ?", request.GetUsername())
+
+	// Generate the SQL query from the query builder
+	query, args, err := queryBuilder.ToSql()
+	if err != nil {
+		us.logger.Errorf("Error building SQL query: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error building SQL query: %v", err)
+	}
 
 	var nickname, userStatus, pictureUrl, subscriptionID pgtype.Text
 	var followingCount, followerCount, pictureWidth, pictureHeight pgtype.Int4
 
-	if err = conn.QueryRow(selectCtx, query, args...).Scan(
+	if err = conn.QueryRow(ctx, query, args...).Scan(
 		&nickname, &userStatus, &pictureUrl, &pictureWidth,
 		&pictureHeight, &subscriptionID, &followingCount, &followerCount,
 	); err != nil {
-		selectSpan.End()
 		if errors.Is(err, pgx.ErrNoRows) {
 			us.logger.Infof("User not found")
 			return nil, status.Errorf(codes.NotFound, "User not found")
@@ -95,7 +96,6 @@ func (us userService) GetUser(ctx context.Context, request *userv1.GetUserReques
 		us.logger.Errorf("Error in conn.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in conn.QueryRow: %v", err)
 	}
-	selectSpan.End()
 
 	// Get post count by pagination response of ListPosts
 	postCount, err := us.getPostCount(ctx, request.GetUsername())

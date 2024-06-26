@@ -360,9 +360,10 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 
 		if code == codes.NotFound {
 			returnErr = goerrors.UserNotFound
+		} else {
+			uh.logger.Errorw("Error in upstream call uh.profileService.GetUser", zap.Error(err))
 		}
 
-		uh.logger.Errorf("Error in upstream call uh.profileService.GetUser: %v", err)
 		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
 			Error: returnErr,
 		})
