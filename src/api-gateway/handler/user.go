@@ -30,7 +30,6 @@ type UserHdlr interface {
 	RefreshToken(c *gin.Context)       // POST /users/refresh
 	ActivateUser(c *gin.Context)       // POST /users/:username/activate
 	ResendToken(c *gin.Context)        // DELETE /users/:username/activate
-	GetUserFeed(c *gin.Context)        // GET /users/:username/feed
 	GetUser(c *gin.Context)            // GET /users/:username
 	CreateSubscription(c *gin.Context) // POST /subscriptions
 	DeleteSubscription(c *gin.Context) // DELETE /subscriptions/:subscriptionId
@@ -60,7 +59,7 @@ func NewUserHandler(logger *zap.SugaredLogger, authService userv1.Authentication
 }
 
 func (uh *UserHandler) RegisterUser(c *gin.Context) {
-	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.RegistrationRequest)
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(dto.RegistrationRequest)
 	ctx := c.Request.Context()
 
 	user, err := uh.authService.RegisterUser(ctx, &userv1.RegisterUserRequest{
@@ -93,7 +92,14 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(201, user)
+	registrationDTO := dto.RegistrationResponse{
+		Username: user.GetUsername(),
+		Nickname: user.GetNickname(),
+		Email:    user.GetEmail(),
+		Picture:  dto.TransformProtoPicToDTO(user.GetPicture()),
+	}
+
+	c.JSON(201, registrationDTO)
 }
 
 func (uh *UserHandler) SearchUsers(c *gin.Context) {
@@ -193,7 +199,7 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 }
 
 func (uh *UserHandler) LoginUser(c *gin.Context) {
-	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*schema.LoginRequest)
+	req := c.MustGet(middleware.SanitizedPayloadKey.String()).(*dto.LoginRequest)
 	ctx := c.Request.Context()
 
 	_, err := uh.authService.LoginUser(ctx, &userv1.LoginUserRequest{
@@ -337,10 +343,6 @@ func (uh *UserHandler) ResendToken(c *gin.Context) {
 	}
 
 	c.JSON(204, nil)
-}
-
-func (uh *UserHandler) GetUserFeed(c *gin.Context) {
-	// to-do
 }
 
 func (uh *UserHandler) GetUser(c *gin.Context) {

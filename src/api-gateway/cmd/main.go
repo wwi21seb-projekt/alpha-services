@@ -150,8 +150,8 @@ func setupRoutes(r *gin.RouterGroup, m *middleware.Middleware, ch handler.ChatHd
 	r.GET("/images", ih.GetImage)
 
 	// User routes
-	r.POST("/users", m.ValidateAndSanitizeStruct(schema.RegistrationRequest{}), uh.RegisterUser)
-	r.POST("/users/login", m.ValidateAndSanitizeStruct(schema.LoginRequest{}), uh.LoginUser)
+	r.POST("/users", m.ValidateAndSanitizeStruct(dto.RegistrationRequest{}), uh.RegisterUser)
+	r.POST("/users/login", m.ValidateAndSanitizeStruct(dto.LoginRequest{}), uh.LoginUser)
 	r.POST("users/refresh", m.ValidateAndSanitizeStruct(schema.RefreshTokenRequest{}), uh.RefreshToken)
 	r.POST("/users/:username/activate", m.ValidateAndSanitizeStruct(schema.ActivationRequest{}), uh.ActivateUser)
 	r.DELETE("/users/:username/activate", uh.ResendToken)

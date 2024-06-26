@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	"os"
 	"time"
 
@@ -31,7 +32,7 @@ type AlphaClaims struct {
 }
 
 type JWTManager interface {
-	Generate(username string) (*schema.TokenPairResponse, error)
+	Generate(username string) (*dto.TokenPairResponse, error)
 	Verify(token string) (string, error)
 	Refresh(refreshToken string) (*schema.TokenPairResponse, error)
 }
@@ -58,7 +59,7 @@ func NewJWTManager(logger *zap.SugaredLogger) JWTManager {
 	}
 }
 
-func (j *jwtManager) Generate(username string) (*schema.TokenPairResponse, error) {
+func (j *jwtManager) Generate(username string) (*dto.TokenPairResponse, error) {
 	// Generate the JWT and refresh token
 	token, err := generateJWT(username, false, j.privateKey)
 	if err != nil {
@@ -70,7 +71,7 @@ func (j *jwtManager) Generate(username string) (*schema.TokenPairResponse, error
 		return nil, err
 	}
 
-	return &schema.TokenPairResponse{
+	return &dto.TokenPairResponse{
 		Token:        token,
 		RefreshToken: refreshToken,
 	}, nil
