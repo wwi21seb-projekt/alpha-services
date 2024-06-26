@@ -62,6 +62,7 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 		queryBuilder = queryBuilder.Where(sq.Eq{"p.post_id": req.GetPostIds()})
 	}
 
+	var authenticatedUsername string
 	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_USER {
 		if req.GetUsername() == "" {
 			return nil, status.Error(codes.InvalidArgument, "username cannot be empty")
@@ -91,7 +92,7 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_PERSONAL {
-		authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+		authenticatedUsername = metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 		newCTX := metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
 		subCtx, subSpan := ps.tracer.Start(newCTX, "ListSubscriptions")
@@ -169,14 +170,9 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 		}
 	}
 
-	posts, authorMap, repostMap, err := ps.retrievePosts(ctx, conn, dataQueryBuilder)
+	protoPosts, err := ps.retrievePosts(ctx, conn, dataQueryBuilder, authenticatedUsername)
 	if err != nil {
 		return nil, err
-	}
-
-	protoPosts := make([]*postv1.Post, 0, len(posts))
-	for _, post := range posts {
-		protoPosts = append(protoPosts, post.ToProto(authorMap, repostMap))
 	}
 
 	protoPagination := &commonv1.PaginationResponse{
@@ -242,11 +238,11 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 	var repost *postv1.Post
 	if request.GetRepostedPostId() != "" {
 		queryBuilder := basePostQuery.Columns("p.*").Where(sq.Eq{"p.post_id": request.GetRepostedPostId()})
-		posts, authorMap, repostMap, err := ps.retrievePosts(ctx, conn, queryBuilder)
+		posts, err := ps.retrievePosts(ctx, conn, queryBuilder, authenticatedUsername)
 		if err != nil {
 			return nil, err
 		}
-		repost = posts[0].ToProto(authorMap, repostMap)
+		repost = posts[0]
 	}
 
 	// Upload the image to image-service
@@ -361,11 +357,11 @@ func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostReq
 
 // ----------------- Helper Functions -----------------
 
-func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, query sq.SelectBuilder) ([]schema.Post, map[string]*userv1.User, map[string]*postv1.Post, error) {
+func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, query sq.SelectBuilder, authenticatedUsername string) ([]*postv1.Post, error) {
 	queryString, args, err := query.ToSql()
 	if err != nil {
 		ps.logger.Errorw("Error building SQL query", "error", err)
-		return nil, nil, nil, status.Error(codes.Internal, "Failed to build query")
+		return nil, status.Error(codes.Internal, "Failed to build query")
 	}
 
 	ps.logger.Debugw("Querying data", "query", queryString, "args", args)
@@ -373,26 +369,41 @@ func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, qu
 	rows, err := conn.Query(ctx, queryString, args...)
 	if err != nil {
 		ps.logger.Errorw("Error querying data", "error", err)
-		return nil, nil, nil, status.Error(codes.Internal, "Failed to query data")
+		return nil, status.Error(codes.Internal, "Failed to query data")
 	}
 
 	posts, err := pgx.CollectRows(rows, pgx.RowToStructByName[schema.Post])
 	if err != nil {
 		ps.logger.Errorw("Failed to scan rows", "error", err)
-		return nil, nil, nil, status.Error(codes.Internal, "Failed to scan rows")
+		return nil, status.Error(codes.Internal, "Failed to scan rows")
 	}
 
 	authorMap, err := ps.getAuthorMap(ctx, posts)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	repostMap, err := ps.getRepostMap(ctx, conn, posts)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	return posts, authorMap, repostMap, nil
+	likesMap, err := ps.getLikesMap(ctx, conn, posts)
+	if err != nil {
+		return nil, err
+	}
+
+	likedMap, err := ps.getLikedMap(ctx, conn, posts, authenticatedUsername)
+	if err != nil {
+		return nil, err
+	}
+
+	protoPosts := make([]*postv1.Post, 0, len(posts))
+	for _, post := range posts {
+		protoPosts = append(protoPosts, post.ToProto(authorMap, repostMap, likesMap, likedMap))
+	}
+
+	return protoPosts, nil
 }
 
 func (ps *postService) getAuthorMap(ctx context.Context, posts []schema.Post) (map[string]*userv1.User, error) {
@@ -458,7 +469,7 @@ func (ps *postService) getRepostMap(ctx context.Context, conn *pgxpool.Conn, pos
 
 	repostMap := make(map[string]*postv1.Post)
 	for _, post := range reposts {
-		repostMap[post.PostID] = post.ToProto(authorMap, nil)
+		repostMap[post.PostID] = post.ToProto(authorMap, nil, nil, nil)
 	}
 
 	return repostMap, nil
@@ -484,4 +495,84 @@ func (ps *postService) insertHashtags(ctx context.Context, tx pgx.Tx, post *sche
 		}
 	}
 	return nil
+}
+
+func (ps *postService) getLikesMap(ctx context.Context, conn *pgxpool.Conn, posts []schema.Post) (map[string]uint32, error) {
+	postIDs := make([]string, 0, len(posts))
+	for _, post := range posts {
+		postIDs = append(postIDs, post.PostID)
+	}
+
+	if len(postIDs) == 0 {
+		return nil, nil
+	}
+
+	queryBuilder := psql.Select("post_id", "COUNT(*) AS likes").
+		From("likes").
+		Where(sq.Eq{"post_id": postIDs}).
+		GroupBy("post_id")
+
+	queryString, args, err := queryBuilder.ToSql()
+	if err != nil {
+		ps.logger.Errorw("Error building query", "error", err)
+		return nil, status.Error(codes.Internal, "failed to build query")
+	}
+
+	rows, err := conn.Query(ctx, queryString, args...)
+	if err != nil {
+		ps.logger.Errorw("Error querying data", "error", err)
+		return nil, status.Error(codes.Internal, "failed to query data")
+	}
+
+	likesMap := make(map[string]uint32)
+	for rows.Next() {
+		var postID string
+		var likes uint32
+		if err := rows.Scan(&postID, &likes); err != nil {
+			ps.logger.Errorw("Error scanning rows", "error", err)
+			return nil, status.Error(codes.Internal, "failed to scan rows")
+		}
+		likesMap[postID] = likes
+	}
+
+	return likesMap, nil
+}
+
+func (ps *postService) getLikedMap(ctx context.Context, conn *pgxpool.Conn, posts []schema.Post, authenticatedUsername string) (map[string]bool, error) {
+	postIDs := make([]string, 0, len(posts))
+	for _, post := range posts {
+		postIDs = append(postIDs, post.PostID)
+	}
+
+	if len(postIDs) == 0 {
+		return nil, nil
+	}
+
+	queryBuilder := psql.Select("post_id").
+		From("likes").
+		Where(sq.Eq{"post_id": postIDs, "username": authenticatedUsername})
+
+	queryString, args, err := queryBuilder.ToSql()
+	if err != nil {
+		ps.logger.Errorw("Error building query", "error", err)
+		return nil, status.Error(codes.Internal, "failed to build query")
+	}
+
+	rows, err := conn.Query(ctx, queryString, args...)
+	if err != nil {
+		ps.logger.Errorw("Error querying data", "error", err)
+		return nil, status.Error(codes.Internal, "failed to query data")
+	}
+
+	likedMap := make(map[string]bool)
+	for rows.Next() {
+		var postID string
+		if err := rows.Scan(&postID); err != nil {
+			ps.logger.Errorw("Error scanning rows", "error", err)
+			return nil, nil
+		}
+		likedMap[postID] = true
+	}
+
+	return likedMap, nil
 }

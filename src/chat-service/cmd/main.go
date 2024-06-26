@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	healthv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/health/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+	"github.com/wwi21seb-projekt/alpha-shared/health"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/chat-service/handler"
@@ -11,9 +15,6 @@ import (
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
-	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	userv1 "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -37,7 +38,7 @@ func main() {
 
 	// Initialize the database
 	ctx := context.Background()
-	database, err := db.NewDB(ctx, cfg.DatabaseConfig)
+	database, err := db.NewDB(ctx, cfg.DatabaseConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to the database", zap.Error(err))
 	}
@@ -69,10 +70,11 @@ func main() {
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
 	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
+	healthSvc := health.NewHealthServer(logger)
+	healthv1.RegisterHealthServiceServer(grpcServer, healthSvc) // Register health service
 
 	// Register services
-	pb.RegisterChatServiceServer(grpcServer, handler.NewChatService(logger, database, userClient))
+	chatv1.RegisterChatServiceServer(grpcServer, handler.NewChatService(logger, database, userClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))
