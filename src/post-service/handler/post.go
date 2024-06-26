@@ -144,8 +144,9 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 		OrderBy("p.created_at DESC").
 		Limit(uint64(req.Pagination.GetPageSize()))
 
+	var offset int
 	if req.Pagination.GetPageToken() != "" {
-		offset, err := strconv.Atoi(req.Pagination.GetPageToken())
+		offset, err = strconv.Atoi(req.Pagination.GetPageToken())
 		if err != nil {
 			dataQueryBuilder = dataQueryBuilder.Where("p.created_at < (SELECT created_at FROM posts WHERE post_id = ?)", req.Pagination.GetPageToken())
 		} else {
@@ -183,7 +184,12 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	if req.FeedType != postv1.FeedType_FEED_TYPE_USER || govalidator.IsUUIDv4(req.Pagination.GetPageToken()) {
-		protoPagination.NextPageToken = protoPosts[len(protoPosts)-1].PostId
+		// If the protoPosts contain the last post, then the next page token is the last post's ID
+		if len(protoPosts) > 0 {
+			protoPagination.NextPageToken = protoPosts[len(protoPosts)-1].PostId
+		} else {
+			protoPagination.NextPageToken = fmt.Sprintf("%d", offset)
+		}
 	} else {
 		offset, _ := strconv.Atoi(req.Pagination.GetPageToken())
 		protoPagination.NextPageToken = fmt.Sprintf("%d", offset+len(protoPosts))

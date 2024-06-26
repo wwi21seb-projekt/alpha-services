@@ -252,7 +252,8 @@ func (ph *PostHandler) QueryPosts(c *gin.Context) {
 
 	resp, err := ph.postService.ListPosts(ctx, req)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err)
+		ph.logger.Errorw("error in upstream call uh.postService.ListPosts", "error", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, goerrors.InternalServerError)
 		return
 	}
 
@@ -272,9 +273,11 @@ func (ph *PostHandler) QueryPosts(c *gin.Context) {
 
 func transformListPostsResponse(resp *postv1.ListPostsResponse) []dto.Post {
 	posts := make([]dto.Post, 0, len(resp.GetPosts()))
+	zap.L().Info("transforming posts")
 	for _, post := range resp.GetPosts() {
 		postDTO := dto.TransformProtoPostToDTO(post)
 		if postDTO != nil {
+			zap.L().Info("appending post")
 			posts = append(posts, *dto.TransformProtoPostToDTO(post))
 		}
 	}
@@ -299,7 +302,7 @@ func (ph *PostHandler) DeletePost(c *gin.Context) {
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.DeletePost: %v", err)
-		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
+		c.AbortWithStatusJSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
