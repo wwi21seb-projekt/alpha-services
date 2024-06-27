@@ -60,21 +60,30 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	// Make gRPC call
-	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &notificationv1.CreatePushSubscriptionRequest{
-		Type: func(s string) notificationv1.PushSubscriptionType {
-			if val, ok := notificationv1.PushSubscriptionType_value[s]; ok {
-				return notificationv1.PushSubscriptionType(val)
-			}
-			return notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_WEB // web is returned by defualt
-		}(req.Type),
-		Token:          req.Token,
-		Endpoint:       req.Endpoint,
-		ExpirationTime: req.ExpirationTime,
-		P256Dh:         req.P256Dh,
-		Auth:           req.Auth,
-	})
+	pushType := notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_WEB
+	if req.Type == "expo" {
+		pushType = notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_EXPO
+	}
 
+	// Initialisiere gRPC-Request
+	grpcReq := &notificationv1.CreatePushSubscriptionRequest{
+		Type:  pushType,
+		Token: req.Token,
+	}
+
+	// Fülle die Web-spezifischen Felder, falls der Typ "web" ist
+	if req.Type == "web" && req.Subscription != nil {
+		grpcReq.Endpoint = req.Subscription.Endpoint
+		grpcReq.ExpirationTime = ""
+		if req.Subscription.ExpirationTime != nil {
+			grpcReq.ExpirationTime = *req.Subscription.ExpirationTime
+		}
+		grpcReq.P256Dh = req.Subscription.Keys.P256Dh
+		grpcReq.Auth = req.Subscription.Keys.Auth
+	}
+
+	// Führe den gRPC-Call aus
+	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, grpcReq)
 	if err != nil {
 		returnErr := goerrors.InternalServerError
 		if status.Code(err) == codes.NotFound {

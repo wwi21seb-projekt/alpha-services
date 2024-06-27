@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
@@ -66,10 +67,19 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 		typeLower = "expo"
 	}
 
+	var expirationTime pgtype.Timestamptz
+	if request.ExpirationTime != "" {
+		err = expirationTime.Scan(request.ExpirationTime)
+		if err != nil {
+			p.logger.Errorf("Error in expirationTime.Scan: %v", err)
+			expirationTime = pgtype.Timestamptz{Valid: false}
+		}
+	}
+
 	p.logger.Info("Inserting subscription into database...")
 	query, args, _ := psql.Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
-		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
+		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, expirationTime, request.P256Dh, request.Auth).
 		ToSql()
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
