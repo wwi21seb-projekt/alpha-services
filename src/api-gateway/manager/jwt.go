@@ -26,7 +26,7 @@ const (
 )
 
 type AlphaClaims struct {
-	IsRefreshToken bool   `json:"irf"`
+	IsRefreshToken bool   `json:"refresh"` // wtf
 	Username       string `json:"username"`
 	jwt.RegisteredClaims
 }

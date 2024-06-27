@@ -133,7 +133,6 @@ func (ph *PostHandler) CreatePost(c *gin.Context) {
 	if rsp.GetRepost() != nil {
 		repost := rsp.GetRepost()
 		postDTO.Repost = &dto.Repost{
-			PostID: repost.GetPostId(),
 			Author: dto.User{
 				Username: repost.GetAuthor().GetUsername(),
 				Nickname: repost.GetAuthor().GetNickname(),

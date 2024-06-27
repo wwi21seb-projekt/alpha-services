@@ -43,7 +43,7 @@ type Post struct {
 }
 
 type Repost struct {
-	PostID       string    `json:"repostedPostId"` // 2024-02-01T16:18:48+01:00
+	//	PostID       string    `json:"repostedPostId"` // 2024-02-01T16:18:48+01:00
 	Author       User      `json:"author"`
 	CreationDate string    `json:"creationDate"`
 	Content      string    `json:"content"`
@@ -111,7 +111,7 @@ func TransformProtoRepostToDTO(repost *postv1.Post) *Repost {
 		return nil
 	}
 	repostDTO := &Repost{
-		PostID:       repost.GetPostId(),
+		//	PostID:       repost.GetPostId(),
 		Author:       TransformProtoUserToDTO(repost.GetAuthor()),
 		CreationDate: repost.GetCreationDate(),
 		Content:      repost.GetContent(),
