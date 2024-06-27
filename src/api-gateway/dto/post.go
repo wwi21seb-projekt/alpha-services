@@ -94,7 +94,7 @@ func TransformProtoPostToDTO(post *postv1.Post) *Post {
 
 	return &Post{
 		PostID:       post.GetPostId(),
-		Author:       *TransformProtoUserToDTO(post.GetAuthor()),
+		Author:       TransformProtoUserToDTO(post.GetAuthor()),
 		CreationDate: post.GetCreationDate(),
 		Content:      post.GetContent(),
 		Picture:      TransformProtoPicToDTO(post.GetPicture()),
@@ -110,12 +110,26 @@ func TransformProtoRepostToDTO(repost *postv1.Post) *Repost {
 	if repost == nil {
 		return nil
 	}
-	return &Repost{
+	repostDTO := &Repost{
 		PostID:       repost.GetPostId(),
-		Author:       *TransformProtoUserToDTO(repost.GetAuthor()),
+		Author:       TransformProtoUserToDTO(repost.GetAuthor()),
 		CreationDate: repost.GetCreationDate(),
 		Content:      repost.GetContent(),
-		Picture:      TransformProtoPicToDTO(repost.GetPicture()),
-		Location:     TransformProtoLocationToDTO(repost.GetLocation()),
+		Picture:      nil,
+		Location:     nil,
 	}
+
+	if repost.GetAuthor() != nil {
+		repostDTO.Author = TransformProtoUserToDTO(repost.GetAuthor())
+	}
+
+	if repost.GetPicture() != nil {
+		repostDTO.Picture = TransformProtoPicToDTO(repost.GetPicture())
+	}
+
+	if repost.GetLocation() != nil {
+		TransformProtoLocationToDTO(repost.GetLocation())
+	}
+
+	return repostDTO
 }

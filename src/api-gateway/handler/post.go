@@ -278,7 +278,7 @@ func transformListPostsResponse(resp *postv1.ListPostsResponse) []dto.Post {
 		postDTO := dto.TransformProtoPostToDTO(post)
 		if postDTO != nil {
 			zap.L().Info("appending post")
-			posts = append(posts, *dto.TransformProtoPostToDTO(post))
+			posts = append(posts, *postDTO)
 		}
 	}
 	return posts
