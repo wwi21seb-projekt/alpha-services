@@ -401,8 +401,8 @@ func (cs *chatService) PrepareChatStream(ctx context.Context, req *chatv1.Prepar
 	return &chatv1.PrepareChatStreamResponse{}, nil
 }
 
-// ChatStream implements serveralpha.ChatServiceServer.
-func (cs *chatService) ChatStream(stream chatv1.ChatService_ChatMessageServer) error {
+// ChatMessage implements serveralpha.ChatServiceServer.
+func (cs *chatService) ChatMessage(stream chatv1.ChatService_ChatMessageServer) error {
 	ctx := stream.Context()
 	cs.logger.Info("Received request for chat stream")
 

@@ -286,7 +286,12 @@ func transformListPostsResponse(resp *postv1.ListPostsResponse) []dto.Post {
 func (ph *PostHandler) DeletePost(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := ph.postService.DeletePost(ctx, &postv1.DeletePostRequest{PostId: c.Param("postId")})
+	postId := c.Param("postId")
+	if postId == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	}
+
+	_, err := ph.postService.DeletePost(ctx, &postv1.DeletePostRequest{PostId: postId})
 	if err != nil {
 		rpcStatus := status.Convert(err)
 		returnErr := goerrors.InternalServerError

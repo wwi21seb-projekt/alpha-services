@@ -145,7 +145,7 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	dataQueryBuilder := queryBuilder.
-		Columns("p.*").
+		Columns("DISTINCT p.*").
 		OrderBy("p.created_at DESC").
 		Limit(uint64(req.Pagination.GetPageSize()))
 
@@ -272,6 +272,10 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 		} else {
 			picture.Url = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadResponse.GetUrl())
 		}
+
+		post.PictureURL = &picture.Url
+		post.PictureWidth = &picture.Width
+		post.PictureHeight = &picture.Height
 	}
 
 	tx, err := ps.db.BeginTx(ctx, conn)
@@ -318,8 +322,18 @@ func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostReq
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
+	// Convert post ID to UUID
+	postID, err := uuid.Parse(req.GetPostId())
+	if err != nil {
+		ps.logger.Debugw("Invalid UUID format", "error", err)
+		return nil, status.Error(codes.InvalidArgument, "invalid post ID format")
+	}
+
 	// Get the post
-	posts, err := ps.ListPosts(ctx, &postv1.ListPostsRequest{PostIds: []string{req.GetPostId()}})
+	posts, err := ps.ListPosts(ctx, &postv1.ListPostsRequest{
+		PostIds:    []string{postID.String()},
+		Pagination: &commonv1.PaginationRequest{PageSize: 1},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -329,8 +343,7 @@ func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostReq
 	}
 
 	// Check if the authenticated user is the author of the post
-	post := posts.GetPosts()[0]
-	if post.Author.Username != authenticatedUsername {
+	if posts.GetPosts()[0].Author.Username != authenticatedUsername {
 		return nil, status.Error(codes.PermissionDenied, "user is not the author")
 	}
 
@@ -346,8 +359,8 @@ func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostReq
 	defer ps.db.RollbackTx(ctx, tx)
 
 	// Delete the post
-	queryString, args, _ := psql.Delete("posts").Where(sq.Eq{"post_id": req.GetPostId()}).ToSql()
-	if _, err := tx.Exec(ctx, queryString, args); err != nil {
+	queryString, args, _ := psql.Delete("posts").Where(sq.Eq{"post_id": postID}).ToSql()
+	if _, err = tx.Exec(ctx, queryString, args...); err != nil {
 		ps.logger.Errorw("Error in tx.Exec", "error", err)
 		return nil, status.Error(codes.Internal, "failed to delete post")
 	}
