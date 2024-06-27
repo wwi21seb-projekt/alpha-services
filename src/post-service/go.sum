@@ -7,8 +7,7 @@ github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyY
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/exaring/otelpgx v0.6.1 h1:oVm7H3obc7eXg0iXWk62wJTWprB2pHu6rYApHjqmCUs=
-github.com/exaring/otelpgx v0.6.1/go.mod h1:DuRveXIeRNz6VJrMTj2uCBFqiocMx4msCN1mIMmbZUI=
+github.com/exaring/otelpgx v0.6.2 h1:z1ayuDusPITNOhzvmx3nLpFax+tv7Hu7mdrjtgW3ZeA=
 github.com/exaring/otelpgx v0.6.2/go.mod h1:DuRveXIeRNz6VJrMTj2uCBFqiocMx4msCN1mIMmbZUI=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
@@ -47,14 +46,6 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240625143658-aee7a97c7b53 h1:rs+//GMMJd8FXQf2RbBZyA3Nns2zPHypfneep72L+30=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240625143658-aee7a97c7b53/go.mod h1:8agPrREk1bF2TZZUoarHavI4swecC1Kb7mFy1qNAg2U=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240625184501-b56acc879d59 h1:fUdgUdjlRUXRFVmz5y2QBwR9Ay/HKQaA1Icv/8xZY90=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240625184501-b56acc879d59/go.mod h1:8agPrREk1bF2TZZUoarHavI4swecC1Kb7mFy1qNAg2U=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626005254-b41234b3f955 h1:f8Yv9WkK5zVgBoGubiSQoU8U0kS09fQdXLmsOpSl3OU=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626005254-b41234b3f955/go.mod h1:8agPrREk1bF2TZZUoarHavI4swecC1Kb7mFy1qNAg2U=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc h1:3pLF3Tz3XYuX4uL8MZrLDKIwmffRp6WUsYZETntwsPU=
-github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc/go.mod h1:8agPrREk1bF2TZZUoarHavI4swecC1Kb7mFy1qNAg2U=
 github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626205222-37eede7a86b6 h1:gcxho6Ud4lPXBYoFCC4hkqhtVkKWykUNKOWCxXno9Xs=
 github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626205222-37eede7a86b6/go.mod h1:LQPx6fv9UB9FI1bix4McEbNivCW2X9zqLzSODi9yNTo=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.52.0 h1:vS1Ao/R55RNV4O7TA2Qopok8yN+X0LIP6RVWLFkprck=

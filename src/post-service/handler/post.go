@@ -368,8 +368,6 @@ func (ps *postService) retrievePosts(ctx context.Context, conn *pgxpool.Conn, qu
 		return nil, status.Error(codes.Internal, "Failed to build query")
 	}
 
-	ps.logger.Debugw("Querying data", "query", queryString, "args", args)
-
 	rows, err := conn.Query(ctx, queryString, args...)
 	if err != nil {
 		ps.logger.Errorw("Error querying data", "error", err)
@@ -470,10 +468,15 @@ func (ps *postService) getRepostMap(ctx context.Context, conn *pgxpool.Conn, pos
 		ps.logger.Errorw("Error scanning rows", "error", err)
 		return nil, status.Error(codes.Internal, "failed to scan rows")
 	}
+	ps.logger.Infow("Reposts", "reposts", reposts)
 
-	authorMap, err := ps.getAuthorMap(ctx, []schema.Post{reposts[0]})
+	authorMap, err := ps.getAuthorMap(ctx, reposts)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(authorMap) == 0 {
+		ps.logger.Warnw("No authors found for reposts", "repostIDs", repostIDs)
 	}
 
 	repostMap := make(map[string]*postv1.Post)

@@ -1,6 +1,9 @@
 package dto
 
-import userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+import (
+	"fmt"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+)
 
 // ======================================== //
 // =========== Shared DTOs ================ //
@@ -49,11 +52,12 @@ type TokenPairResponse struct {
 // ========== Helper Functions ============ //
 // ======================================== //
 
-func TransformProtoUserToDTO(user *userv1.User) *User {
+func TransformProtoUserToDTO(user *userv1.User) User {
 	if user == nil {
-		return nil
+		fmt.Printf("User is nil")
+		return User{}
 	}
-	return &User{
+	return User{
 		Username: user.GetUsername(),
 		Nickname: user.GetNickname(),
 		Picture:  TransformProtoPicToDTO(user.Picture),

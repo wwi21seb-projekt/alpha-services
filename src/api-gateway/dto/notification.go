@@ -20,7 +20,7 @@ func TransformNotificationProtoToDTO(proto *notificationv1.ListNotificationsResp
 		notificationDTO := Notification{
 			NotificationId: notification.GetNotificationId(),
 			Timestamp:      notification.GetTimestamp(),
-			User:           *TransformProtoUserToDTO(notification.GetUser()),
+			User:           TransformProtoUserToDTO(notification.GetUser()),
 		}
 
 		switch notification.GetNotificationType() {

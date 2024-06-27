@@ -9,7 +9,7 @@ import postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1
 type Comment struct {
 	CommentID    string `json:"commentId"`
 	Content      string `json:"content"`
-	Author       *User  `json:"author"`
+	Author       User   `json:"author"`
 	CreationDate string `json:"creationDate"`
 }
 
