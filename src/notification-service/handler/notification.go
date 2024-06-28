@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/dto"
+	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/schema"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"net/http"
 	"os"
 	"time"
@@ -15,8 +19,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,6 +36,7 @@ var vapidPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 type NotificationService struct {
 	logger             *zap.SugaredLogger
 	db                 *db.DB
+	tracer             trace.Tracer
 	profileClient      userv1.UserServiceClient
 	subscriptionClient userv1.SubscriptionServiceClient
 	notificationv1.UnimplementedNotificationServiceServer
@@ -42,28 +46,27 @@ func NewNotificationServiceServer(logger *zap.SugaredLogger, db *db.DB, profileC
 	return &NotificationService{
 		logger:             logger,
 		db:                 db,
+		tracer:             otel.GetTracerProvider().Tracer("notification-service"),
 		profileClient:      profileClient,
 		subscriptionClient: subscriptionClient,
 	}
 }
 
 func (n *NotificationService) ListNotifications(ctx context.Context, req *notificationv1.ListNotificationsRequest) (*notificationv1.ListNotificationsResponse, error) {
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	dataQuery, dataArgs, _ := psql.
+		Select("*").
+		From("notifications").
+		Where("recipient_username = ?", authenticatedUsername).
+		ToSql()
+
 	conn, err := n.db.Acquire(ctx)
 	if err != nil {
-		n.logger.Errorf("Error in n.db.Pool.Acquire: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
+		return nil, err
 	}
 	defer conn.Release()
 
-	// Fetch the username of the authenticated user
-	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-	dataQuery, dataArgs, _ := psql.Select().
-		Columns("n.notification_id", "n.timestamp", "n.notification_type", "n.sender_username").
-		From("notifications n").
-		Where("n.recipient_username = ?", authenticatedUsername).
-		ToSql()
-
-	n.logger.Info("Executing single query for notification data")
 	rows, err := conn.Query(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		n.logger.Errorf("Error executing query: %v", err)
@@ -71,59 +74,49 @@ func (n *NotificationService) ListNotifications(ctx context.Context, req *notifi
 	}
 	defer rows.Close()
 
-	var usernames []string
-
-	notificationsResponse := &notificationv1.ListNotificationsResponse{}
-	for rows.Next() {
-		var username, notificationId, notificationType pgtype.Text
-		var timestamp pgtype.Timestamptz
-
-		if err = rows.Scan(&notificationId, &timestamp, &notificationType, &username); err != nil {
-			n.logger.Errorf("Error in rows.Scan: %v", err)
-			return nil, status.Errorf(codes.Internal, "Error in rows.Scan: %v", err)
-		}
-		usernames = append(usernames, username.String)
-
-		var notificationTypeResponse notificationv1.NotificationType
-		if notificationType.String == "follow" {
-			notificationTypeResponse = notificationv1.NotificationType_NOTIFICATION_TYPE_FOLLOW
-		} else {
-			notificationTypeResponse = notificationv1.NotificationType_NOTIFICATION_TYPE_REPOST
-		}
-		user := &userv1.User{
-			Username: username.String,
-		}
-
-		notification := &notificationv1.Notification{
-			NotificationId:   notificationId.String,
-			Timestamp:        timestamp.Time.Format(time.RFC3339),
-			NotificationType: notificationTypeResponse,
-			User:             user,
-		}
-
-		notificationsResponse.Notifications = append(notificationsResponse.Notifications, notification)
-	}
-
-	userdata, err := n.profileClient.ListUsers(ctx, &userv1.ListUsersRequest{Usernames: usernames})
+	notifications, err := pgx.CollectRows(rows, pgx.RowToStructByName[schema.Notification])
 	if err != nil {
-		n.logger.Errorf("Error in n.profileClient.ListUsers: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to get users: %v", err)
+		n.logger.Errorf("Error collecting rows: %v", err)
+		return nil, status.Error(codes.Internal, "Error collecting rows")
 	}
 
-	userMap := make(map[string]*userv1.User)
-	for _, user := range userdata.Users {
-		userMap[user.Username] = &userv1.User{
-			Nickname: user.Nickname,
-			Picture:  user.Picture,
-		}
+	// Get the sender map
+	senderMap, err := n.getSenderMap(ctx, notifications)
+	if err != nil {
+		n.logger.Errorf("Error getting sender map: %v", err)
+		return nil, status.Error(codes.Internal, "Error getting sender map")
 	}
-	for _, notfication := range notificationsResponse.Notifications {
 
-		notfication.User.Nickname = userMap[notfication.User.Username].Nickname
-		notfication.User.Picture = userMap[notfication.User.Username].Picture
-
+	notificationsProto := make([]*notificationv1.Notification, 0, len(notifications))
+	for _, notification := range notifications {
+		notificationsProto = append(notificationsProto, notification.ToProto(senderMap))
 	}
-	return notificationsResponse, nil
+
+	resp := &notificationv1.ListNotificationsResponse{Notifications: notificationsProto}
+	return resp, nil
+}
+
+func (n *NotificationService) getSenderMap(ctx context.Context, notifications []schema.Notification) (map[string]*userv1.User, error) {
+	senderNames := make([]string, 0, len(notifications))
+	for _, notification := range notifications {
+		senderNames = append(senderNames, notification.SenderUsername)
+	}
+
+	authorsCTX, authorsSpan := n.tracer.Start(ctx, "Fetch user data of senders")
+	authorProfiles, err := n.profileClient.ListUsers(authorsCTX, &userv1.ListUsersRequest{Usernames: senderNames})
+	if err != nil {
+		authorsSpan.End()
+		n.logger.Errorw("error getting user data", "error", err)
+		return nil, status.Error(codes.Internal, "Error getting user data")
+	}
+	authorsSpan.End()
+
+	senderMap := make(map[string]*userv1.User)
+	for _, profile := range authorProfiles.GetUsers() {
+		senderMap[profile.GetUsername()] = profile
+	}
+
+	return senderMap, nil
 }
 
 func (n *NotificationService) DeleteNotification(ctx context.Context, request *notificationv1.DeleteNotificationRequest) (*notificationv1.DeleteNotificationResponse, error) {
@@ -163,6 +156,22 @@ func (n *NotificationService) DeleteNotification(ctx context.Context, request *n
 }
 
 func (n *NotificationService) SendNotification(ctx context.Context, request *notificationv1.SendNotificationRequest) (*notificationv1.SendNotificationResponse, error) {
+	// Fetch the username of the authenticated user (who is sending the notification)
+	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	notification := schema.Notification{
+		NotificationID:    uuid.New(),
+		RecipientUsername: request.GetSender(),
+		NotificationType:  request.NotificationType,
+		SenderUsername:    authenticatedUsername,
+		Timestamp:         time.Now(),
+	}
+
+	query, args, _ := psql.Insert("notifications").
+		Columns("notification_id", "recipient_username", "sender_username", "timestamp", "notification_type").
+		Values(notification.NotificationID, notification.RecipientUsername, notification.SenderUsername, notification.Timestamp, notification.NotificationType).
+		ToSql()
+
 	conn, err := n.db.Acquire(ctx)
 	if err != nil {
 		return nil, err
@@ -174,25 +183,18 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *not
 	}
 	defer n.db.RollbackTx(ctx, tx)
 
-	// Fetch the username of the authenticated user
-	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
-	query, args, _ := psql.Insert("notifications").
-		Columns("notification_id", "recipient_username", "sender_username", "timestamp", "notification_type").
-		Values(uuid.New(), request.GetSender(), authenticatedUsername, time.Now(), request.NotificationType).
-		ToSql()
-
 	if _, err = tx.Exec(ctx, query, args...); err != nil {
 		n.logger.Errorf("Error in tx.Exec: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in tx.Exec: %v", err)
 	}
 
 	// Check if the recipient of the notification has any subscriptions
-	subscriptionsQuery, subscriptionsArgs, _ := psql.Select().
-		Columns("s.subscription_id", "s.type", "s.token", "s.endpoint", "s.expiration_time", "s.p256dh", "s.auth").
-		From("push_subscriptions s").
-		Where("s.username = ?", request.GetSender()).
+	subscriptionsQuery, subscriptionsArgs, _ := psql.
+		Select("*").
+		From("push_subscriptions").
+		Where("username = ?", notification.RecipientUsername).
 		ToSql()
+
 	subscriptionRows, err := tx.Query(ctx, subscriptionsQuery, subscriptionsArgs...)
 	if err != nil {
 		n.logger.Errorf("Error executing query: %v", err)
@@ -200,32 +202,31 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *not
 	}
 	defer subscriptionRows.Close()
 
-	// Iterate over the subscription rows
-	for subscriptionRows.Next() {
-		var subscriptionID, deviceType, token, endpoint, p256dh, auth pgtype.Text
-		var expirationTime pgtype.Timestamptz
+	subscriptions, err := pgx.CollectRows(subscriptionRows, pgx.RowToStructByName[schema.PushSubscription])
+	if err != nil {
+		n.logger.Errorw("Error collecting push subscription rows", "error", err)
+		return nil, status.Error(codes.Internal, "Error collecting push subscription rows")
+	}
 
-		if err = subscriptionRows.Scan(&subscriptionID, &deviceType, &token, &endpoint, &expirationTime, &p256dh, &auth); err != nil {
-			n.logger.Errorf("Error in subscriptionRows.Scan: %v", err)
-			return nil, status.Errorf(codes.Internal, "Error in subscriptionRows.Scan: %v", err)
-		}
+	for _, subscription := range subscriptions {
 		// Send notification based on device type
-		switch deviceType.String {
+		switch subscription.Type {
 		case "expo":
 			// Send notification to Expo
-			err = sendExpoNotification(ctx, request.NotificationType, token.String)
+			err = sendExpoNotification(ctx, request.NotificationType, *subscription.Token)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "Error sending Expo notification: %v", err)
 			}
 		case "web":
 			// Send notification to web
-			err = n.sendWebNotification(ctx, request.NotificationType, endpoint.String, expirationTime, p256dh.String, auth.String)
+			err = n.sendWebNotification(ctx, &notification, &subscription)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
 			}
 		default:
-			return nil, status.Errorf(codes.Internal, "Unknown device type: %s", deviceType.String)
+			return nil, status.Errorf(codes.Internal, "Unknown device type: %s", subscription.Type)
 		}
+
 	}
 
 	// Commit transaction
@@ -272,50 +273,74 @@ func sendExpoNotification(ctx context.Context, notificationType string, token st
 	return nil
 }
 
-func (n *NotificationService) sendWebNotification(ctx context.Context, notificationType string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
+func (n *NotificationService) sendWebNotification(ctx context.Context, notification *schema.Notification, pushSubscription *schema.PushSubscription) error {
 	// Check if expiration time is valid and if it is in the past
-	if expirationTime.Valid && expirationTime.Time.Before(time.Now()) {
+	if pushSubscription.ExpirationTime != nil && pushSubscription.ExpirationTime.Before(time.Now()) {
+		n.logger.Errorw("subscription expired", "expirationTime", pushSubscription.ExpirationTime)
 		return status.Errorf(codes.InvalidArgument, "subscription expired")
 	}
 
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
-	var title, body string
-
-	switch notificationType {
-	case "follow":
-		title = "New Follower!"
-		body = fmt.Sprintf("%s started following you", authenticatedUsername)
-	case "repost":
-		title = "New Repost!"
-		body = fmt.Sprintf("%s reposted your post", authenticatedUsername)
-	}
-
-	notificationPayload := map[string]string{
-		"title": title,
-		"body":  body,
-	}
-	notificationPayloadBytes, err := json.Marshal(notificationPayload)
+	// Fetch User
+	users, err := n.profileClient.ListUsers(ctx, &userv1.ListUsersRequest{
+		Usernames: []string{authenticatedUsername},
+	})
 	if err != nil {
+		n.logger.Errorw("error getting user", "error", err)
+		return status.Errorf(codes.Internal, "failed to get user: %v", err)
+	}
+
+	if len(users.GetUsers()) == 0 {
+		return status.Errorf(codes.NotFound, "user not found")
+	}
+
+	user := users.GetUsers()[0]
+
+	notificationDTO := dto.Notification{
+		NotificationType: notification.NotificationType,
+		NotificationID:   notification.NotificationID.String(),
+		User: dto.User{
+			Username: user.GetUsername(),
+			Nickname: user.GetNickname(),
+		},
+	}
+
+	if user.GetPicture() != nil {
+		notificationDTO.User.Picture = &dto.Picture{
+			Url:    user.GetPicture().GetUrl(),
+			Width:  user.GetPicture().GetWidth(),
+			Height: user.GetPicture().GetHeight(),
+		}
+	}
+
+	notificationPayloadBytes, err := json.Marshal(notificationDTO)
+	if err != nil {
+		n.logger.Errorw("failed to marshal notification payload", "error", err)
 		return status.Errorf(codes.Internal, "failed to marshal notification payload: %v", err)
 	}
 
 	sub := &webpush.Subscription{
-		Endpoint: endpoint,
+		Endpoint: *pushSubscription.Endpoint,
 		Keys: webpush.Keys{
-			P256dh: p256dh,
-			Auth:   auth,
+			P256dh: *pushSubscription.P256dh,
+			Auth:   *pushSubscription.Auth,
 		},
 	}
 
-	resp, err := webpush.SendNotification(notificationPayloadBytes, sub, &webpush.Options{
+	sendCTX, sendSpan := n.tracer.Start(ctx, "Send Web Notification")
+	n.logger.Debugw("sending web notification", "notification", notificationDTO, "subscription", sub, "vapidPublicKey", vapidPublicKey)
+	resp, err := webpush.SendNotificationWithContext(sendCTX, notificationPayloadBytes, sub, &webpush.Options{
 		TTL:             300,
 		VAPIDPublicKey:  vapidPublicKey,
 		VAPIDPrivateKey: vapidPrivateKey,
 	})
 	if err != nil {
+		sendSpan.End()
+		n.logger.Errorw("failed to send notification", "error", err)
 		return status.Errorf(codes.Internal, "failed to send notification: %v", err)
 	}
+	sendSpan.End()
 	defer resp.Body.Close()
 
 	return nil

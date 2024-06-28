@@ -3,7 +3,7 @@ package handler
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"os"
+	"time"
 )
 
 type pushSubscriptionService struct {
@@ -40,18 +41,6 @@ func (p *pushSubscriptionService) GetPublicKey(context.Context, *notificationv1.
 }
 
 func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, request *notificationv1.CreatePushSubscriptionRequest) (*notificationv1.CreatePushSubscriptionResponse, error) {
-	conn, err := p.db.Acquire(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	tx, err := p.db.BeginTx(ctx, conn)
-	if err != nil {
-		return nil, err
-	}
-	defer p.db.RollbackTx(ctx, tx)
-
-	subscriptionId := uuid.New()
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
@@ -67,20 +56,59 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 		typeLower = "expo"
 	}
 
-	var expirationTime pgtype.Timestamptz
-	if request.ExpirationTime != "" {
-		err = expirationTime.Scan(request.ExpirationTime)
-		if err != nil {
-			p.logger.Errorf("Error in expirationTime.Scan: %v", err)
-			expirationTime = pgtype.Timestamptz{Valid: false}
-		}
+	pushSubscription := &schema.PushSubscription{
+		SubscriptionID: uuid.New(),
+		Username:       authenticatedUsername,
+		Type:           typeLower,
+		Token:          nil,
+		Endpoint:       nil,
+		ExpirationTime: nil,
+		P256dh:         nil,
+		Auth:           nil,
 	}
 
-	p.logger.Info("Inserting subscription into database...")
-	query, args, _ := psql.Insert("push_subscriptions").
+	if request.Token != "" {
+		pushSubscription.Token = &request.Token
+	}
+
+	if request.Endpoint != "" {
+		pushSubscription.Endpoint = &request.Endpoint
+	}
+
+	if request.P256Dh != "" {
+		pushSubscription.P256dh = &request.P256Dh
+	}
+
+	if request.Auth != "" {
+		pushSubscription.Auth = &request.Auth
+	}
+
+	if request.ExpirationTime != "" {
+		expirationTime, err := time.Parse(time.RFC3339, request.ExpirationTime)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid expiration time: %v", err)
+		}
+		pushSubscription.ExpirationTime = &expirationTime
+	}
+
+	query, args, _ := psql.
+		Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
-		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, expirationTime, request.P256Dh, request.Auth).
+		Values(pushSubscription.SubscriptionID, pushSubscription.Username, pushSubscription.Type,
+			&pushSubscription.Endpoint, &pushSubscription.ExpirationTime, &pushSubscription.P256dh, &pushSubscription.Auth).
 		ToSql()
+
+	conn, err := p.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := p.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer p.db.RollbackTx(ctx, tx)
+
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -92,6 +120,6 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	}
 
 	return &notificationv1.CreatePushSubscriptionResponse{
-		SubscriptionId: subscriptionId.String(),
+		SubscriptionId: pushSubscription.SubscriptionID.String(),
 	}, nil
 }
