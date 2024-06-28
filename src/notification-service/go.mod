@@ -3,14 +3,14 @@ module github.com/wwi21seb-projekt/alpha-services/src/notification-service
 go 1.22.3
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc
+	github.com/wwi21seb-projekt/alpha-shared v0.23.0
 	google.golang.org/grpc v1.64.0
 )
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cockroachdb/apd v1.1.0 // indirect
-	github.com/exaring/otelpgx v0.6.1 // indirect
+	github.com/exaring/otelpgx v0.6.2 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect

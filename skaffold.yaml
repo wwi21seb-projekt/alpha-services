@@ -55,6 +55,11 @@ portForward:
     namespace: default
     port: 5432
     localPort: 5432
+  - resourceType: service
+    resourceName: alpha-release-jaeger-query
+    namespace: default
+    port: 16686
+    localPort: 16686
 profiles:
   - name: dev
     activation:

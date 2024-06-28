@@ -4,7 +4,7 @@ go 1.22.3
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
-	github.com/wwi21seb-projekt/alpha-shared v0.22.1-0.20240626010400-b26c01a2f3cc
+	github.com/wwi21seb-projekt/alpha-shared v0.23.0
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	go.uber.org/zap v1.27.0
@@ -13,7 +13,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/exaring/otelpgx v0.6.1 // indirect
+	github.com/exaring/otelpgx v0.6.2 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect

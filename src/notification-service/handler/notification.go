@@ -219,7 +219,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *not
 			}
 		case "web":
 			// Send notification to web
-			err = sendWebNotification(ctx, request.NotificationType, endpoint.String, expirationTime, p256dh.String, auth.String)
+			err = n.sendWebNotification(ctx, request.NotificationType, endpoint.String, expirationTime, p256dh.String, auth.String)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "Error sending web notification: %v", err)
 			}
@@ -272,9 +272,9 @@ func sendExpoNotification(ctx context.Context, notificationType string, token st
 	return nil
 }
 
-func sendWebNotification(ctx context.Context, notificationType string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
-	// Check if expiration time is in the past
-	if expirationTime.Time.Before(time.Now()) {
+func (n *NotificationService) sendWebNotification(ctx context.Context, notificationType string, endpoint string, expirationTime pgtype.Timestamptz, p256dh string, auth string) error {
+	// Check if expiration time is valid and if it is in the past
+	if expirationTime.Valid && expirationTime.Time.Before(time.Now()) {
 		return status.Errorf(codes.InvalidArgument, "subscription expired")
 	}
 
