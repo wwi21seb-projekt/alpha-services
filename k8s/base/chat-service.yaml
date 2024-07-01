@@ -66,24 +66,3 @@ spec:
       name: grpc
       port: 50055
       targetPort: 50055
-    # metrics server
-    - protocol: TCP
-      name: metrics
-      port: 2112
-      targetPort: 2112
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: chat-service
-  labels:
-    team: team-alpha
-    release: alpha-kube-prometheus-stack
-spec:
-  selector:
-    matchLabels:
-      app: chat-service
-  endpoints:
-    - port: metrics
-      interval: 15s
-      path: /metrics

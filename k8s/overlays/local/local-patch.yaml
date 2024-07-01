@@ -7,8 +7,8 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -21,8 +21,8 @@ spec:
     spec:
       containers:
         - name: chat-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -35,8 +35,8 @@ spec:
     spec:
       containers:
         - name: user-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -49,8 +49,8 @@ spec:
     spec:
       containers:
         - name: post-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -63,8 +63,8 @@ spec:
     spec:
       containers:
         - name: mail-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -77,8 +77,8 @@ spec:
     spec:
       containers:
         - name: notification-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"
 ---
@@ -91,7 +91,7 @@ spec:
     spec:
       containers:
         - name: image-service
-          imagePullPolicy: Never
-        - env:
+          imagePullPolicy: IfNotPresent
+          env:
             - name: ENVIRONMENT
               value: "local"

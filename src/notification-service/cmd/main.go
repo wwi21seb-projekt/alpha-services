@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
@@ -10,9 +12,6 @@ import (
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 
 	"go.uber.org/zap"
@@ -37,7 +36,7 @@ func main() {
 
 	// Initialize the database
 	ctx := context.Background()
-	database, err := db.NewDB(ctx, cfg.DatabaseConfig)
+	database, err := db.NewDB(ctx, cfg.DatabaseConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to the database", zap.Error(err))
 	}
@@ -63,18 +62,15 @@ func main() {
 	}
 
 	// Create client stubs
-	userProfileClient := pbUser.NewUserServiceClient(cfg.GRPCClients.UserService)
-	userSubscriptionClient := pbUser.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
+	userProfileClient := userv1.NewUserServiceClient(cfg.GRPCClients.UserService)
+	userSubscriptionClient := userv1.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
 	// Register notification service
-	pbNotification.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
-	pbNotification.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
-
-	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
+	notificationv1.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	notificationv1.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+cfg.Port)

@@ -3,6 +3,11 @@ package handler
 import (
 	"context"
 	"errors"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,9 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -27,11 +29,11 @@ type subscriptionService struct {
 	logger             *zap.SugaredLogger
 	tracer             trace.Tracer
 	db                 *db.DB
-	notificationClient pbNotification.NotificationServiceClient
-	pb.UnimplementedSubscriptionServiceServer
+	notificationClient notificationv1.NotificationServiceClient
+	userv1.UnimplementedSubscriptionServiceServer
 }
 
-func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificiationClient pbNotification.NotificationServiceClient) pb.SubscriptionServiceServer {
+func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificiationClient notificationv1.NotificationServiceClient) userv1.SubscriptionServiceServer {
 	return &subscriptionService{
 		logger:             logger,
 		tracer:             otel.GetTracerProvider().Tracer("subscription-service"),
@@ -40,22 +42,20 @@ func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificia
 	}
 }
 
-func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
-	conn, err := ss.db.Pool.Acquire(ctx)
-	if err != nil {
-		ss.logger.Errorf("Error in ss.db.Pool.Acquire: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
-	}
-	defer conn.Release()
-
+func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *userv1.ListSubscriptionsRequest) (*userv1.ListSubscriptionsResponse, error) {
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
 	// Get the followers by default
 	userTypes := []string{"subscriber_name", "subscribee_name"}
 	// If the subscription type is following, fetch the users the user is following
-	if request.GetSubscriptionType() == pb.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING {
+	if request.GetSubscriptionType() == userv1.SubscriptionType_SUBSCRIPTION_TYPE_FOLLOWING {
 		userTypes = []string{"subscribee_name", "subscriber_name"}
+	}
+
+	offset, err := strconv.ParseInt(request.GetPagination().GetPageToken(), 10, 64)
+	if err != nil {
+		offset = 0
 	}
 
 	// For every subscription we also want to know if the authenticated user is subscribed to the subscribee and vice
@@ -63,17 +63,17 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	// the subscription of the current user in the loop to the authenticated user and S3 the other way around.
 	selectCtx, selectSpan := ss.tracer.Start(ctx, "GetSubscriptionsData")
 	dataQuery, dataArgs, _ := psql.Select().
-		Columns("s2.subscription_id", "s3.subscription_id").
+		Columns("s2.subscription_id AS follower_subscription_id").
+		Columns("s3.subscription_id AS followed_subscription_id").
 		Columns("u.username", "u.nickname", "u.picture_url", "u.picture_width", "u.picture_height").
 		From("users u").
 		Join("subscriptions s1 ON s1."+userTypes[0]+" = u.username").
-		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username AND s2.subscribee_name = ?", authenticatedUsername).
-		LeftJoin("subscriptions s3 ON s3.subscriber_name = ? AND s3.subscribee_name = u.username", authenticatedUsername).
+		LeftJoin("subscriptions s2 ON s2.subscriber_name = ? AND s2.subscribee_name = u.username", authenticatedUsername).
+		LeftJoin("subscriptions s3 ON s3.subscriber_name = u.username AND s3.subscribee_name = ?", authenticatedUsername).
 		Where("s1."+userTypes[1]+" = ?", request.GetUsername()).
-		GroupBy("s1.created_at", "s2.subscription_id", "s3.subscription_id", "u.username", "u.nickname", "u.profile_picture_url").
 		OrderBy("s1.created_at DESC").
-		Limit(uint64(request.GetPagination().GetLimit())).
-		Offset(uint64(request.GetPagination().GetOffset())).
+		Limit(uint64(request.GetPagination().GetPageSize())).
+		Offset(uint64(offset)).
 		ToSql()
 
 	// Count the total number of subscriptions and also validate that the user exists
@@ -88,6 +88,13 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	batch := &pgx.Batch{}
 	batch.Queue(countQuery, countArgs...)
 	batch.Queue(dataQuery, dataArgs...)
+
+	conn, err := ss.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
 	br := conn.SendBatch(selectCtx, batch)
 	defer br.Close()
 
@@ -115,11 +122,11 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 	selectSpan.End()
 	defer rows.Close()
 
-	response := &pb.ListSubscriptionsResponse{}
+	response := &userv1.ListSubscriptionsResponse{}
 	_, scanRowsSpan := ss.tracer.Start(ctx, "ScanSubscriptionRows")
 	defer scanRowsSpan.End() // we defer the span here, since we'll return after the loop anyway
 	for rows.Next() {
-		subscription := &pb.Subscription{}
+		subscription := &userv1.Subscription{}
 		var followedId, followerId, nickname, pictureUrl pgtype.Text
 		var pictureWidth, pictureHeight pgtype.Int4
 
@@ -139,7 +146,7 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 			subscription.Nickname = nickname.String
 		}
 		if pictureUrl.Valid && pictureWidth.Valid && pictureHeight.Valid {
-			subscription.Picture = &pbCommon.Picture{
+			subscription.Picture = &imagev1.Picture{
 				Url:    pictureUrl.String,
 				Width:  pictureWidth.Int32,
 				Height: pictureHeight.Int32,
@@ -148,22 +155,26 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *pb
 		response.Subscriptions = append(response.Subscriptions, subscription)
 	}
 
-	response.Pagination = &pbCommon.Pagination{
-		Records: subscriptionCount,
-		Offset:  request.GetPagination().GetOffset(),
-		Limit:   request.GetPagination().GetLimit(),
+	response.Pagination = &commonv1.PaginationResponse{
+		TotalSize:     subscriptionCount,
+		NextPageToken: request.GetPagination().GetPageToken(),
 	}
 
 	return response, nil
 }
 
-func (ss subscriptionService) CreateSubscription(ctx context.Context, request *pb.CreateSubscriptionRequest) (*pb.CreateSubscriptionResponse, error) {
-	tx, err := ss.db.Begin(ctx)
+func (ss subscriptionService) CreateSubscription(ctx context.Context, request *userv1.CreateSubscriptionRequest) (*userv1.CreateSubscriptionResponse, error) {
+	conn, err := ss.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := ss.db.BeginTx(ctx, conn)
 	if err != nil {
 		ss.logger.Errorf("Error in ss.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
 	}
-	defer ss.db.Rollback(ctx, tx)
+	defer ss.db.RollbackTx(ctx, tx)
 
 	// Fetch the username of the authenticated user
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
@@ -207,15 +218,15 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 	}
 	insertSpan.End()
 
-	if err = ss.db.Commit(ctx, tx); err != nil {
+	if err = ss.db.CommitTx(ctx, tx); err != nil {
 		ss.logger.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
 	}
 
 	// Send a notification to the user that they have been subscribed to
-	sendNotificationRequest := pbNotification.SendNotificationRequest{
+	sendNotificationRequest := notificationv1.SendNotificationRequest{
 		NotificationType: "follow",
-		Recipient:        request.GetFollowedUsername(),
+		Sender:           request.GetFollowedUsername(),
 	}
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("sub", username))
@@ -223,23 +234,19 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *p
 		ss.logger.Error("Error in ss.notificationClient.SendNotification", zap.Error(err))
 	}
 
-	return &pb.CreateSubscriptionResponse{
+	return &userv1.CreateSubscriptionResponse{
 		SubscriptionId:   subscriptionId.String(),
 		SubscriptionDate: createdAt.Format(time.RFC3339),
 		FollowerUsername: username,
 		FollowedUsername: request.GetFollowedUsername(),
 	}, nil
 }
-func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *pb.DeleteSubscriptionRequest) (*pbCommon.Empty, error) {
-	tx, err := ss.db.Begin(ctx)
-	if err != nil {
-		ss.logger.Errorf("Error in ss.db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
-	}
-	defer ss.db.Rollback(ctx, tx)
-
+func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *userv1.DeleteSubscriptionRequest) (*userv1.DeleteSubscriptionResponse, error) {
 	// Fetch the username of the authenticated user
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	ss.logger.Infof("Deleting subscription %s", request.GetSubscriptionId())
+	ss.logger.Infof("Authenticated user: %s", username)
 
 	// Trigger the deletion of the subscription within the transaction, if the subscription does not exist
 	// we'll get an appropriate error
@@ -249,6 +256,18 @@ func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *p
 		// We return the subscriber_name to verify that the authenticated user is the subscriber
 		Suffix("RETURNING subscriber_name").
 		ToSql()
+
+	conn, err := ss.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := ss.db.BeginTx(ctx, conn)
+	if err != nil {
+		ss.logger.Errorf("Error in ss.db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
+	}
+	defer ss.db.RollbackTx(ctx, tx)
 
 	ss.logger.Info("Deleting subscription...")
 	var subscriberName string
@@ -270,10 +289,10 @@ func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *p
 		return nil, status.Errorf(codes.PermissionDenied, "the authenticated user is not the subscriber")
 	}
 
-	if err = ss.db.Commit(ctx, tx); err != nil {
+	if err = ss.db.CommitTx(ctx, tx); err != nil {
 		ss.logger.Errorf("Error in ss.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "Error in ss.db.Commit: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &userv1.DeleteSubscriptionResponse{}, nil
 }

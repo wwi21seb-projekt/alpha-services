@@ -1,0 +1,18 @@
+{{- range $serviceName, $serviceConfig := .Values.services }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $serviceName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $.Release.Name }}-{{ $serviceName }}
+spec:
+  {{- if $serviceConfig.port }}
+  ports:
+    - port: {{ default $serviceConfig.service.port $serviceConfig.port }}
+      targetPort: {{ $serviceConfig.port }}
+  {{- end }}
+  selector:
+    app: {{ $.Release.Name }}-{{ $serviceName }}
+---
+{{- end }}

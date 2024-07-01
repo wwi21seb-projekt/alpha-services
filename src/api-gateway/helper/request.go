@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ExtractPaginationFromContext(c *gin.Context) (int, int) {
+func ExtractPaginationFromContext(c *gin.Context) (int64, int32) {
 	offset, limit := 0, 10
 
 	// Check if offset and limit are provided and in the correct format
@@ -18,5 +18,5 @@ func ExtractPaginationFromContext(c *gin.Context) (int, int) {
 		limit = l
 	}
 
-	return offset, limit
+	return int64(offset), int32(limit)
 }

@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"errors"
 	"fmt"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	"go.uber.org/zap"
 	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
-	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/truemail-rb/truemail-go"
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
@@ -29,59 +30,12 @@ func (c *contextKey) String() string {
 }
 
 var SanitizedPayloadKey = &contextKey{"sanitizedPayload"}
-var badRequestError = &schema.ErrorDTO{Error: goerrors.BadRequest}
-
-func ValidateAndSanitizeStruct(obj interface{}) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if err := c.ShouldBindJSON(obj); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
-			return
-		}
-		validator := GetValidator()
-		// Sanitize the data
-		if err := validator.SanitizeData(obj); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
-			return
-		}
-
-		if err := validator.Validate.Struct(obj); err != nil {
-			// Handle validation errors as before
-			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
-			return
-		}
-		// Set the sanitized object in the context
-		c.Set(SanitizedPayloadKey.String(), obj)
-		c.Next()
-	}
-}
-
-var instance *Validator
-var once sync.Once
+var badRequestError = &dto.ErrorDTO{Error: goerrors.BadRequest}
 
 type Validator struct {
 	SanitizeData func(data interface{}) error
 	Validate     *validator.Validate
 	VerifyEmail  func(email string) bool
-}
-
-func GetValidator() *Validator {
-	once.Do(func() {
-		configuration, _ := truemail.NewConfiguration(truemail.ConfigurationAttr{
-			VerifierEmail:         "team@mail.server-alpha.tech",
-			ValidationTypeDefault: "mx",
-			SmtpFailFast:          true,
-		})
-		sanitizer := bluemonday.UGCPolicy()
-		instance = &Validator{
-			SanitizeData: func(data interface{}) error { return sanitizeData(sanitizer, data) },
-			Validate:     validator.New(),
-			VerifyEmail:  func(email string) bool { return truemail.IsValid(email, configuration) },
-		}
-
-		registerCustomValidators(instance.Validate)
-	})
-
-	return instance
 }
 
 // SanitizeData uses reflection to sanitize all string fields of a struct
@@ -132,7 +86,7 @@ func registerCustomValidators(v *validator.Validate) {
 	_ = v.RegisterValidation("username_validation", usernameValidation)
 	_ = v.RegisterValidation("password_validation", passwordValidation)
 	_ = v.RegisterValidation("post_validation", postValidation)
-	_ = v.RegisterValidation("location_validation", locationValidation)
+	//	_ = v.RegisterValidation("location_validation", locationValidation)
 }
 
 // usernameValidation defines the validation logic for a username.
@@ -183,27 +137,66 @@ func postValidation(fl validator.FieldLevel) bool {
 	return utf8.ValidString(value)
 }
 
-// locationValidation defines the validation logic for a location.
-// It ensures that the longitude, latitude, and accuracy fields contain valid values.
-func locationValidation(fl validator.FieldLevel) bool {
-	// Get the location struct from the field
-	location := fl.Field().Interface().(*schema.Location)
+func NewValidator() *Validator {
+	configuration, _ := truemail.NewConfiguration(truemail.ConfigurationAttr{
+		VerifierEmail:         "team@mail.server-alpha.tech",
+		ValidationTypeDefault: "mx",
+		SmtpFailFast:          true,
+	})
+	sanitizer := bluemonday.UGCPolicy()
 
-	// If location is empty, return true since it is not required
-	if location == nil {
-		return true
+	validate := validator.New()
+
+	// Register custom validators
+	registerCustomValidators(validate)
+
+	return &Validator{
+		SanitizeData: func(data interface{}) error { return sanitizeData(sanitizer, data) },
+		Validate:     validate,
+		VerifyEmail:  func(email string) bool { return truemail.IsValid(email, configuration) },
 	}
-	// Check if the longitude is valid
-	if location.Longitude < -180 || location.Longitude > 180 {
-		return false
+}
+
+func (m *Middleware) ValidateAndSanitizeStruct(objType interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		obj := reflect.New(reflect.TypeOf(objType)).Interface()
+
+		if err := c.ShouldBindJSON(obj); err != nil {
+			m.logger.Debugw("Failed to bind JSON", "error", zap.Error(err))
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
+			return
+		}
+
+		if err := m.validator.SanitizeData(obj); err != nil {
+			m.logger.Debugw("Failed to sanitize data", "error", zap.Error(err))
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
+			return
+		}
+
+		if err := m.validator.Validate.Struct(obj); err != nil {
+			var invalidValidationError *validator.InvalidValidationError
+			if errors.As(err, &invalidValidationError) {
+				m.logger.Error("Invalid validation error", "error", zap.Error(err))
+				return
+			}
+
+			for _, err := range err.(validator.ValidationErrors) {
+				m.logger.Debugw("Validation error",
+					zap.String("Field", err.Field()),
+					zap.String("Tag", err.Tag()),
+					zap.String("ActualTag", err.ActualTag()),
+					zap.String("Namespace", err.Namespace()),
+					zap.String("Param", err.Param()),
+					zap.Any("Value", err.Value()),
+					zap.String("Type", err.Type().String()),
+				)
+			}
+
+			c.AbortWithStatusJSON(http.StatusBadRequest, badRequestError)
+			return
+		}
+
+		c.Set(SanitizedPayloadKey.String(), obj)
+		c.Next()
 	}
-	// Check if the latitude is valid
-	if location.Latitude < -90 || location.Latitude > 90 {
-		return false
-	}
-	// Check if the accuracy is valid
-	if location.Accuracy < 0 {
-		return false
-	}
-	return true
 }

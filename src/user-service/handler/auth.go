@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"math/rand"
 	"os"
 	"strconv"
@@ -12,16 +15,10 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/ggwhite/go-masker/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pbImage "github.com/wwi21seb-projekt/alpha-shared/proto/image"
-	pbMail "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -50,12 +47,12 @@ type authenticationService struct {
 	logger      *zap.SugaredLogger
 	tracer      trace.Tracer
 	db          *db.DB
-	mailClient  pbMail.MailServiceClient
-	imageClient pbImage.ImageServiceClient
-	pb.UnimplementedAuthenticationServiceServer
+	mailClient  mailv1.MailServiceClient
+	imageClient imagev1.ImageServiceClient
+	userv1.UnimplementedAuthenticationServiceServer
 }
 
-func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient pbMail.MailServiceClient, imageClient pbImage.ImageServiceClient) pb.AuthenticationServiceServer {
+func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient mailv1.MailServiceClient, imageClient imagev1.ImageServiceClient) userv1.AuthenticationServiceServer {
 	return &authenticationService{
 		logger:      logger,
 		tracer:      otel.GetTracerProvider().Tracer("auth-service"),
@@ -65,16 +62,10 @@ func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailCli
 	}
 }
 
-func (as authenticationService) RegisterUser(ctx context.Context, request *pb.RegisterUserRequest) (*pb.User, error) {
-	// Start a transaction
-	tx, err := as.db.Begin(ctx)
-	if err != nil {
-		as.logger.Errorf("Error in db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
-	}
-	defer as.db.Rollback(ctx, tx)
-
+func (as authenticationService) RegisterUser(ctx context.Context, request *userv1.RegisterUserRequest) (*userv1.RegisterUserResponse, error) {
+	// Hash the password
 	_, hashSpan := as.tracer.Start(ctx, "HashPassword")
+	as.logger.Debug("Hashing user password")
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), bcrypt.DefaultCost)
 	if err != nil {
 		as.logger.Errorf("Error in bcrypt.GenerateFromPassword: %v", err)
@@ -83,17 +74,61 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	}
 	hashSpan.End()
 
+	// Start a transaction
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
+	if err != nil {
+		as.logger.Errorf("Error in db.Begin: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
+	}
+	defer as.db.RollbackTx(ctx, tx)
+
+	// Check for existing user or email
+	query, args, err := psql.Select("username, email").
+		From("users").
+		Where(sq.Or{sq.Eq{"username": request.GetUsername()}, sq.Eq{"email": request.GetEmail()}}).
+		ToSql()
+	if err != nil {
+		as.logger.Warnw("Error in psql.Select", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
+	}
+
+	var username string
+	var email string
+	as.logger.Debug("Checking if user or email exists")
+	err = tx.QueryRow(ctx, query, args...).Scan(&username, &email)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			as.logger.Warnw("Error in tx.QueryRow", "error", err)
+			return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
+		}
+		// User does not exist, continue
+	} else {
+		if username == request.GetUsername() {
+			as.logger.Debug("Username already exists")
+			return nil, status.Error(codes.AlreadyExists, "username already exists")
+		}
+		if email == request.GetEmail() {
+			as.logger.Debug("Email already exists")
+			return nil, status.Error(codes.AlreadyExists, "email already exists")
+		}
+	}
+
 	// Upload image to storage if provided
 	imageUrl := defaultAvatarURL
 	imageWidth := defaultAvatarWidth
 	imageHeight := defaultAvatarHeight
 
-	if request.GetBase64Picture() != "" {
+	if request.GetImage() != "" {
 		uploadImageCtx, uploadImageSpan := as.tracer.Start(ctx, "UploadImage")
-		as.logger.Info("Calling upstream imageClient.UploadImage...")
-		uploadImageResponse, err := as.imageClient.UploadImage(uploadImageCtx, &pbImage.UploadImageRequest{
-			Image:         request.GetBase64Picture(),
-			ContextString: request.GetUsername(),
+		as.logger.Infow("Uploading image to storage", "username", request.GetUsername())
+		uploadImageResponse, err := as.imageClient.UploadImage(uploadImageCtx, &imagev1.UploadImageRequest{
+			Image: request.GetImage(),
+			Name:  request.GetUsername(),
 		})
 		if err != nil {
 			as.logger.Errorf("Error in upstream call imageClient.UploadImage: %v", err)
@@ -102,10 +137,10 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		}
 
 		environment := os.Getenv("ENVIRONMENT")
-		if environment == "local" {
-			imageUrl = fmt.Sprintf("http://localhost:8080/images?image=%s", uploadImageResponse.GetUrl())
+		if environment == "production" {
+			imageUrl = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadImageResponse.GetUrl())
 		} else {
-			imageUrl = fmt.Sprintf("https://alpha.c930.net/images?image=%s", uploadImageResponse.GetUrl())
+			imageUrl = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadImageResponse.GetUrl())
 		}
 
 		imageWidth = 500  // replace with actual width
@@ -117,35 +152,18 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	createdAt := time.Now()
 	expiresAt := createdAt.Add(168 * time.Hour)
 
-	insertUserCtx, insertUserSpan := as.tracer.Start(ctx, "InsertUser")
-	as.logger.Info("Inserting user into database...")
-	query, args, _ := psql.Insert("users").
+	as.logger.Debugw("Inserting user into database", "username", request.Username)
+	query, args, _ = psql.Insert("users").
 		Columns("username", "nickname", "password", "email", "picture_url", "picture_width", "picture_height", "created_at", "expires_at").
 		Values(request.Username, request.Nickname, hashedPassword, request.Email, imageUrl, imageWidth, imageHeight, createdAt, expiresAt).
 		ToSql()
-	_, err = tx.Exec(insertUserCtx, query, args...)
+	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
-		insertUserSpan.End()
-		// Check for constraint violation
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			as.logger.Info("User creation failed due to unique constraint violation")
-			// Check which constraint was violated
-			if pgErr.ConstraintName == "users_pkey" {
-				return nil, status.Error(codes.AlreadyExists, "username already exists")
-			}
-			if pgErr.ConstraintName == "email_uq" {
-				return nil, status.Error(codes.AlreadyExists, "email already exists")
-			}
-		}
-
-		as.logger.Errorf("Error in tx.Exec: %v", err)
+		as.logger.Errorw("Error while inserting user into database", "error", err, "username", request.Username)
 		return nil, status.Errorf(codes.Internal, "failed to insert user: %v", err)
 	}
-	insertUserSpan.End()
 
 	// Generate a random 6-digit number
-	insertTokenCtx, insertTokenSpan := as.tracer.Start(ctx, "InsertToken")
 	activationCode := generateToken()
 	tokenId := uuid.New()
 	expiresAt = time.Now().Add(24 * time.Hour)
@@ -154,43 +172,42 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 		Values(tokenId, activationCode, expiresAt, "activation", request.GetUsername()).
 		ToSql()
 
-	as.logger.Info("Inserting activation token into database...")
-	_, err = tx.Exec(insertTokenCtx, query, args...)
+	as.logger.Debugw("Inserting activation token into database", "username", request.Username)
+	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
-		as.logger.Errorf("Error in tx.Exec: %v", err)
-		insertTokenSpan.End()
+		as.logger.Errorw("Error in tx.Exec while inserting token", "error", err, "username", request.Username)
 		return nil, status.Errorf(codes.Internal, "failed to insert token: %v", err)
 	}
-	insertTokenSpan.End()
 
 	// Call mail service to send registration email
 	mailUpstreamCtx, mailUpstreamSpan := as.tracer.Start(ctx, "SendTokenMail")
-	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
-	_, err = as.mailClient.SendTokenMail(mailUpstreamCtx, &pbMail.TokenMailRequest{
+	as.logger.Infow("Calling upstream mailClient.SendTokenMail", "username", request.Username)
+	_, err = as.mailClient.SendTokenMail(mailUpstreamCtx, &mailv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  pbMail.TokenMailType_TOKENMAILTYPE_REGISTRATION,
-		User: &pbMail.UserInformation{
+		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
+		User: &mailv1.UserInformation{
 			Username: request.Username,
 			Email:    request.Email,
 		},
 	})
 	if err != nil {
-		as.logger.Errorf("Error in upstream call mailClient.SendTokenMail: %v", err)
+		as.logger.Errorw("Error in upstream call mailClient.SendTokenMail while sending token mail", "error", err, "username", request.Username, "email", request.Email)
 		mailUpstreamSpan.End()
 		return nil, status.Errorf(codes.Internal, "failed to send token mail: %v", err)
 	}
 	mailUpstreamSpan.End()
 
-	if err := as.db.Commit(ctx, tx); err != nil {
-		as.logger.Errorf("Error in tx.Commit: %v", err)
+	if err = as.db.CommitTx(ctx, tx); err != nil {
+		as.logger.Errorw("Error in tx.Commit while committing transaction", "error", err, "username", request.Username)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pb.User{
+	as.logger.Infow("User registered successfully", "username", request.Username)
+	return &userv1.RegisterUserResponse{
 		Username: request.Username,
 		Nickname: request.Nickname,
 		Email:    request.Email,
-		Picture: &pbCommon.Picture{
+		Picture: &imagev1.Picture{
 			Url:    imageUrl,
 			Width:  imageWidth,
 			Height: imageHeight,
@@ -198,16 +215,20 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *pb.Re
 	}, nil
 }
 
-func (as authenticationService) ResendActivationEmail(ctx context.Context, request *pb.ResendActivationEmailRequest) (*pbCommon.Empty, error) {
-	tx, err := as.db.Begin(ctx)
+func (as authenticationService) ResendActivationEmail(ctx context.Context, request *userv1.ResendActivationEmailRequest) (*userv1.ResendActivationEmailResponse, error) {
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
 		as.logger.Errorf("Error in db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer as.db.Rollback(ctx, tx)
+	defer as.db.RollbackTx(ctx, tx)
 
 	// Fetch the required user data
-	queryCtx, querySpan := as.tracer.Start(ctx, "QueryDatabase")
 	query, args, _ := psql.Select("activated_at", "email").
 		From("users").
 		Where("username = ?", request.GetUsername()).
@@ -216,44 +237,47 @@ func (as authenticationService) ResendActivationEmail(ctx context.Context, reque
 	var activatedAt *time.Time
 	var email string
 	as.logger.Info("Querying database for user...")
-	err = tx.QueryRow(queryCtx, query, args...).Scan(&activatedAt, &email)
+	err = tx.QueryRow(ctx, query, args...).Scan(&activatedAt, &email)
 	if err != nil {
-		querySpan.End()
 		if errors.Is(err, pgx.ErrNoRows) {
-			as.logger.Error("User not found")
+			as.logger.Debugw("User not found", "username", request.GetUsername())
 			return nil, status.Error(codes.NotFound, "user not found")
 		}
 
 		as.logger.Errorf("Error in tx.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
 	}
-	querySpan.End()
 
 	if activatedAt != nil {
-		as.logger.Error("User is already activated")
+		as.logger.Debugw("User is already activated", "username", request.GetUsername())
 		return nil, status.Error(codes.FailedPrecondition, "user is already activated")
 	}
 
 	// Set a new activation token and send the email
 	if err := as.setNewRegistrationTokenAndSendMail(ctx, tx, request.GetUsername(), email); err != nil {
-		as.logger.Errorf("Error in as.setNewRegistrationTokenAndSendMail: %v", err)
+		as.logger.Errorw("Error in as.setNewRegistrationTokenAndSendMail", "error", err)
 		return nil, err
 	}
-	if err := as.db.Commit(ctx, tx); err != nil {
-		as.logger.Errorf("Error in tx.Commit: %v", err)
+	if err := as.db.CommitTx(ctx, tx); err != nil {
+		as.logger.Errorw("Error in tx.Commit", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &userv1.ResendActivationEmailResponse{}, nil
 }
 
-func (as authenticationService) ActivateUser(ctx context.Context, request *pb.ActivateUserRequest) (*pbCommon.Empty, error) {
-	tx, err := as.db.Begin(ctx)
+func (as authenticationService) ActivateUser(ctx context.Context, request *userv1.ActivateUserRequest) (*userv1.ActivateUserResponse, error) {
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
 		as.logger.Errorf("Error in db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer as.db.Rollback(ctx, tx)
+	defer as.db.RollbackTx(ctx, tx)
 
 	// Update the user's status to active and return the email
 	// for the confirmation email
@@ -291,7 +315,7 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	// if the user exists and the token is valid, otherwise it returns an error
 	deleteCtx, deleteSpan := as.tracer.Start(ctx, "DeleteToken")
 	query, args, _ = psql.Delete("tokens").
-		Where("token = ? AND type = ? AND username = ?", request.GetToken(), Activation, request.GetUsername()).
+		Where("token = ? AND type = ? AND username = ?", request.GetActivationCode(), Activation, request.GetUsername()).
 		Suffix("RETURNING expires_at").
 		ToSql()
 
@@ -317,14 +341,14 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 		// This is actually quite tricky, since we first need to rollback the ongoing transaction
 		// explicit to release the lock on the user row and revert the activation.
 		// Then we can start a new transaction and send a new token.
-		if err := as.db.Rollback(newTokenCtx, tx); err != nil {
+		if err := as.db.RollbackTx(newTokenCtx, tx); err != nil {
 			as.logger.Errorf("Error in db.Rollback: %v", err)
 			return nil, status.Errorf(codes.Internal, "failed to rollback transaction: %v", err)
 		}
 
 		// We simplify the process by calling the resend token function, even if that produces
 		// some unnecessary double-checks but in return handles the new transaction handling.
-		if _, err := as.ResendActivationEmail(newTokenCtx, &pb.ResendActivationEmailRequest{
+		if _, err := as.ResendActivationEmail(newTokenCtx, &userv1.ResendActivationEmailRequest{
 			Username: request.GetUsername(),
 		}); err != nil {
 			as.logger.Errorf("Error in as.ResendActivationEmail: %v", err)
@@ -337,8 +361,8 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	// Send confirmation email
 	upstreamMailCtx, upstreamMailSpan := as.tracer.Start(ctx, "SendConfirmationMail")
 	as.logger.Info("Calling upstream mailClient.SendMail...")
-	_, err = as.mailClient.SendConfirmationMail(upstreamMailCtx, &pbMail.ConfirmationMailRequest{
-		User: &pbMail.UserInformation{
+	_, err = as.mailClient.SendConfirmationMail(upstreamMailCtx, &mailv1.SendConfirmationMailRequest{
+		User: &mailv1.UserInformation{
 			Username: request.GetUsername(),
 			Email:    email,
 		},
@@ -350,17 +374,17 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *pb.Ac
 	}
 	upstreamMailSpan.End()
 
-	if err := as.db.Commit(ctx, tx); err != nil {
+	if err := as.db.CommitTx(ctx, tx); err != nil {
 		as.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
 	// No need to return anything, since a nil-error response is a success for the gateway
-	return &pbCommon.Empty{}, nil
+	return &userv1.ActivateUserResponse{}, nil
 }
 
-func (as authenticationService) LoginUser(ctx context.Context, request *pb.LoginUserRequest) (*pbCommon.Empty, error) {
-	conn, err := as.db.Pool.Acquire(ctx)
+func (as authenticationService) LoginUser(ctx context.Context, request *userv1.LoginUserRequest) (*userv1.LoginUserResponse, error) {
+	conn, err := as.db.Acquire(ctx)
 	if err != nil {
 		as.logger.Errorf("Error in db.Pool.Acquire: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to acquire connection: %v", err)
@@ -368,7 +392,6 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 	defer conn.Release()
 
 	// Create a child span for the database query
-	dbSpanCtx, dbSpan := as.tracer.Start(ctx, "QueryDatabase")
 	query, args, _ := psql.Select("password", "activated_at").
 		From("users").
 		Where("username = ?", request.Username).
@@ -377,8 +400,7 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 	var hashedPassword []byte
 	var activatedAt pgtype.Timestamptz
 	as.logger.Info("Querying database for user...")
-	if err := conn.QueryRow(dbSpanCtx, query, args...).Scan(&hashedPassword, &activatedAt); err != nil {
-		dbSpan.End()
+	if err := conn.QueryRow(ctx, query, args...).Scan(&hashedPassword, &activatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			as.logger.Error("User not found")
 			return nil, status.Error(codes.NotFound, "user not found")
@@ -387,33 +409,37 @@ func (as authenticationService) LoginUser(ctx context.Context, request *pb.Login
 		as.logger.Errorf("Error in conn.QueryRow: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to query database: %v", err)
 	}
-	dbSpan.End()
 
 	// Check if the user is activated
 	if !activatedAt.Valid {
-		as.logger.Error("User is not activated")
+		as.logger.Debugw("User is not activated", "username", request.Username)
 		return nil, status.Error(codes.FailedPrecondition, "user is not activated")
 	}
 
 	// Compare the hashed password with the provided password
 	_, passwordSpan := as.tracer.Start(ctx, "ComparePassword")
 	if err := bcrypt.CompareHashAndPassword(hashedPassword, []byte(request.Password)); err != nil {
-		as.logger.Errorf("Error in bcrypt.CompareHashAndPassword: %v", err)
+		as.logger.Debugw("Invalid password", "username", request.Username)
 		passwordSpan.End()
 		return nil, status.Error(codes.PermissionDenied, "invalid password")
 	}
 	passwordSpan.End()
 
-	return &pbCommon.Empty{}, nil
+	return &userv1.LoginUserResponse{}, nil
 }
 
-func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.ChangePasswordRequest) (*pbCommon.Empty, error) {
-	tx, err := as.db.Begin(ctx)
+func (as authenticationService) UpdatePassword(ctx context.Context, request *userv1.UpdatePasswordRequest) (*userv1.UpdatePasswordResponse, error) {
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
 		as.logger.Errorf("Error in db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer as.db.Rollback(ctx, tx)
+	defer as.db.RollbackTx(ctx, tx)
 
 	// Hash the new password
 	_, hashSpan := as.tracer.Start(ctx, "HashPassword")
@@ -463,21 +489,26 @@ func (as authenticationService) UpdatePassword(ctx context.Context, request *pb.
 	}
 	passwordSpan.End()
 
-	if err := as.db.Commit(ctx, tx); err != nil {
+	if err := as.db.CommitTx(ctx, tx); err != nil {
 		as.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &userv1.UpdatePasswordResponse{}, nil
 }
 
-func (as authenticationService) ResetPassword(ctx context.Context, request *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
-	tx, err := as.db.Begin(ctx)
+func (as authenticationService) ResetPassword(ctx context.Context, request *userv1.ResetPasswordRequest) (*userv1.ResetPasswordResponse, error) {
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
 		as.logger.Errorf("Error in as.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer as.db.Rollback(ctx, tx)
+	defer as.db.RollbackTx(ctx, tx)
 
 	// Fetch the required user data
 	query, args, _ := psql.Select("email").
@@ -508,7 +539,7 @@ func (as authenticationService) ResetPassword(ctx context.Context, request *pb.R
 		return nil, err
 	}
 
-	if err := as.db.Commit(ctx, tx); err != nil {
+	if err := as.db.CommitTx(ctx, tx); err != nil {
 		as.logger.Errorf("Error in as.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
@@ -517,16 +548,21 @@ func (as authenticationService) ResetPassword(ctx context.Context, request *pb.R
 	emailMasker := &masker.EmailMasker{}
 	maskedEmail := emailMasker.Marshal("*", email)
 
-	return &pb.ResetPasswordResponse{Email: maskedEmail}, nil
+	return &userv1.ResetPasswordResponse{Email: maskedEmail}, nil
 }
 
-func (as authenticationService) SetPassword(ctx context.Context, request *pb.SetPasswordRequest) (*pbCommon.Empty, error) {
-	tx, err := as.db.Begin(ctx)
+func (as authenticationService) SetPassword(ctx context.Context, request *userv1.SetPasswordRequest) (*userv1.SetPasswordResponse, error) {
+	conn, err := as.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
 		as.logger.Errorf("Error in as.db.Begin: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
 	}
-	defer as.db.Rollback(ctx, tx)
+	defer as.db.RollbackTx(ctx, tx)
 
 	// Check if the user exists
 	query, args, _ := psql.Select("username").
@@ -591,12 +627,12 @@ func (as authenticationService) SetPassword(ctx context.Context, request *pb.Set
 		return nil, status.Errorf(codes.Internal, "failed to update password: %v", err)
 	}
 
-	if err := as.db.Commit(ctx, tx); err != nil {
+	if err := as.db.CommitTx(ctx, tx); err != nil {
 		as.logger.Errorf("Error in as.db.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &userv1.SetPasswordResponse{}, nil
 }
 
 func (as authenticationService) setNewRegistrationTokenAndSendMail(ctx context.Context, tx pgx.Tx, username, email string) error {
@@ -628,10 +664,10 @@ func (as authenticationService) setNewRegistrationTokenAndSendMail(ctx context.C
 	upstreamMailCtx, upstreamMailSpan := as.tracer.Start(ctx, "SendTokenMail")
 	defer upstreamMailSpan.End() // we can defer here, since we'll return after this
 	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
-	_, err = as.mailClient.SendTokenMail(upstreamMailCtx, &pbMail.TokenMailRequest{
+	_, err = as.mailClient.SendTokenMail(upstreamMailCtx, &mailv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  pbMail.TokenMailType_TOKENMAILTYPE_REGISTRATION,
-		User: &pbMail.UserInformation{
+		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
+		User: &mailv1.UserInformation{
 			Username: username,
 			Email:    email,
 		},
@@ -670,10 +706,10 @@ func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.
 
 	// Call mail service to send registration email
 	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
-	_, err = as.mailClient.SendTokenMail(ctx, &pbMail.TokenMailRequest{
+	_, err = as.mailClient.SendTokenMail(ctx, &mailv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  pbMail.TokenMailType_TOKENMAILTYPE_PASSWORD_RESET,
-		User: &pbMail.UserInformation{
+		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET,
+		User: &mailv1.UserInformation{
 			Username: username,
 			Email:    email,
 		},

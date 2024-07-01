@@ -2,7 +2,11 @@ package handler
 
 import (
 	"context"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -14,8 +18,6 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -37,11 +39,11 @@ type ChatHandler struct {
 	tracer            trace.Tracer
 	jwtManager        manager.JWTManager
 	upgrader          websocket.Upgrader
-	chatServiceClient pb.ChatServiceClient
+	chatServiceClient chatv1.ChatServiceClient
 	hub               *ws.Hub
 }
 
-func NewChatHandler(logger *zap.SugaredLogger, jwtManager manager.JWTManager, chatClient pb.ChatServiceClient, hub *ws.Hub) ChatHdlr {
+func NewChatHandler(logger *zap.SugaredLogger, jwtManager manager.JWTManager, chatClient chatv1.ChatServiceClient, hub *ws.Hub) ChatHdlr {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -81,7 +83,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		checkAuthSpan.AddEvent("No authorization header provided")
 		checkAuthSpan.End()
 		ch.logger.Error("No authorization header provided")
-		c.JSON(http.StatusUnauthorized, schema.ErrorDTO{
+		c.JSON(http.StatusUnauthorized, dto.ErrorDTO{
 			Error: goerrors.Unauthorized,
 		})
 		return
@@ -92,7 +94,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		checkAuthSpan.AddEvent("Failed to verify token")
 		checkAuthSpan.End()
 		ch.logger.Error("Failed to verify token: ", err)
-		c.JSON(http.StatusUnauthorized, schema.ErrorDTO{
+		c.JSON(http.StatusUnauthorized, dto.ErrorDTO{
 			Error: goerrors.Unauthorized,
 		})
 		return
@@ -103,7 +105,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 	ctx := metadata.NewOutgoingContext(c.Request.Context(), metadata.Pairs(string(keys.SubjectKey), username))
 	ch.logger.Info("ChatHandler: Preparing chat stream...")
 
-	if _, err = ch.chatServiceClient.PrepareChatStream(ctx, &pb.PrepareChatStreamRequest{
+	if _, err = ch.chatServiceClient.PrepareChatStream(ctx, &chatv1.PrepareChatStreamRequest{
 		ChatId: chatId,
 	}); err != nil {
 		code := status.Code(err)
@@ -115,7 +117,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		}
 
 		ch.logger.Error("Error in ch.chatServiceClient.PrepareChatStream: ", err)
-		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -123,7 +125,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 
 	ctx = metadata.AppendToOutgoingContext(ctx, string(keys.ChatIDKey), chatId)
 	ch.logger.Info("ChatHandler: Creating chat stream...")
-	stream, err := ch.chatServiceClient.ChatStream(ctx)
+	stream, err := ch.chatServiceClient.ChatMessage(ctx)
 	if err != nil {
 		status := status.Convert(err)
 		returnErr := goerrors.InternalServerError
@@ -134,7 +136,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		}
 
 		ch.logger.Error("Failed to create chat stream: ", err)
-		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -154,7 +156,7 @@ func (ch *ChatHandler) Chat(c *gin.Context) {
 		upgradeSpan.AddEvent("Failed to upgrade to websocket")
 		upgradeSpan.End()
 		ch.logger.Error("Failed to upgrade to websocket: ", err)
-		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
+		c.JSON(http.StatusInternalServerError, dto.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return
@@ -194,7 +196,7 @@ func (ch *ChatHandler) CreateChat(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	// Call chat service
-	resp, err := ch.chatServiceClient.CreateChat(ctx, &pb.CreateChatRequest{
+	resp, err := ch.chatServiceClient.CreateChat(ctx, &chatv1.CreateChatRequest{
 		Username: req.Username,
 		Message:  req.Content,
 	})
@@ -211,7 +213,7 @@ func (ch *ChatHandler) CreateChat(c *gin.Context) {
 		}
 
 		ch.logger.Error("Error in ch.chatServiceClient.CreateChat: ", err)
-		c.JSON(returnErr.HttpStatus, schema.ErrorDTO{
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -233,11 +235,11 @@ func (ch *ChatHandler) GetChat(c *gin.Context) {
 	chatID := c.Param("chatId")
 	offset, limit := helper.ExtractPaginationFromContext(c)
 
-	resp, err := ch.chatServiceClient.GetChat(ctx, &pb.GetChatRequest{
+	resp, err := ch.chatServiceClient.GetChat(ctx, &chatv1.GetChatRequest{
 		ChatId: chatID,
-		Pagination: &pbCommon.PaginationRequest{
-			Offset: int32(offset),
-			Limit:  int32(limit),
+		Pagination: &commonv1.PaginationRequest{
+			PageToken: strconv.FormatInt(offset, 10),
+			PageSize:  limit,
 		},
 	})
 	if err != nil {
@@ -249,7 +251,7 @@ func (ch *ChatHandler) GetChat(c *gin.Context) {
 		}
 
 		ch.logger.Error("Error in ch.chatServiceClient.GetChat: ", err)
-		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
+		c.JSON(http.StatusInternalServerError, dto.ErrorDTO{
 			Error: returnErr,
 		})
 		return
@@ -267,9 +269,9 @@ func (ch *ChatHandler) GetChat(c *gin.Context) {
 	c.JSON(http.StatusOK, schema.GetChatResponse{
 		Messages: messages,
 		Pagination: schema.PaginationResponse{
-			Records: resp.Pagination.Records,
-			Offset:  resp.Pagination.Offset,
-			Limit:   resp.Pagination.Limit,
+			Records: resp.Pagination.GetTotalSize(),
+			Offset:  offset,
+			Limit:   limit,
 		},
 	})
 }
@@ -278,10 +280,10 @@ func (ch *ChatHandler) GetChat(c *gin.Context) {
 func (ch *ChatHandler) GetChats(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	resp, err := ch.chatServiceClient.ListChats(ctx, &pbCommon.Empty{})
+	resp, err := ch.chatServiceClient.ListChats(ctx, &chatv1.ListChatsRequest{})
 	if err != nil {
 		ch.logger.Error("Error in ch.chatServiceClient.ListChats: ", err)
-		c.JSON(http.StatusInternalServerError, schema.ErrorDTO{
+		c.JSON(http.StatusInternalServerError, dto.ErrorDTO{
 			Error: goerrors.InternalServerError,
 		})
 		return

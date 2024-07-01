@@ -1,25 +1,22 @@
 package schema
 
-type Notification struct {
-	NotificationID   string `json:"notificationId"`
-	Timestamp        string `json:"timestamp"`
-	NotificationType string `json:"notificationType"`
-	User             Author `json:"user"`
-}
-
 // ----------------- Request Schemas -----------------
 
 type CreatePushSubscriptionRequest struct {
-	Endpoint       string `json:"endpoint"`
-	P256Dh         string `json:"p256dh"`
-	Auth           string `json:"auth"`
-	Type           string `json:"type"`
-	Token          string `json:"token"`
-	ExpirationTime string `json:"expirationTime"`
+	Type         string           `json:"type"`                   // "web" or "expo"
+	Token        string           `json:"token,omitempty"`        // only for expo
+	Subscription *WebSubscription `json:"subscription,omitempty"` // only for web
 }
 
-type GetNotificationsResponse struct {
-	Records []Notification `json:"records"`
+type WebSubscription struct {
+	Endpoint       string              `json:"endpoint"`
+	ExpirationTime *string             `json:"expirationTime,omitempty"` // optional
+	Keys           WebSubscriptionKeys `json:"keys"`
+}
+
+type WebSubscriptionKeys struct {
+	P256Dh string `json:"p256dh"`
+	Auth   string `json:"auth"`
 }
 
 // ----------------- Response Schemas -----------------
