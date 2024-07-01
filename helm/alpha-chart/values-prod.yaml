@@ -11,10 +11,6 @@ ingress:
     enabled: true
     secretName: alpha-c930-net-tls
 
-global:
-  image:
-    tag: pr-25
-
 services:
   api-gateway:
     replicaCount: 1
