@@ -1,0 +1,98 @@
+overrideConfigMap:
+  ENVIRONMENT: production
+
+secretOverride:
+  MAILGUN_API_KEY: ""
+
+ingress:
+  enabled: true
+  host: alpha.c930.net
+  tls:
+    enabled: true
+    secretName: alpha-c930-net-tls
+
+global:
+  image:
+    tag: pr-25
+
+services:
+  api-gateway:
+    replicaCount: 1
+
+  chat-service:
+    replicaCount: 1
+
+  image-service:
+    replicaCount: 1
+
+  mail-service:
+    replicaCount: 1
+
+  notification-service :
+    replicaCount: 1
+
+  post-service:
+    replicaCount: 1
+
+  user-service:
+    replicaCount: 1
+
+postgresql:
+  image:
+    debug: false
+  auth:
+    username: "alpha_user"
+    password: "A3C2EW7ieV"
+    database: "alpha_db"
+  primary:
+    persistence:
+      enabled: true
+    initdb:
+      scriptsConfigMap: init-db-scripts
+    resources:
+      limits:
+        memory: 5Gi
+
+opentelemetry-collector:
+  mode: daemonset
+  ports:
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+      containerPort: 8889
+      servicePort: 8889
+      protocol: TCP
+  serviceMonitor:
+    enabled: true
+    metricsEndpoints:
+      - port: metrics
+      - port: prometheus # This is the port of the prometheus receiver (8889)
+  config:
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      otlp/jaeger:
+        endpoint: "jaegertracing-collector.observability:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        metrics:
+          receivers:
+            - otlp
+          exporters:
+            - prometheus
+        traces:
+          receivers:
+            - otlp
+          exporters:
+            - otlp/jaeger
+  service:
+    enabled: true
+
+prometheus:
+  enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack
+
+jaeger:
+  enabled: false

@@ -1,0 +1,191 @@
+overrideConfigMap:
+  ENVIRONMENT: development
+  OTEL_EXPORTER_OTLP_ENDPOINT:
+  POSTGRES_HOST:
+  POSTGRES_PORT:
+
+secretOverride:
+  POSTGRES_USER:
+  POSTGRES_PASSWORD:
+  DATABASE_URL:
+  MAILGUN_API_KEY: REPLACE_ME # (Ask Luca for the key)
+  VAPID_PUBLIC_KEY:
+  VAPID_PRIVATE_KEY:
+  JWT_PRIVATE_KEY_BASE64:
+  JWT_PUBLIC_KEY_BASE64:
+
+global:
+  image:
+    repository: ghcr.io/wwi21seb-projekt/alpha-services
+    tag: latest
+    pullPolicy: Always
+  env: {} # (Optional) Add extra global environment variables here
+  resources:
+    limits:
+      memory: 100Mi
+
+ingress:
+  enabled: false
+  host:
+  tls:
+    enabled: true
+    secretName:
+
+services:
+  api-gateway:
+    replicaCount: 1
+    image:
+      repository:         # (Optional) If you want to use a custom image, set the repository here
+      name: api-gateway
+      tag:                # (Optional) If you want to use a custom image, set the tag here
+    port: 8080
+    service:
+      port: 80
+    connections:
+      - chat-service
+      - image-service
+      - notification-service
+      - post-service
+      - user-service
+    env: {} # (Optional) Add extra environment variables here
+
+  chat-service:
+    replicaCount: 1
+    port: 50051
+    service:
+      port: 50051
+    image:
+      name: chat-service
+    connections:
+      - user-service
+
+  image-service:
+    replicaCount: 1
+    port: 50052
+    service:
+      port: 50052
+    image:
+      name: image-service
+
+
+  mail-service:
+    replicaCount: 1
+    port: 50053
+    service:
+      port: 50053
+    image:
+      name: mail-service
+
+  notification-service:
+    replicaCount: 1
+    port: 50054
+    service:
+      port: 50054
+    image:
+      name: notification-service
+    connections:
+      - user-service
+
+  post-service:
+    replicaCount: 1
+    port: 50055
+    service:
+      port: 50055
+    image:
+      name: post-service
+    connections:
+      - user-service
+      - image-service
+
+  user-service:
+    replicaCount: 1
+    port: 50056
+    service:
+      port: 50056
+    image:
+      name: user-service
+    connections:
+      - image-service
+      - mail-service
+      - notification-service
+      - post-service
+
+postgresql:
+  image:
+    debug: true
+  auth:
+    username: "myuser"      # CHANGE THIS
+    password: "mypassword"  # CHANGE THIS
+    database: "mydatabase"  # CHANGE THIS
+  primary:
+    persistence:
+      enabled: true
+      size: 2Gi
+    initdb:
+      scriptsConfigMap: init-db-scripts
+    resources:
+      limits:
+        memory: 1Gi
+
+opentelemetry-collector:
+  mode: deployment
+  image:
+    repository: otel/opentelemetry-collector-contrib
+  ports:
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+      containerPort: 8889
+      servicePort: 8889
+      protocol: TCP
+  serviceMonitor:
+    enabled: true
+    metricsEndpoints:
+      - port: metrics
+      - port: prometheus # This is the port of the prometheus receiver
+  config:
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      otlp/jaeger:
+        endpoint: "alpha-release-jaeger-collector:4317" # If needed, replace with the correct endpoint
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        metrics:
+          receivers:
+            - otlp
+          exporters:
+            - prometheus
+        traces:
+          receivers:
+            - otlp
+          exporters:
+            - otlp/jaeger
+
+prometheus:
+  enabled: true  # Turn this off if you dont want to deploy kube-prometheus-stack
+
+kube-prometheus-stack:
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false
+  alertmanager:
+    enabled: false
+
+jaeger:
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+  storage:
+    type: memory
+  agent:
+    enabled: false
+  collector:
+    enabled: false
+  query:
+    enabled: false

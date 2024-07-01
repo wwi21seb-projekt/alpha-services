@@ -1,13 +1,14 @@
 package ws
 
 import (
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.uber.org/zap"
 )
@@ -22,7 +23,7 @@ type Client struct {
 	// Websocket Connection to Client
 	conn *websocket.Conn
 	// gRPC Stream to Chat Service, which handles chat messages in both directions
-	stream pb.ChatService_ChatStreamClient
+	stream chatv1.ChatService_ChatMessageClient
 	// Channel to send messages to client via websocket
 	send chan []byte
 	// Channel to signal client disconnect, used to close goroutines.
@@ -48,7 +49,7 @@ const (
 	maxMessageSize = 256
 )
 
-func NewClient(logger *zap.SugaredLogger, hub *Hub, conn *websocket.Conn, stream pb.ChatService_ChatStreamClient, username string) *Client {
+func NewClient(logger *zap.SugaredLogger, hub *Hub, conn *websocket.Conn, stream chatv1.ChatService_ChatMessageClient, username string) *Client {
 	return &Client{
 		logger:     logger,
 		hub:        hub,
@@ -88,7 +89,7 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 		// Check if the message exceeds the maximum message size or is empty
 		if len(message) == 0 || len(message) > maxMessageSize {
 			c.logger.Errorf("Message exceeds maximum message size or is empty")
-			errorMessage := schema.ErrorDTO{Error: goerrors.BadRequest}
+			errorMessage := dto.ErrorDTO{Error: goerrors.BadRequest}
 			errorMessageBytes, err := errorMessage.MarshalJSON()
 			if err != nil {
 				c.logger.Errorf("Failed to marshal error message: %v", err)
@@ -118,10 +119,9 @@ func (c *Client) sendMessageToChatService(message []byte) error {
 	// Sanitize the message content
 	unmarshalledMessage.Content = c.policy.Sanitize(unmarshalledMessage.Content)
 
-	grpcMessage := &pb.ChatMessage{
-		Username:  c.username,
-		Message:   unmarshalledMessage.Content,
-		CreatedAt: time.Now().Format(time.RFC3339),
+	grpcMessage := &chatv1.ChatMessageRequest{
+		Username: c.username,
+		Message:  unmarshalledMessage.Content,
 	}
 
 	// Send the message to the chat service via gRPC

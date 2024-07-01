@@ -4,66 +4,102 @@ metadata:
   name: serveralpha
 build:
   artifacts:
-    - image: api-gateway-image
+    - image: apigateway
       context: src/api-gateway
       docker:
         dockerfile: Dockerfile
-    - image: chat-service-image
+    - image: chatservice
       context: src/chat-service
       docker:
         dockerfile: Dockerfile
-    - image: post-service-image
+    - image: postservice
       context: src/post-service
       docker:
         dockerfile: Dockerfile
-    - image: user-service-image
+    - image: userservice
       context: src/user-service
       docker:
         dockerfile: Dockerfile
-    - image: mail-service-image
+    - image: mailservice
       context: src/mail-service
       docker:
         dockerfile: Dockerfile
-    - image: notification-service-image
+    - image: notificationservice
       context: src/notification-service
       docker:
         dockerfile: Dockerfile
-    - image: image-service-image
+    - image: imageservice
       context: src/image-service
       docker:
         dockerfile: Dockerfile
-  tagPolicy:
-    sha256: {}
   local:
     useBuildkit: true
     concurrency: 4
-manifests:
-  kustomize:
-    paths:
-      - k8s/base
+deploy:
+  helm:
+    releases:
+      - name: alpha-release
+        namespace: default
+        skipBuildDependencies: false
+        chartPath: ./helm/alpha-chart
+        valuesFiles:
+          - ./helm/alpha-chart/values-dev.yaml
 portForward:
   - resourceType: service
-    resourceName: api-gateway
+    resourceName: alpha-release-api-gateway
     namespace: default
-    port: 80
+    port: 8080
     localPort: 8080
   - resourceType: service
-    resourceName: postgres
+    resourceName: alpha-release-postgresql
     namespace: default
     port: 5432
     localPort: 5432
+  - resourceType: service
+    resourceName: alpha-release-jaeger-query
+    namespace: default
+    port: 16686
+    localPort: 16686
 profiles:
-  - name: local
+  - name: dev
     activation:
       - command: dev
-    manifests:
-      kustomize:
-        paths:
-          - k8s/overlays/local
+    build:
+      local:
+        push: false
+    deploy:
+      helm:
+        releases:
+          - name: alpha-release
+            namespace: default
+            skipBuildDependencies: true
+            chartPath: ./helm/alpha-chart
+            valuesFiles:
+              - ./helm/alpha-chart/values-dev.yaml
+            setValueTemplates:
+              services.api-gateway.image.repository: "{{.IMAGE_REPO_apigateway}}"
+              services.api-gateway.image.tag: "{{.IMAGE_TAG_apigateway}}@{{.IMAGE_DIGEST_apigateway}}"
+              services.chat-service.image.repository: "{{.IMAGE_REPO_chatservice}}"
+              services.chat-service.image.tag: "{{.IMAGE_TAG_chatservice}}@{{.IMAGE_DIGEST_chatservice}}"
+              services.post-service.image.repository: "{{.IMAGE_REPO_postservice}}"
+              services.post-service.image.tag: "{{.IMAGE_TAG_postservice}}@{{.IMAGE_DIGEST_postservice}}"
+              services.user-service.image.repository: "{{.IMAGE_REPO_userservice}}"
+              services.user-service.image.tag: "{{.IMAGE_TAG_userservice}}@{{.IMAGE_DIGEST_userservice}}"
+              services.mail-service.image.repository: "{{.IMAGE_REPO_mailservice}}"
+              services.mail-service.image.tag: "{{.IMAGE_TAG_mailservice}}@{{.IMAGE_DIGEST_mailservice}}"
+              services.notification-service.image.repository: "{{.IMAGE_REPO_notificationservice}}"
+              services.notification-service.image.tag: "{{.IMAGE_TAG_notificationservice}}@{{.IMAGE_DIGEST_notificationservice}}"
+              services.image-service.image.repository: "{{.IMAGE_REPO_imageservice}}"
+              services.image-service.image.tag: "{{.IMAGE_TAG_imageservice}}@{{.IMAGE_DIGEST_imageservice}}"
+            setValues:
+              global.image.pullPolicy: "IfNotPresent"
   - name: prod
     activation:
-      - command: run
-    manifests:
-      kustomize:
-        paths:
-          - k8s/overlays/prod
+      - command: deploy
+    build:
+      local:
+        push: true
+    patches:
+      - op: replace
+        path: /deploy/helm/releases/0/valuesFiles/0
+        value: ./helm/alpha-chart/values-prod.yaml

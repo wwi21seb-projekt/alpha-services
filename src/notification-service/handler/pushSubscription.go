@@ -2,31 +2,29 @@ package handler
 
 import (
 	"context"
-	"os"
-	"strings"
-
 	"github.com/google/uuid"
+	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
+	"os"
+	"time"
 )
 
 type pushSubscriptionService struct {
 	logger             *zap.SugaredLogger
 	db                 *db.DB
-	profileClient      pbUser.UserServiceClient
-	subscriptionClient pbUser.SubscriptionServiceClient
-	pb.UnimplementedPushServiceServer
+	profileClient      userv1.UserServiceClient
+	subscriptionClient userv1.SubscriptionServiceClient
+	notificationv1.UnimplementedPushServiceServer
 }
 
-func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient pbUser.UserServiceClient, subscriptionClient pbUser.SubscriptionServiceClient) pb.PushServiceServer {
+func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscriptionClient userv1.SubscriptionServiceClient) notificationv1.PushServiceServer {
 	return &pushSubscriptionService{
 		logger:             logger,
 		db:                 db,
@@ -35,22 +33,14 @@ func NewPushSubscriptionServiceServer(logger *zap.SugaredLogger, db *db.DB, prof
 	}
 }
 
-func (p *pushSubscriptionService) GetPublicKey(context.Context, *pbCommon.Empty) (*pb.PublicKeyResponse, error) {
+func (p *pushSubscriptionService) GetPublicKey(context.Context, *notificationv1.GetPublicKeyRequest) (*notificationv1.GetPublicKeyResponse, error) {
 	vapidPulicKey := os.Getenv("VAPID_PUBLIC_KEY")
-	return &pb.PublicKeyResponse{
+	return &notificationv1.GetPublicKeyResponse{
 		PublicKey: vapidPulicKey,
 	}, nil
 }
 
-func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, request *pb.CreatePushSubscriptionRequest) (*pb.CreatePushSubscriptionResponse, error) {
-	tx, err := p.db.Begin(ctx)
-	if err != nil {
-		p.logger.Errorf("Error in db.Begin: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start transaction: %v", err)
-	}
-	defer p.db.Rollback(ctx, tx)
-
-	subscriptionId := uuid.New()
+func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, request *notificationv1.CreatePushSubscriptionRequest) (*notificationv1.CreatePushSubscriptionResponse, error) {
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
@@ -58,24 +48,78 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	p.logger.Info("Checking for existing subscription with the same username, type, and future expiration time...")
 
 	// Type needs to be converted to lowercase because enum value is uppercase but postgres expects lowercase
-	typeLower := strings.ToLower(request.Type.String())
 
-	p.logger.Info("Inserting subscription into database...")
-	query, args, _ := psql.Insert("push_subscriptions").
+	var typeLower string
+	if request.Type == notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_WEB {
+		typeLower = "web"
+	} else {
+		typeLower = "expo"
+	}
+
+	pushSubscription := &schema.PushSubscription{
+		SubscriptionID: uuid.New(),
+		Username:       authenticatedUsername,
+		Type:           typeLower,
+		Token:          nil,
+		Endpoint:       nil,
+		ExpirationTime: nil,
+		P256dh:         nil,
+		Auth:           nil,
+	}
+
+	if request.Token != "" {
+		pushSubscription.Token = &request.Token
+	}
+
+	if request.Endpoint != "" {
+		pushSubscription.Endpoint = &request.Endpoint
+	}
+
+	if request.P256Dh != "" {
+		pushSubscription.P256dh = &request.P256Dh
+	}
+
+	if request.Auth != "" {
+		pushSubscription.Auth = &request.Auth
+	}
+
+	if request.ExpirationTime != "" {
+		expirationTime, err := time.Parse(time.RFC3339, request.ExpirationTime)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid expiration time: %v", err)
+		}
+		pushSubscription.ExpirationTime = &expirationTime
+	}
+
+	query, args, _ := psql.
+		Insert("push_subscriptions").
 		Columns("subscription_id", "username", "type", "endpoint", "expiration_time", "p256dh", "auth").
-		Values(subscriptionId, authenticatedUsername, typeLower, request.Endpoint, request.ExpirationTime, request.P256Dh, request.Auth).
+		Values(pushSubscription.SubscriptionID, pushSubscription.Username, pushSubscription.Type,
+			&pushSubscription.Endpoint, &pushSubscription.ExpirationTime, &pushSubscription.P256dh, &pushSubscription.Auth).
 		ToSql()
+
+	conn, err := p.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := p.db.BeginTx(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer p.db.RollbackTx(ctx, tx)
+
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := p.db.Commit(ctx, tx); err != nil {
+	if err := p.db.CommitTx(ctx, tx); err != nil {
 		p.logger.Errorf("Error in tx.Commit: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
 	}
 
-	return &pb.CreatePushSubscriptionResponse{
-		SubscriptionId: subscriptionId.String(),
+	return &notificationv1.CreatePushSubscriptionResponse{
+		SubscriptionId: pushSubscription.SubscriptionID.String(),
 	}, nil
 }

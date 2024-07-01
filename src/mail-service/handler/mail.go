@@ -3,12 +3,11 @@ package handler
 import (
 	"context"
 	"fmt"
+	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
 	"os"
 
 	"github.com/mailgun/mailgun-go/v4"
 	"github.com/matcornic/hermes/v2"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/mail"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -19,21 +18,21 @@ import (
 var from = "Server Alpha <team@mail.server-alpha.tech>"
 var serviceName = "Team Ganz Weit Weg"
 
-type mailService struct {
+type MailService struct {
 	logger *zap.SugaredLogger
 	tracer trace.Tracer
 	mg     *mailgun.MailgunImpl
 	h      *hermes.Hermes
-	pb.UnimplementedMailServiceServer
+	mailv1.UnimplementedMailServiceServer
 }
 
 // NewMailService creates a new mail service
-func NewMailService(logger *zap.SugaredLogger) *mailService {
+func NewMailService(logger *zap.SugaredLogger) *MailService {
 	apiKey := os.Getenv("MAILGUN_API_KEY")
 	mailgunInstance := mailgun.NewMailgun("mail.server-alpha.tech", apiKey)
 	mailgunInstance.SetAPIBase(mailgun.APIBaseEU)
 
-	return &mailService{
+	return &MailService{
 		logger: logger,
 		tracer: otel.GetTracerProvider().Tracer("grpc-mail-service"),
 		h: &hermes.Hermes{
@@ -51,7 +50,7 @@ func NewMailService(logger *zap.SugaredLogger) *mailService {
 	}
 }
 
-func (ms *mailService) SendConfirmationMail(ctx context.Context, request *pb.ConfirmationMailRequest) (*pbCommon.Empty, error) {
+func (ms *MailService) SendConfirmationMail(ctx context.Context, request *mailv1.SendConfirmationMailRequest) (*mailv1.SendConfirmationMailResponse, error) {
 	email := hermes.Email{
 		Body: hermes.Body{
 			Name: request.GetUser().GetUsername(),
@@ -72,19 +71,19 @@ func (ms *mailService) SendConfirmationMail(ctx context.Context, request *pb.Con
 		return nil, status.Errorf(codes.Internal, "Failed to send confirmation mail: %v", err)
 	}
 
-	return nil, nil
+	return &mailv1.SendConfirmationMailResponse{}, nil
 }
 
-func (ms *mailService) SendTokenMail(ctx context.Context, request *pb.TokenMailRequest) (*pbCommon.Empty, error) {
+func (ms *MailService) SendTokenMail(ctx context.Context, request *mailv1.SendTokenMailRequest) (*mailv1.SendTokenMailResponse, error) {
 	var email hermes.Email
 	subject := ""
 
 	switch request.GetType() {
-	case pb.TokenMailType_TOKENMAILTYPE_REGISTRATION:
+	case mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION:
 		ms.logger.Infof("Sending registration mail to %s", request.GetUser().GetEmail())
 		subject = fmt.Sprintf("Welcome %s! Activate your account now!", request.GetUser().GetUsername())
 		email = ms.generateRegistrationMail(ctx, request)
-	case pb.TokenMailType_TOKENMAILTYPE_PASSWORD_RESET:
+	case mailv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET:
 		ms.logger.Infof("Sending password reset mail to %s", request.GetUser().GetEmail())
 		subject = fmt.Sprintf("Password reset for %s", request.GetUser().GetUsername())
 		email = ms.generatePasswordResetMail(ctx, request)
@@ -98,11 +97,11 @@ func (ms *mailService) SendTokenMail(ctx context.Context, request *pb.TokenMailR
 		return nil, status.Errorf(codes.Internal, "Failed to send token mail: %v", err)
 	}
 
-	return &pbCommon.Empty{}, nil
+	return &mailv1.SendTokenMailResponse{}, nil
 }
 
 // SendMail sends an email
-func (ms *mailService) sendMail(ctx context.Context, email hermes.Email, subject, to string) error {
+func (ms *MailService) sendMail(ctx context.Context, email hermes.Email, subject, to string) error {
 	_, composeSpan := ms.tracer.Start(ctx, "composeMail")
 	emailBody, err := ms.h.GenerateHTML(email)
 	if err != nil {
@@ -126,7 +125,7 @@ func (ms *mailService) sendMail(ctx context.Context, email hermes.Email, subject
 	return nil
 }
 
-func (ms *mailService) generateRegistrationMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
+func (ms *MailService) generateRegistrationMail(ctx context.Context, request *mailv1.SendTokenMailRequest) hermes.Email {
 	_, span := ms.tracer.Start(ctx, "generateRegistrationMail")
 	defer span.End()
 
@@ -150,7 +149,7 @@ func (ms *mailService) generateRegistrationMail(ctx context.Context, request *pb
 	}
 }
 
-func (ms *mailService) generatePasswordResetMail(ctx context.Context, request *pb.TokenMailRequest) hermes.Email {
+func (ms *MailService) generatePasswordResetMail(ctx context.Context, request *mailv1.SendTokenMailRequest) hermes.Email {
 	_, span := ms.tracer.Start(ctx, "generatePasswordResetMail")
 	defer span.End()
 

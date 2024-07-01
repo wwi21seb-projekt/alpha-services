@@ -1,0 +1,115 @@
+{{- range $serviceName, $serviceConfig := .Values.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $serviceName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $.Release.Name }}-{{ $serviceName }}
+spec:
+  replicas: {{ $serviceConfig.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $.Release.Name }}-{{ $serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $.Release.Name }}-{{ $serviceName }}
+    spec:
+      containers:
+        - name: {{ $serviceName }}
+          image: "{{ $serviceConfig.image.repository | default $.Values.global.image.repository }}/{{ $serviceConfig.image.name | default $serviceName }}:{{ $serviceConfig.image.tag | default $.Values.global.image.tag }}"
+          imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $serviceConfig.port }}
+          env:
+            - name: PORT
+              value: "{{ $serviceConfig.port }}"
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-config
+                  key: ENVIRONMENT
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-config
+                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+            - name: SCHEMA_NAME
+              value: "{{ $serviceName | replace "-" "_"}}"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                  configMapKeyRef:
+                    name: {{ $.Release.Name }}-config
+                    key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Release.Name }}-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                  secretKeyRef:
+                      name: {{ $.Release.Name }}-secrets
+                      key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                  secretKeyRef:
+                      name: {{ $.Release.Name }}-secrets
+                      key: POSTGRES_PASSWORD
+            {{- if (eq $serviceName "api-gateway") }}
+            - name: JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: JWT_PRIVATE_KEY
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: JWT_PUBLIC_KEY
+            {{ end }}
+            {{- if (eq $serviceName "mail-service") }}
+            - name: MAILGUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: MAILGUN_API_KEY
+            {{ end }}
+            {{- if (eq $serviceName "notification-service") }}
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: VAPID_PUBLIC_KEY
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: VAPID_PRIVATE_KEY
+            {{ end }}
+            {{- include "alpha-chart.global.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 8 }}
+            {{- include "alpha-chart.service.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 8 }}
+            {{- range $connectsTo := $serviceConfig.connections }}
+            - name: {{ upper ($connectsTo | replace "-" "_") }}_URL
+              value: {{ printf "%s-%s.%s.svc.cluster.local:%d" $.Release.Name $connectsTo $.Release.Namespace (int (index $.Values.services $connectsTo).port) }}
+            {{- end }}
+          resources:
+            limits:
+              memory: {{ $.Values.global.resources.limits.memory }}
+          {{- if eq $serviceName "image-service" }}
+          volumeMounts:
+            - name: image-service-storage
+              mountPath: /serveralpha/data
+      volumes:
+        - name: image-service-storage
+          persistentVolumeClaim:
+            claimName: {{ $.Release.Name }}-image-store-pvc
+      {{- end }}
+---
+{{- end }}

@@ -1,0 +1,21 @@
+apiVersion: v2
+name: alpha-chart
+description: A Helm chart for deploying alpha microservices
+version: 0.1.1
+type: application
+
+dependencies:
+  - name: postgresql
+    version: 15.5.9
+    repository: https://charts.bitnami.com/bitnami
+  - name: opentelemetry-collector
+    version: 0.94.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: kube-prometheus-stack
+    version: 60.3.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+  - name: jaeger
+    version: 3.0.10
+    repository: https://jaegertracing.github.io/helm-charts
+    condition: jaeger.enabled

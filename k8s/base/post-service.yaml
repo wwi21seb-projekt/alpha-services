@@ -66,21 +66,3 @@ spec:
       name: grpc
       port: 50051
       targetPort: 50051
-    # metrics server
-    - protocol: TCP
-      name: metrics
-      port: 2112
-      targetPort: 2112
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: post-service
-  labels:
-    team: team-alpha
-spec:
-  selector:
-    matchLabels:
-      app: post-service
-  endpoints:
-    - port: metrics

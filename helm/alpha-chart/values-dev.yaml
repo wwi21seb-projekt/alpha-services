@@ -1,0 +1,59 @@
+overrideConfigMap:
+  ENVIRONMENT: development
+
+secretOverride:
+  MAILGUN_API_KEY: ""
+
+global:
+  image:
+    tag: pr-25
+
+postgresql:
+  image:
+    debug: true
+  auth:
+    username: "alpha_user"
+    password: "A3C2EW7ieV"
+    database: "alpha_db"
+
+opentelemetry-collector:
+  mode: deployment
+  ports:
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+      containerPort: 8889
+      servicePort: 8889
+      protocol: TCP
+  serviceMonitor:
+    enabled: true
+    metricsEndpoints:
+      - port: metrics
+      - port: prometheus # This is the port of the prometheus receiver (8889)
+  config:
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      otlp/jaeger:
+        endpoint: "alpha-release-jaeger-collector:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        metrics:
+          receivers:
+            - otlp
+          exporters:
+            - prometheus
+        traces:
+          receivers:
+            - otlp
+          exporters:
+            - otlp/jaeger
+
+prometheus:
+  enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack
+
+jaeger:
+  enabled: true

@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,9 +27,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
 	"github.com/wwi21seb-projekt/alpha-shared/keys"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/chat"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pbUser "github.com/wwi21seb-projekt/alpha-shared/proto/user"
 )
 
 var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
@@ -33,13 +35,13 @@ type chatService struct {
 	logger     *zap.SugaredLogger
 	tracer     trace.Tracer
 	db         *db.DB
-	userClient pbUser.UserServiceClient
+	userClient userv1.UserServiceClient
 	streams    map[string]*chatStream
 	mu         sync.RWMutex
-	pb.UnimplementedChatServiceServer
+	chatv1.UnimplementedChatServiceServer
 }
 
-func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient pbUser.UserServiceClient) pb.ChatServiceServer {
+func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient userv1.UserServiceClient) chatv1.ChatServiceServer {
 	return &chatService{
 		logger:     logger,
 		tracer:     otel.GetTracerProvider().Tracer("chat-service"),
@@ -63,7 +65,7 @@ type openConnection struct {
 	// to allow the user to connect from multiple devices. but we need to
 	// save all the references to the streams to be able to send messages
 	// to all of them
-	streams []pb.ChatService_ChatStreamServer
+	streams []chatv1.ChatService_ChatMessageServer
 	// active is used to determine if the connection is active or not. it's used to
 	// determine if the connection was prepared but not yet connected
 	active bool
@@ -72,12 +74,18 @@ type openConnection struct {
 }
 
 // CreateChat implements serveralpha.ChatServiceServer.
-func (cs *chatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest) (*pb.CreateChatResponse, error) {
-	tx, err := cs.db.Begin(ctx)
+func (cs *chatService) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
+	conn, err := cs.db.Acquire(ctx)
+	if err != nil {
+		cs.logger.Errorf("Error in cs.db.Acquire: %v", err)
+		return nil, err
+	}
+
+	tx, err := cs.db.BeginTx(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
-	defer cs.db.Rollback(ctx, tx)
+	defer cs.db.RollbackTx(ctx, tx)
 
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 	chatId, messageId := uuid.New(), uuid.New()
@@ -137,14 +145,14 @@ func (cs *chatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest
 		return nil, err
 	}
 	// Now we can commit the transaction
-	if err := cs.db.Commit(ctx, tx); err != nil {
+	if err := cs.db.CommitTx(ctx, tx); err != nil {
 		cs.logger.Errorf("Error in cs.db.Commit: %v", err)
 		return nil, err
 	}
 
-	return &pb.CreateChatResponse{
+	return &chatv1.CreateChatResponse{
 		ChatId: chatId.String(),
-		Message: &pb.ChatMessage{
+		Message: &chatv1.ChatMessageResponse{
 			Username:  username,
 			Message:   req.GetMessage(),
 			CreatedAt: createdAt.Format(time.RFC3339),
@@ -153,8 +161,8 @@ func (cs *chatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest
 }
 
 // GetChat implements serveralpha.ChatServiceServer.
-func (cs *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb.GetChatResponse, error) {
-	conn, err := cs.db.Pool.Acquire(ctx)
+func (cs *chatService) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
+	conn, err := cs.db.Acquire(ctx)
 	if err != nil {
 		cs.logger.Errorf("Error in cs.db.Pool.Acquire: %v", err)
 		return nil, err
@@ -162,6 +170,11 @@ func (cs *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb
 	defer conn.Release()
 
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	offset, err := strconv.Atoi(req.GetPagination().GetPageToken())
+	if err != nil {
+		offset = 0
+	}
 
 	// Check if user1 or user2 equals the username, otherwise return not found
 	selectCtx, selectSpan := cs.tracer.Start(ctx, "GetChat")
@@ -171,8 +184,8 @@ func (cs *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb
 		Join("chats c ON m.chat_id = c.chat_id").
 		Where("c.chat_id = ? AND (c.user1_name = ? OR c.user2_name = ?)", req.ChatId, username, username).
 		OrderBy("m.created_at DESC").
-		Offset(uint64(req.Pagination.Offset)).
-		Limit(uint64(req.Pagination.Limit)).
+		Offset(uint64(offset)).
+		Limit(uint64(req.Pagination.GetPageSize())).
 		ToSql()
 
 	countQuery, countArgs, _ := psql.Select("COUNT(*)").
@@ -198,9 +211,9 @@ func (cs *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb
 	selectSpan.End()
 
 	_, scanSpan := cs.tracer.Start(ctx, "ScanChatRows")
-	var messages []*pb.ChatMessage
+	var messages []*chatv1.ChatMessageResponse
 	for dataRows.Next() {
-		var message pb.ChatMessage
+		var message chatv1.ChatMessageResponse
 		var createdAt pgtype.Timestamptz
 
 		if err := dataRows.Scan(&message.Message, &createdAt, &message.Username); err != nil {
@@ -215,30 +228,29 @@ func (cs *chatService) GetChat(ctx context.Context, req *pb.GetChatRequest) (*pb
 		messages = append(messages, &message)
 	}
 
-	pagination := &pbCommon.Pagination{
-		Offset: req.Pagination.Offset,
-		Limit:  req.Pagination.Limit,
+	pagination := &commonv1.PaginationResponse{
+		NextPageToken: req.Pagination.GetPageToken(),
 	}
-	if err := results.QueryRow().Scan(&pagination.Records); err != nil {
+	if err := results.QueryRow().Scan(&pagination.TotalSize); err != nil {
 		scanSpan.End()
 		cs.logger.Errorf("Error in results.QueryRow().Scan: %v", err)
 		return nil, status.Error(codes.Internal, "could not get chat")
 	}
 	scanSpan.End()
 
-	if pagination.Records == 0 {
+	if pagination.GetTotalSize() == 0 {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
 
-	return &pb.GetChatResponse{
+	return &chatv1.GetChatResponse{
 		Messages:   messages,
 		Pagination: pagination,
 	}, nil
 }
 
 // ListChats implements serveralpha.ChatServiceServer.
-func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.ListChatsResponse, error) {
-	conn, err := cs.db.Pool.Acquire(ctx)
+func (cs *chatService) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) (*chatv1.ListChatsResponse, error) {
+	conn, err := cs.db.Acquire(ctx)
 	if err != nil {
 		cs.logger.Errorf("Error in cs.db.Pool.Acquire: %v", err)
 		return nil, err
@@ -275,11 +287,11 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 	selectSpan.End()
 
 	_, scanSpan := cs.tracer.Start(ctx, "ScanChatRows")
-	var chats []*pb.Chat
+	var chats []*chatv1.Chat
 	var usernames []string
 	for rows.Next() {
-		var chat = pb.Chat{
-			User: &pbUser.User{},
+		var chat = chatv1.Chat{
+			User: &userv1.User{},
 		}
 
 		if err := rows.Scan(&chat.Id, &chat.User.Username); err != nil {
@@ -295,14 +307,14 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 
 	// Early return to avoid unnecessary calls to user service
 	if len(chats) == 0 {
-		return &pb.ListChatsResponse{
+		return &chatv1.ListChatsResponse{
 			Chats: chats,
 		}, nil
 	}
 
 	// Get user information for each chat
 	upstreamCtx, upstreamSpan := cs.tracer.Start(ctx, "UpstreamListUsers")
-	resp, err := cs.userClient.ListUsers(upstreamCtx, &pbUser.ListUsersRequest{Usernames: usernames})
+	resp, err := cs.userClient.ListUsers(upstreamCtx, &userv1.ListUsersRequest{Usernames: usernames})
 	if err != nil {
 		upstreamSpan.End()
 		cs.logger.Errorf("Error in cs.userClient.ListUsers: %v", err)
@@ -320,14 +332,14 @@ func (cs *chatService) ListChats(ctx context.Context, req *pbCommon.Empty) (*pb.
 	}
 	upstreamSpan.End()
 
-	return &pb.ListChatsResponse{
+	return &chatv1.ListChatsResponse{
 		Chats: chats,
 	}, nil
 }
 
 // PrepareChatStream implements serveralpha.ChatServiceServer.
-func (cs *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareChatStreamRequest) (*pbCommon.Empty, error) {
-	conn, err := cs.db.Pool.Acquire(ctx)
+func (cs *chatService) PrepareChatStream(ctx context.Context, req *chatv1.PrepareChatStreamRequest) (*chatv1.PrepareChatStreamResponse, error) {
+	conn, err := cs.db.Acquire(ctx)
 	if err != nil {
 		cs.logger.Errorf("Error in cs.db.Pool.Acquire: %v", err)
 		return nil, err
@@ -373,7 +385,7 @@ func (cs *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareCha
 	for _, conn := range cs.streams[req.GetChatId()].connections {
 		if conn.username == username {
 			prepareSpan.End()
-			return &pbCommon.Empty{}, nil
+			return &chatv1.PrepareChatStreamResponse{}, nil
 		}
 	}
 
@@ -386,11 +398,11 @@ func (cs *chatService) PrepareChatStream(ctx context.Context, req *pb.PrepareCha
 	cs.streams[req.GetChatId()].connections = append(cs.streams[req.GetChatId()].connections, openConn)
 	prepareSpan.End()
 
-	return &pbCommon.Empty{}, nil
+	return &chatv1.PrepareChatStreamResponse{}, nil
 }
 
-// ChatStream implements serveralpha.ChatServiceServer.
-func (cs *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error {
+// ChatMessage implements serveralpha.ChatServiceServer.
+func (cs *chatService) ChatMessage(stream chatv1.ChatService_ChatMessageServer) error {
 	ctx := stream.Context()
 	cs.logger.Info("Received request for chat stream")
 
@@ -475,7 +487,7 @@ func (cs *chatService) ChatStream(stream pb.ChatService_ChatStreamServer) error 
 	return nil
 }
 
-func (cs *chatService) handleMessages(ctx context.Context, cancel context.CancelFunc, chatId string, conn *openConnection, stream pb.ChatService_ChatStreamServer) {
+func (cs *chatService) handleMessages(ctx context.Context, cancel context.CancelFunc, chatId string, conn *openConnection, stream chatv1.ChatService_ChatMessageServer) {
 	handleCtx, handleSpan := cs.tracer.Start(ctx, "HandleMessages")
 	defer handleSpan.End()
 
@@ -489,6 +501,9 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 		default:
 			// Receive message from the client
 			message, err := stream.Recv()
+
+			// Add created_at
+
 			chatCtx, chatSpan := cs.tracer.Start(handleCtx, "ReceiveMessage")
 			if err != nil {
 				chatSpan.AddEvent("Failed to receive message from client")
@@ -506,26 +521,24 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 			}
 
 			// Insert the message into the database
-			tx, err := cs.db.Begin(chatCtx)
+			conn, err := cs.db.Acquire(chatCtx)
 			if err != nil {
-				chatSpan.AddEvent("Failed to start transaction")
+				chatSpan.AddEvent("Failed to start connection")
 				chatSpan.End()
-				cs.logger.Errorf("Failed to start transaction: %v", err)
+				cs.logger.Errorf("Failed to start connection: %v", err)
 				return
 			}
-			defer cs.db.Rollback(chatCtx, tx)
 
-			if err := cs.insertMessage(chatCtx, tx, chatId, message.GetUsername(), message.GetMessage()); err != nil {
+			response := &chatv1.ChatMessageResponse{
+				Username:  message.GetUsername(),
+				Message:   message.GetMessage(),
+				CreatedAt: time.Now().Format(time.RFC3339),
+			}
+
+			if err := cs.insertMessage(chatCtx, conn, chatId, response.GetUsername(), response.GetMessage(), response.GetCreatedAt()); err != nil {
 				chatSpan.AddEvent("Failed to insert message")
 				chatSpan.End()
 				cs.logger.Errorf("Failed to insert message: %v", err)
-				return
-			}
-
-			if err := cs.db.Commit(chatCtx, tx); err != nil {
-				chatSpan.AddEvent("Failed to commit transaction")
-				chatSpan.End()
-				cs.logger.Errorf("Failed to commit transaction: %v", err)
 				return
 			}
 
@@ -538,7 +551,8 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 			for _, c := range cs.streams[chatId].connections {
 				if c.active {
 					for _, stream := range c.streams {
-						if err := stream.Send(message); err != nil {
+
+						if err := stream.Send(response); err != nil {
 							sendSpan.AddEvent("Failed to send message to client")
 							cs.logger.Errorf("Failed to send message to client: %v", err)
 							error = true
@@ -559,9 +573,8 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 	}
 }
 
-func (cs *chatService) insertMessage(ctx context.Context, tx pgx.Tx, chatId, username, message string) error {
+func (cs *chatService) insertMessage(ctx context.Context, conn *pgxpool.Conn, chatId, username, message, createdAt string) error {
 	messageId := uuid.New()
-	createdAt := time.Now()
 
 	insertCtx, insertSpan := cs.tracer.Start(ctx, "InsertMessage")
 	defer insertSpan.End()
@@ -570,7 +583,7 @@ func (cs *chatService) insertMessage(ctx context.Context, tx pgx.Tx, chatId, use
 		Values(chatId, messageId, username, message, createdAt).
 		ToSql()
 
-	_, err := tx.Exec(insertCtx, query, args...)
+	_, err := conn.Exec(insertCtx, query, args...)
 	return err
 }
 
@@ -579,7 +592,7 @@ func removeSingleConnection(slice []*openConnection, i int) []*openConnection {
 	return slice[:len(slice)-1]
 }
 
-func removeSingleStream(slice []pb.ChatService_ChatStreamServer, i int) []pb.ChatService_ChatStreamServer {
+func removeSingleStream(slice []chatv1.ChatService_ChatMessageServer, i int) []chatv1.ChatService_ChatMessageServer {
 	slice[i] = slice[len(slice)-1]
 	return slice[:len(slice)-1]
 }

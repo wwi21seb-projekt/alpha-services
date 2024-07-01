@@ -2,12 +2,12 @@ package handler
 
 import (
 	"context"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/schema"
-	pbCommon "github.com/wwi21seb-projekt/alpha-shared/proto/common"
-	pbNotification "github.com/wwi21seb-projekt/alpha-shared/proto/notification"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -24,11 +24,11 @@ type NotificationHdlr interface {
 
 type NotificationHandler struct {
 	logger                  *zap.SugaredLogger
-	notificationService     pbNotification.NotificationServiceClient
-	pushSubscriptionService pbNotification.PushServiceClient
+	notificationService     notificationv1.NotificationServiceClient
+	pushSubscriptionService notificationv1.PushServiceClient
 }
 
-func NewNotificationHandler(logger *zap.SugaredLogger, notificationClient pbNotification.NotificationServiceClient, pushSubscriptionClient pbNotification.PushServiceClient) NotificationHdlr {
+func NewNotificationHandler(logger *zap.SugaredLogger, notificationClient notificationv1.NotificationServiceClient, pushSubscriptionClient notificationv1.PushServiceClient) NotificationHdlr {
 	return &NotificationHandler{
 		logger:                  logger,
 		notificationService:     notificationClient,
@@ -40,7 +40,7 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	publicKey, err := n.pushSubscriptionService.GetPublicKey(ctx, &pbCommon.Empty{})
+	publicKey, err := n.pushSubscriptionService.GetPublicKey(ctx, &notificationv1.GetPublicKeyRequest{})
 
 	if err != nil {
 		returnErr := goerrors.InternalServerError
@@ -60,21 +60,30 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	// Make gRPC call
-	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, &pbNotification.CreatePushSubscriptionRequest{
-		Type: func(s string) pbNotification.PushSubscriptionType {
-			if val, ok := pbNotification.PushSubscriptionType_value[s]; ok {
-				return pbNotification.PushSubscriptionType(val)
-			}
-			return pbNotification.PushSubscriptionType_WEB // web is returned by defualt
-		}(req.Type),
-		Token:          req.Token,
-		Endpoint:       req.Endpoint,
-		ExpirationTime: req.ExpirationTime,
-		P256Dh:         req.P256Dh,
-		Auth:           req.Auth,
-	})
+	pushType := notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_WEB
+	if req.Type == "expo" {
+		pushType = notificationv1.PushSubscriptionType_PUSH_SUBSCRIPTION_TYPE_EXPO
+	}
 
+	// Initialisiere gRPC-Request
+	grpcReq := &notificationv1.CreatePushSubscriptionRequest{
+		Type:  pushType,
+		Token: req.Token,
+	}
+
+	// Fülle die Web-spezifischen Felder, falls der Typ "web" ist
+	if req.Type == "web" && req.Subscription != nil {
+		grpcReq.Endpoint = req.Subscription.Endpoint
+		grpcReq.ExpirationTime = ""
+		if req.Subscription.ExpirationTime != nil {
+			grpcReq.ExpirationTime = *req.Subscription.ExpirationTime
+		}
+		grpcReq.P256Dh = req.Subscription.Keys.P256Dh
+		grpcReq.Auth = req.Subscription.Keys.Auth
+	}
+
+	// Führe den gRPC-Call aus
+	createPushSubscriptionResponse, err := n.pushSubscriptionService.CreatePushSubscription(ctx, grpcReq)
 	if err != nil {
 		returnErr := goerrors.InternalServerError
 		if status.Code(err) == codes.NotFound {
@@ -95,7 +104,7 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	notifications, err := n.notificationService.GetNotifications(ctx, &pbCommon.Empty{})
+	notifications, err := n.notificationService.ListNotifications(ctx, &notificationv1.ListNotificationsRequest{})
 
 	if err != nil {
 		code := status.Code(err)
@@ -110,32 +119,13 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 		return
 	}
 
-	response := schema.GetNotificationsResponse{}
-	for _, notification := range notifications.Notifications {
-		responseUser := schema.Author{
-			Username: notification.User.Username,
-			Nickname: notification.User.Nickname,
-			Picture: &schema.Picture{
-				Url:    notification.User.GetPicture().GetUrl(),
-				Width:  notification.User.GetPicture().GetWidth(),
-				Height: notification.User.GetPicture().GetHeight(),
-			},
-		}
-		responseNotification := schema.Notification{
-			NotificationID:   notification.NotificationId,
-			Timestamp:        notification.Timestamp,
-			NotificationType: notification.NotficationType.String(),
-			User:             responseUser,
-		}
-		response.Records = append(response.Records, responseNotification)
-	}
-	c.JSON(200, response)
+	c.JSON(200, dto.TransformNotificationProtoToDTO(notifications))
 }
 
 func (n *NotificationHandler) DeleteNotification(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
-	_, err := n.notificationService.DeleteNotification(ctx, &pbNotification.DeleteNotificationRequest{
+	_, err := n.notificationService.DeleteNotification(ctx, &notificationv1.DeleteNotificationRequest{
 		NotificationId: c.Param("notificationId"),
 	})
 
@@ -148,5 +138,5 @@ func (n *NotificationHandler) DeleteNotification(c *gin.Context) {
 		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
-	c.JSON(204, pbCommon.Empty{})
+	c.JSON(204, notificationv1.DeleteNotificationResponse{})
 }

@@ -34,6 +34,8 @@ runs:
             - 'src/post-service/**'
           user-service:
             - 'src/user-service/**'
+          image-service:
+            - 'src/image-service/**'
         token: ${{ inputs.github-token }}
 
     - name: Set matrix
@@ -65,6 +67,10 @@ runs:
         fi
         if [ "${{ steps.detect-changed-dirs.outputs.user-service }}" == "true" ]; then
           MATRIX="$MATRIX{\"service\":\"user-service\"},"
+          RESULT="true"
+        fi
+        if [ "${{ steps.detect-changed-dirs.outputs.image-service }}" == "true" ]; then
+          MATRIX="$MATRIX{\"service\":\"image-service\"},"
           RESULT="true"
         fi
         MATRIX="${MATRIX%,}]}"  # Remove trailing comma and close JSON

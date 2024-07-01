@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	"net"
 
 	"github.com/wwi21seb-projekt/alpha-shared/config"
 	sharedGRPC "github.com/wwi21seb-projekt/alpha-shared/grpc"
 	sharedLogging "github.com/wwi21seb-projekt/alpha-shared/logging"
 	"github.com/wwi21seb-projekt/alpha-shared/metrics"
-	pbHealth "github.com/wwi21seb-projekt/alpha-shared/proto/health"
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"github.com/wwi21seb-projekt/alpha-shared/tracing"
 	"github.com/wwi21seb-projekt/src/image-service/handler"
 	"go.uber.org/zap"
@@ -51,11 +50,8 @@ func main() {
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
-	// Register health service
-	pbHealth.RegisterHealthServer(grpcServer, handler.NewHealthServer())
-
 	// Register image service
-	pb.RegisterImageServiceServer(grpcServer, handler.NewImageServiceServer(logger))
+	imagev1.RegisterImageServiceServer(grpcServer, handler.NewImageServiceServer(logger))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))
@@ -64,7 +60,6 @@ func main() {
 	}
 
 	// Start server
-	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
 	logger.Infof("Starting %s v%s on port %s", name, version, cfg.Port)
 	if err = grpcServer.Serve(lis); err != nil {
 		logger.Fatal("Failed to serve", zap.Error(err))

@@ -3,13 +3,13 @@ package handler
 import (
 	"encoding/base64"
 	"fmt"
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	pb "github.com/wwi21seb-projekt/alpha-shared/proto/image"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 )
 
@@ -20,10 +20,10 @@ type ImageHdlr interface {
 type imageHandler struct {
 	logger      *zap.SugaredLogger
 	tracer      trace.Tracer
-	imageClient pb.ImageServiceClient
+	imageClient imagev1.ImageServiceClient
 }
 
-func NewImageHandler(logger *zap.SugaredLogger, imageServiceClient pb.ImageServiceClient) ImageHdlr {
+func NewImageHandler(logger *zap.SugaredLogger, imageServiceClient imagev1.ImageServiceClient) ImageHdlr {
 	return &imageHandler{
 		logger:      logger,
 		tracer:      otel.GetTracerProvider().Tracer("image-handler"),
@@ -40,8 +40,8 @@ func (i *imageHandler) GetImage(c *gin.Context) {
 
 	// Get image from storage
 	i.logger.Infof("Getting image %s", image)
-	imageResponse, err := i.imageClient.GetImage(ctx, &pb.GetImageRequest{
-		ImageName: image,
+	imageResponse, err := i.imageClient.GetImage(ctx, &imagev1.GetImageRequest{
+		Name: image,
 	})
 	if err != nil {
 		i.logger.Errorf("Error in upstream call i.imageClient.GetImage: %v", err)
@@ -50,8 +50,8 @@ func (i *imageHandler) GetImage(c *gin.Context) {
 	}
 
 	// Convert base64 string to image
-	contentType := fmt.Sprintf("image/%s", imageResponse.GetImageType())
-	imageBytes, err := decodeBase64Image(i.logger, imageResponse.GetBase64Image())
+	contentType := fmt.Sprintf("image/%s", imageResponse.GetType())
+	imageBytes, err := decodeBase64Image(i.logger, imageResponse.GetImage())
 	if err != nil {
 		i.logger.Errorf("Failed to decode base64 image: %v", err)
 		c.JSON(500, goerrors.InternalServerError)
