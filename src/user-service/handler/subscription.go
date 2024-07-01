@@ -43,13 +43,6 @@ func NewSubscriptionServer(logger *zap.SugaredLogger, database *db.DB, notificia
 }
 
 func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *userv1.ListSubscriptionsRequest) (*userv1.ListSubscriptionsResponse, error) {
-	conn, err := ss.db.Acquire(ctx)
-	if err != nil {
-		ss.logger.Errorf("Error in ss.db.Pool.Acquire: %v", err)
-		return nil, status.Errorf(codes.Internal, "Failed to acquire connection: %v", err)
-	}
-	defer conn.Release()
-
 	// Fetch the username of the authenticated user
 	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
@@ -70,14 +63,14 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *us
 	// the subscription of the current user in the loop to the authenticated user and S3 the other way around.
 	selectCtx, selectSpan := ss.tracer.Start(ctx, "GetSubscriptionsData")
 	dataQuery, dataArgs, _ := psql.Select().
-		Columns("s2.subscription_id", "s3.subscription_id").
+		Columns("s2.subscription_id AS follower_subscription_id").
+		Columns("s3.subscription_id AS followed_subscription_id").
 		Columns("u.username", "u.nickname", "u.picture_url", "u.picture_width", "u.picture_height").
 		From("users u").
 		Join("subscriptions s1 ON s1."+userTypes[0]+" = u.username").
-		LeftJoin("subscriptions s2 ON s2.subscriber_name = u.username AND s2.subscribee_name = ?", authenticatedUsername).
-		LeftJoin("subscriptions s3 ON s3.subscriber_name = ? AND s3.subscribee_name = u.username", authenticatedUsername).
+		LeftJoin("subscriptions s2 ON s2.subscriber_name = ? AND s2.subscribee_name = u.username", authenticatedUsername).
+		LeftJoin("subscriptions s3 ON s3.subscriber_name = u.username AND s3.subscribee_name = ?", authenticatedUsername).
 		Where("s1."+userTypes[1]+" = ?", request.GetUsername()).
-		GroupBy("s1.created_at", "s2.subscription_id", "s3.subscription_id", "u.username", "u.nickname", "u.picture_url").
 		OrderBy("s1.created_at DESC").
 		Limit(uint64(request.GetPagination().GetPageSize())).
 		Offset(uint64(offset)).
@@ -95,6 +88,13 @@ func (ss subscriptionService) ListSubscriptions(ctx context.Context, request *us
 	batch := &pgx.Batch{}
 	batch.Queue(countQuery, countArgs...)
 	batch.Queue(dataQuery, dataArgs...)
+
+	conn, err := ss.db.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
 	br := conn.SendBatch(selectCtx, batch)
 	defer br.Close()
 
@@ -242,6 +242,21 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *u
 	}, nil
 }
 func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *userv1.DeleteSubscriptionRequest) (*userv1.DeleteSubscriptionResponse, error) {
+	// Fetch the username of the authenticated user
+	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
+
+	ss.logger.Infof("Deleting subscription %s", request.GetSubscriptionId())
+	ss.logger.Infof("Authenticated user: %s", username)
+
+	// Trigger the deletion of the subscription within the transaction, if the subscription does not exist
+	// we'll get an appropriate error
+	deleteCtx, deleteSpan := ss.tracer.Start(ctx, "DeleteSubscription")
+	query, args, _ := psql.Delete("subscriptions").
+		Where("subscription_id = ?", request.GetSubscriptionId()).
+		// We return the subscriber_name to verify that the authenticated user is the subscriber
+		Suffix("RETURNING subscriber_name").
+		ToSql()
+
 	conn, err := ss.db.Acquire(ctx)
 	if err != nil {
 		return nil, err
@@ -253,18 +268,6 @@ func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *u
 		return nil, status.Errorf(codes.Internal, "could not start transaction: %v", err)
 	}
 	defer ss.db.RollbackTx(ctx, tx)
-
-	// Fetch the username of the authenticated user
-	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
-	// Trigger the deletion of the subscription within the transaction, if the subscription does not exist
-	// we'll get an appropriate error
-	deleteCtx, deleteSpan := ss.tracer.Start(ctx, "DeleteSubscription")
-	query, args, _ := psql.Delete("subscriptions").
-		Where("subscription_id = ?", request.GetSubscriptionId()).
-		// We return the subscriber_name to verify that the authenticated user is the subscriber
-		Suffix("RETURNING subscriber_name").
-		ToSql()
 
 	ss.logger.Info("Deleting subscription...")
 	var subscriberName string
