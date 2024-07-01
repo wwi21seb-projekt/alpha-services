@@ -25,18 +25,31 @@ Every service uses shared libraries for common functionality, such as protos, da
 - [Go](https://golang.org/doc/install)
 - [Atlas](https://atlasgo.io/getting-started)
 
-You need to have a `.env.local` file in the `k8s/overlays/local` directory with the following content:
+Central part of the deployment process is the helm chart `alpha-chart` which is located in the `helm/` directory.
+In this chart you need to fill out the file `values-dev.yaml` with your own values. 
+This file is used for your own development environment.
 
-```env
-MAILGUN_API_KEY=getItFromLuca
-POSTGRES_PASSWORD=mypassword
-POSTGRES_USER=myuser
-POSTGRES_NAME=mydatabase
-VAPID_PUBLIC_KEY=yourVapidPublicKey
-VAPID_PRIVATE_KEY=yourVapidPrivateKey
+```yaml
+secretOverride:
+  MAILGUN_API_KEY: "" # (Ask Luca for the key)
 ```
 
 You can get the `MAILGUN_API_KEY` from Luca, the `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` can be generated on the following website for development purposes: [VAPID Key Generator](https://web-push-codelab.glitch.me/).
+
+In case you want to overwrite fields like `VAPID_PUBLIC_KEY` or `JWT_PRIVATE_KEY_BASE64` with your own values, you can just add the following to your `values-dev.yaml`:
+
+```yaml
+secretOverride:
+  VAPID_PUBLIC_KEY: "YourKeyGoesHere"
+  VAPID_PRIVATE_KEY: "YourKeyGoesHere"
+  JWT_PRIVATE_KEY_BASE64: "WW91cktleUdvZXNIZXJl"
+  JWT_PUBLIC_KEY_BASE64: "WW91cktleUdvZXNIZXJl"
+```
+
+Alternatively, you can just replace the keys in your `files` folder in the `helm/alpha-chart/` directory.
+Helper scripts are provided in the `scripts/` directory to generate the keys and base64 encode them.
+
+Please be reminded that this is optional and only necessary if you want to overwrite the default values.
 
 ### Setup
 
@@ -53,29 +66,45 @@ git clone <ssh or https link>
 
 #### Preparing the cluster
 
-1. Create a local Kubernetes cluster with `kind create cluster --name <some_name> --config k8s/overlays/local/kind-config.yaml`.
-2. Install cert-manager with `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.6.3/cert-manager.yaml`
-3. Setup ingress-nginx with `kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/release-1.10/deploy/static/provider/kind/deploy.yaml`
-4. Create the `observability` namespace with `kubectl create namespace observability`, since the jaeger operator requires it.
-5. Install the jaeger operator with `kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.57.0/jaeger-operator.yaml -n observability`
-6. Install the kube-prometheus-stack with:
-
-```sh
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install alpha-kube-prometheus-stack prometheus-community/kube-prometheus-stack --version 60.1.0
+Create a local Kubernetes cluster with 
+```bash
+kind create cluster
 ```
-
-7. Install the otel operator with `kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/download/v0.102.0/opentelemetry-operator.yaml`
-
-> Note: It can take up to a few minutes for each step to complete. Ensure that `cert-manager` and `ingress-nginx` are running before proceeding with the rest of the steps.
 
 #### Running the services
 
-1. Run `skaffold dev` in the root directory to start the services and database.
-2. Change to the `db` directory and run `atlas migrate apply --env=local` to apply the newest schema migrations.
-3. The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`.
-4. To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
-5. Optionally, you can run `kind delete cluster` to delete the local Kubernetes cluster. Note that this will delete all data in the cluster and you will need to prepare the cluster again [as described above](#preparing-the-cluster).
+##### With Skaffold
+```bash
+skaffold dev
+```
+The services should now be running and you can access the API Gateway at `localhost:8080` and the database at `localhost:5432`. 
+If enabled, jaeger can be accessed at `localhost:16686` and grafana at `localhost:3000`.
+Please make sure the corresponding ports are not already used and are present in the `skaffold.yaml` file.
+The default user for grafana is `admin` and the password is `prom-operator`.
+
+To stop the services, interrupt the `skaffold dev` process with `Ctrl+C`.
+
+#### Just with Helm
+```bash
+cd helm/alpha-chart
+helm upgrade --install alpha-release . -f values-dev.yaml
+```
+In case there are updates to the chart, run the same command again to update the services.
+
+### Applying database migrations
+
+In case you need to apply database migrations, you can do so with the following command:
+```bash
+cd db
+atlas migrate apply --env=local
+```
+
+### Deleting the cluster
+
+After you are done with the services, you can delete the cluster with
+```bash
+kind delete cluster
+```
 
 ## Contributing
 

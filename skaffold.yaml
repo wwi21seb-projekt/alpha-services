@@ -60,6 +60,11 @@ portForward:
     namespace: default
     port: 16686
     localPort: 16686
+#  - resourceType: service
+#    resourceName: alpha-release-grafana
+#    namespace: default
+#    port: 80
+#    localPort: 3000
 profiles:
   - name: dev
     activation:

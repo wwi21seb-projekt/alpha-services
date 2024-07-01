@@ -2,11 +2,7 @@ overrideConfigMap:
   ENVIRONMENT: development
 
 secretOverride:
-  MAILGUN_API_KEY: ""
-
-global:
-  image:
-    tag: pr-25
+  MAILGUN_API_KEY: "" # (Ask Luca for the key)
 
 postgresql:
   image:
