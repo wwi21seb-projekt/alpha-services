@@ -83,12 +83,9 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 			return nil, status.Error(codes.NotFound, "user does not exist")
 		}
 
-		likedByUser := sq.Eq{"l.username": req.GetUsername()}
-		commentedByUser := sq.Eq{"c.author_name": req.GetUsername()}
-		authoredByUser := sq.Eq{"p.author_name": req.GetUsername()}
 		queryBuilder = queryBuilder.LeftJoin("likes l ON p.post_id = l.post_id").
 			LeftJoin("comments c ON p.post_id = c.post_id").
-			Where(sq.Or{likedByUser, commentedByUser, authoredByUser})
+			Where(sq.Eq{"p.author_name": req.GetUsername()})
 	}
 
 	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_PERSONAL {
