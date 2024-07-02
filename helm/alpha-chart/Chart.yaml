@@ -9,7 +9,7 @@ dependencies:
     version: 15.5.9
     repository: https://charts.bitnami.com/bitnami
   - name: opentelemetry-collector
-    version: 0.94.0
+    version: 0.96.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   - name: kube-prometheus-stack
     version: 61.1.1
