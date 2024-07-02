@@ -181,7 +181,9 @@ func (us userService) UpdateUser(ctx context.Context, request *userv1.UpdateUser
 		imageHeight = 500 // replace with actual height
 
 		uploadImageSpan.End()
+	}
 
+	if request.Base64Picture != nil {
 		queryBuilder = queryBuilder.Set("picture_url", imageUrl).
 			Set("picture_width", imageWidth).
 			Set("picture_height", imageHeight)
