@@ -1,0 +1,22 @@
+name: Login
+description: Testing the login of a user.
+vars: 
+  baseurl: "https://alpha.c930.net/api"
+
+testcases:
+- name: Login User
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/users/login"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "username": "ardagoat",
+        "password": "Champion1!",
+      }
+    assertions:
+    - result.statuscode ShouldEqual 200
+    - result.bodyjson ShouldContainKey token
+
