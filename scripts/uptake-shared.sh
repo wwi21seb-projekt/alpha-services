@@ -9,6 +9,7 @@ services=(
     "notification-service"
     "post-service"
     "user-service"
+    "image-service"
 )
 
 # Validate the input (needs to be in format v<number>.<number>.<number>)

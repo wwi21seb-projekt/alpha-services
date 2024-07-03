@@ -9,6 +9,7 @@ services=(
     "notification-service"
     "post-service"
     "user-service"
+    "image-service"
 )
 
 # Ensure we are in correct directory
