@@ -34,9 +34,9 @@ postgresql:
   image:
     debug: false
   auth:
-    username: "alpha_user"
-    password: "A3C2EW7ieV"
-    database: "alpha_db"
+    username:
+    password:
+    database:
   primary:
     persistence:
       enabled: true
