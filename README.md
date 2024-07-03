@@ -121,6 +121,26 @@ This project uses a feature branch workflow. To contribute, follow these steps:
 5. Wait for a review and address any comments.
 6. Once approved, merge your pull request.
 
+## Testing
+
+This project uses venom for integration testing. Documentation as well as instructions for installation can be found in this github repository: https://github.com/ovh/venom?tab=readme-ov-file
+
+Test implementations can be found in the `integration-tests` folder. To execute all of the existing tests, you can run the `test-all` script located in the `scripts` directory.
+
+To execute individual test suites, use the following command:
+
+```bash
+venom run <directory> --output-dir <directory>/logs
+```
+
+Example: Running the Imprint Test Suite
+For the imprint test suite, the command would be:
+
+```bash
+venom run integration-tests/imprint --output-dir integration-tests/imprint/logs
+```
+Make sure to specify the logs directory as the output directory to prevent the log files from being stored elsewhere.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
