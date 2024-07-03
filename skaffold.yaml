@@ -20,10 +20,6 @@ build:
       context: src/user-service
       docker:
         dockerfile: Dockerfile
-    - image: mailservice
-      context: src/mail-service
-      docker:
-        dockerfile: Dockerfile
     - image: notificationservice
       context: src/notification-service
       docker:
@@ -90,8 +86,6 @@ profiles:
               services.post-service.image.tag: "{{.IMAGE_TAG_postservice}}@{{.IMAGE_DIGEST_postservice}}"
               services.user-service.image.repository: "{{.IMAGE_REPO_userservice}}"
               services.user-service.image.tag: "{{.IMAGE_TAG_userservice}}@{{.IMAGE_DIGEST_userservice}}"
-              services.mail-service.image.repository: "{{.IMAGE_REPO_mailservice}}"
-              services.mail-service.image.tag: "{{.IMAGE_TAG_mailservice}}@{{.IMAGE_DIGEST_mailservice}}"
               services.notification-service.image.repository: "{{.IMAGE_REPO_notificationservice}}"
               services.notification-service.image.tag: "{{.IMAGE_TAG_notificationservice}}@{{.IMAGE_DIGEST_notificationservice}}"
               services.image-service.image.repository: "{{.IMAGE_REPO_imageservice}}"

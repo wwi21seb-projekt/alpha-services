@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	ginzap "github.com/gin-contrib/zap"
@@ -198,6 +199,17 @@ func setupAuthRoutes(r *gin.RouterGroup, m *middleware.Middleware, ch handler.Ch
 
 func HandleImprint(c *gin.Context) {
 	c.JSON(200, gin.H{
-		"text": "This is the imprint",
+		"text": "Impressum\n\nEinen Löwen interessiert es nicht, was Schafe über ihn denken.\n\nDiese Webseite " +
+			"wird im Rahmen eines Universitätsprojektes angeboten von:\nKurs WWI21SEB\nDuale Hochschule " +
+			"Baden-Württemberg Mannheim\nCoblitzallee 1 – 9, 68163 Mannheim\n\nKontakt:\nE-Mail: " +
+			"team@mail.server-alpha.tech\n\nHaftungsausschluss:\nDer Kurs WWI21SEB und die DHBW Mannheim übernehmen " +
+			"keine Haftung für die Inhalte externer Links. Für den Inhalt der verlinkten Seiten sind ausschließlich " +
+			"deren Betreiber verantwortlich.\n\nDatenschutzbeauftragter der Hochschule:\nProf. Dr. Tobias Straub\n" +
+			"Friedrichstraße 14\n70174 Stuttgart\nE-Mail: straub@dhbw.de\n\nDie Nutzung von auf dieser Website " +
+			"veröffentlichten Kontaktdaten durch Dritte zur Übersendung von nicht ausdrücklich angeforderter Werbung " +
+			"und Informationsmaterialien wird hiermit ausdrücklich untersagt. Die Betreiber der Seiten behalten sich " +
+			"ausdrücklich rechtliche Schritte im Falle der unverlangten Zusendung von Werbeinformationen, etwa durch " +
+			"Spam-Mails, vor.\n\nDiese Webseite wurde im Rahmen eines Universitätsprojekts erstellt und dient " +
+			"ausschließlich zu nicht-kommerziellen Zwecken.",
 	})
 }

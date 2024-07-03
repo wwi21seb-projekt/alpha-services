@@ -111,6 +111,13 @@ func (s *imageService) uploadImage(imageBytes []byte, imageType string, imageCon
 	}
 	s.logger.Infow("Image uploaded", "path", filePath)
 
+	environment := os.Getenv("ENVIRONMENT")
+	if environment == "production" {
+		fileName = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", fileName)
+	} else {
+		fileName = fmt.Sprintf("http://localhost:8080/api/images?image=%s", fileName)
+	}
+
 	return fileName
 }
 

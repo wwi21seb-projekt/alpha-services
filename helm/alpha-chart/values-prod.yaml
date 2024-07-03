@@ -21,10 +21,7 @@ services:
   image-service:
     replicaCount: 1
 
-  mail-service:
-    replicaCount: 1
-
-  notification-service :
+  notification-service:
     replicaCount: 1
 
   post-service:
@@ -88,7 +85,7 @@ opentelemetry-collector:
     enabled: true
 
 prometheus:
-  enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack
+  enabled: false # Turn this off if you dont want to deploy kube-prometheus-stack
 
 jaeger:
   enabled: false

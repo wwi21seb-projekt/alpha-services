@@ -3,14 +3,12 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
-	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 
 	sq "github.com/Masterminds/squirrel"
@@ -48,12 +46,12 @@ type authenticationService struct {
 	logger      *zap.SugaredLogger
 	tracer      trace.Tracer
 	db          *db.DB
-	mailClient  mailv1.MailServiceClient
+	mailClient  notificationv1.MailServiceClient
 	imageClient imagev1.ImageServiceClient
 	userv1.UnimplementedAuthenticationServiceServer
 }
 
-func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient mailv1.MailServiceClient, imageClient imagev1.ImageServiceClient) userv1.AuthenticationServiceServer {
+func NewAuthenticationServer(logger *zap.SugaredLogger, database *db.DB, mailClient notificationv1.MailServiceClient, imageClient imagev1.ImageServiceClient) userv1.AuthenticationServiceServer {
 	return &authenticationService{
 		logger:      logger,
 		tracer:      otel.GetTracerProvider().Tracer("auth-service"),
@@ -137,15 +135,9 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *userv
 			return nil, err
 		}
 
-		environment := os.Getenv("ENVIRONMENT")
-		if environment == "production" {
-			imageUrl = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadImageResponse.GetUrl())
-		} else {
-			imageUrl = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadImageResponse.GetUrl())
-		}
-
-		imageWidth = 500  // replace with actual width
-		imageHeight = 500 // replace with actual height
+		imageUrl = uploadImageResponse.GetUrl()
+		imageWidth = uploadImageResponse.GetWidth()
+		imageHeight = uploadImageResponse.GetHeight()
 
 		uploadImageSpan.End()
 	}
@@ -183,10 +175,10 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *userv
 	// Call mail service to send registration email
 	mailUpstreamCtx, mailUpstreamSpan := as.tracer.Start(ctx, "SendTokenMail")
 	as.logger.Infow("Calling upstream mailClient.SendTokenMail", "username", request.Username)
-	_, err = as.mailClient.SendTokenMail(mailUpstreamCtx, &mailv1.SendTokenMailRequest{
+	_, err = as.mailClient.SendTokenMail(mailUpstreamCtx, &notificationv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
-		User: &mailv1.UserInformation{
+		Type:  notificationv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
+		User: &notificationv1.UserInformation{
 			Username: request.Username,
 			Email:    request.Email,
 		},
@@ -362,8 +354,8 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *userv
 	// Send confirmation email
 	upstreamMailCtx, upstreamMailSpan := as.tracer.Start(ctx, "SendConfirmationMail")
 	as.logger.Info("Calling upstream mailClient.SendMail...")
-	_, err = as.mailClient.SendConfirmationMail(upstreamMailCtx, &mailv1.SendConfirmationMailRequest{
-		User: &mailv1.UserInformation{
+	_, err = as.mailClient.SendConfirmationMail(upstreamMailCtx, &notificationv1.SendConfirmationMailRequest{
+		User: &notificationv1.UserInformation{
 			Username: request.GetUsername(),
 			Email:    email,
 		},
@@ -665,10 +657,10 @@ func (as authenticationService) setNewRegistrationTokenAndSendMail(ctx context.C
 	upstreamMailCtx, upstreamMailSpan := as.tracer.Start(ctx, "SendTokenMail")
 	defer upstreamMailSpan.End() // we can defer here, since we'll return after this
 	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
-	_, err = as.mailClient.SendTokenMail(upstreamMailCtx, &mailv1.SendTokenMailRequest{
+	_, err = as.mailClient.SendTokenMail(upstreamMailCtx, &notificationv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
-		User: &mailv1.UserInformation{
+		Type:  notificationv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION,
+		User: &notificationv1.UserInformation{
 			Username: username,
 			Email:    email,
 		},
@@ -707,10 +699,10 @@ func (as authenticationService) setNewPasswordResetTokenAndSendMail(ctx context.
 
 	// Call mail service to send registration email
 	as.logger.Info("Calling upstream mailClient.SendTokenMail...")
-	_, err = as.mailClient.SendTokenMail(ctx, &mailv1.SendTokenMailRequest{
+	_, err = as.mailClient.SendTokenMail(ctx, &notificationv1.SendTokenMailRequest{
 		Token: activationCode,
-		Type:  mailv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET,
-		User: &mailv1.UserInformation{
+		Type:  notificationv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET,
+		User: &notificationv1.UserInformation{
 			Username: username,
 			Email:    email,
 		},

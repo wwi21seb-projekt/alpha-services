@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"net"
+
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -71,6 +72,7 @@ func main() {
 	// Register notification service
 	notificationv1.RegisterNotificationServiceServer(grpcServer, handler.NewNotificationServiceServer(logger, database, userProfileClient, userSubscriptionClient))
 	notificationv1.RegisterPushServiceServer(grpcServer, handler.NewPushSubscriptionServiceServer(logger, database, userProfileClient, userSubscriptionClient))
+	notificationv1.RegisterMailServiceServer(grpcServer, handler.NewMailService(logger))
 
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+cfg.Port)

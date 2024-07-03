@@ -9,7 +9,6 @@ name = "docker"
     "src/user-service/Dockerfile",
     "src/post-service/Dockerfile",
     "src/notification-service/Dockerfile",
-    "src/mail-service/Dockerfile"
   ]
 
 [[analyzers]]
@@ -22,5 +21,4 @@ name = "go"
     "github.com/wwi21seb-projekt/alpha-services/src/user-service", 
     "github.com/wwi21seb-projekt/alpha-services/src/post-service", 
     "github.com/wwi21seb-projekt/alpha-services/src/notification-service", 
-    "github.com/wwi21seb-projekt/alpha-services/src/mail-service"
   ]

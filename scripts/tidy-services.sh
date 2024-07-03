@@ -6,7 +6,6 @@
 services=(
     "api-gateway"
     "chat-service"
-    "mail-service"
     "notification-service"
     "post-service"
     "user-service"

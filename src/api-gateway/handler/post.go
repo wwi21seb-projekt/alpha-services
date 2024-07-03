@@ -15,11 +15,13 @@ import (
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
+	"github.com/wwi21seb-projekt/alpha-shared/keys"
 	"github.com/wwi21seb-projekt/errors-go/goerrors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -308,7 +310,9 @@ func (ph *PostHandler) DeletePost(c *gin.Context) {
 }
 
 func (ph *PostHandler) GetFeed(c *gin.Context) {
-	publicFeedWanted := ph.isPublicFeedWanted(c)
+	publicFeedWanted, authenticated := ph.isPublicFeedWanted(c)
+	ph.logger.Info("publicFeedWanted: ", publicFeedWanted)
+	ph.logger.Info("authenticated: ", authenticated)
 
 	lastPostID := c.Query("postId")
 	limit, err := strconv.Atoi(c.Query("limit"))
@@ -316,12 +320,13 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 		limit = 10
 	}
 
-	feedType := postv1.FeedType_FEED_TYPE_GLOBAL
+	feedType := postv1.FeedType_FEED_TYPE_PERSONAL
+	if publicFeedWanted {
+		feedType = postv1.FeedType_FEED_TYPE_GLOBAL
+	}
 
-	var ctx context.Context
-	ctx = c
-	if !publicFeedWanted {
-		feedType = postv1.FeedType_FEED_TYPE_PERSONAL
+	ctx := c.Request.Context()
+	if authenticated {
 		ctx = c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 	}
 
@@ -352,31 +357,33 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, feedResponse)
 }
 
-func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
+func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) (bool, bool) {
 	authHeader := c.GetHeader("Authorization")
 	feedType := c.Query("feedType")
 
-	if authHeader == "" || feedType == "global" {
-		return true
+	if authHeader == "" {
+		return true, false
 	}
 
 	if !strings.HasPrefix(authHeader, "Bearer ") || len(authHeader) <= len("Bearer ") {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, &dto.ErrorDTO{Error: goerrors.Unauthorized})
-		return false
+		return false, false
 	}
 
 	jwtToken := authHeader[len("Bearer "):]
-	_, err := ph.jwtManager.Verify(jwtToken)
+	username, err := ph.jwtManager.Verify(jwtToken)
 	if err != nil {
 		err := errors.New("invalid authorization header")
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return false
+		return false, false
 	}
 
-	claimsfunc := ph.middleware.SetClaimsMiddleware()
-	claimsfunc(c)
+	c.Set(string(keys.SubjectKey), username)
+	c.Set(string(keys.TokenKey), jwtToken)
+	ctx := metadata.AppendToOutgoingContext(c.Request.Context(), string(keys.SubjectKey), username)
+	c.Set(middleware.GRPCMetadataKey, ctx)
 
-	return false
+	return feedType == "global", true
 }
 
 func (ph *PostHandler) CreateComment(c *gin.Context) {

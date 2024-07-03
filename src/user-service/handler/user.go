@@ -3,13 +3,12 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strconv"
+
 	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"os"
-	"strconv"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
@@ -141,15 +140,10 @@ func (us userService) getPostCount(ctx context.Context, username string) (int32,
 func (us userService) UpdateUser(ctx context.Context, request *userv1.UpdateUserRequest) (*userv1.UpdateUserResponse, error) {
 	username := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 
-	queryBuilder := psql.Update("users").Where(sq.Eq{"username": username})
-
-	if request.GetNickname() != "" {
-		queryBuilder = queryBuilder.Set("nickname", request.GetNickname())
-	}
-
-	if request.GetStatus() != "" {
-		queryBuilder = queryBuilder.Set("status", request.GetStatus())
-	}
+	queryBuilder := psql.Update("users").
+		Where(sq.Eq{"username": username}).
+		Set("nickname", request.GetNickname()).
+		Set("status", request.GetStatus())
 
 	// Upload image to storage if provided
 	imageUrl := defaultAvatarURL
@@ -170,21 +164,16 @@ func (us userService) UpdateUser(ctx context.Context, request *userv1.UpdateUser
 			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
 		}
 
-		environment := os.Getenv("ENVIRONMENT")
-		if environment == "local" {
-			imageUrl = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadImageResponse.GetUrl())
-		} else {
-			imageUrl = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadImageResponse.GetUrl())
-		}
-
-		imageWidth = 500  // replace with actual width
-		imageHeight = 500 // replace with actual height
+		imageUrl = uploadImageResponse.GetUrl()
+		imageWidth = uploadImageResponse.GetWidth()
+		imageHeight = uploadImageResponse.GetHeight()
 
 		uploadImageSpan.End()
 	}
 
 	if request.Base64Picture != nil {
-		queryBuilder = queryBuilder.Set("picture_url", imageUrl).
+		queryBuilder = queryBuilder.
+			Set("picture_url", imageUrl).
 			Set("picture_width", imageWidth).
 			Set("picture_height", imageHeight)
 	}

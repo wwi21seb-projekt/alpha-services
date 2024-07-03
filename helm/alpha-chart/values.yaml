@@ -35,9 +35,9 @@ services:
   api-gateway:
     replicaCount: 1
     image:
-      repository:         # (Optional) If you want to use a custom image, set the repository here
+      repository: # (Optional) If you want to use a custom image, set the repository here
       name: api-gateway
-      tag:                # (Optional) If you want to use a custom image, set the tag here
+      tag: # (Optional) If you want to use a custom image, set the tag here
     port: 8080
     service:
       port: 80
@@ -66,15 +66,6 @@ services:
       port: 50052
     image:
       name: image-service
-
-
-  mail-service:
-    replicaCount: 1
-    port: 50053
-    service:
-      port: 50053
-    image:
-      name: mail-service
 
   notification-service:
     replicaCount: 1
@@ -106,7 +97,6 @@ services:
       name: user-service
     connections:
       - image-service
-      - mail-service
       - notification-service
       - post-service
 
@@ -114,9 +104,9 @@ postgresql:
   image:
     debug: true
   auth:
-    username: "myuser"      # CHANGE THIS
-    password: "mypassword"  # CHANGE THIS
-    database: "mydatabase"  # CHANGE THIS
+    username: "myuser" # CHANGE THIS
+    password: "mypassword" # CHANGE THIS
+    database: "mydatabase" # CHANGE THIS
   primary:
     persistence:
       enabled: true
@@ -166,7 +156,7 @@ opentelemetry-collector:
             - otlp/jaeger
 
 prometheus:
-  enabled: true  # Turn this off if you dont want to deploy kube-prometheus-stack
+  enabled: true # Turn this off if you dont want to deploy kube-prometheus-stack
 
 kube-prometheus-stack:
   prometheus:

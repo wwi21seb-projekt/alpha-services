@@ -63,6 +63,11 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	var authenticatedUsername string
+	subject := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))
+	if subject != nil {
+		authenticatedUsername = subject[0]
+	}
+
 	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_USER {
 		if req.GetUsername() == "" {
 			return nil, status.Error(codes.InvalidArgument, "username cannot be empty")
@@ -89,7 +94,6 @@ func (ps *postService) ListPosts(ctx context.Context, req *postv1.ListPostsReque
 	}
 
 	if req.GetFeedType() == postv1.FeedType_FEED_TYPE_PERSONAL {
-		authenticatedUsername = metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
 		newCTX := metadata.AppendToOutgoingContext(ctx, string(keys.SubjectKey), authenticatedUsername)
 
 		subCtx, subSpan := ps.tracer.Start(newCTX, "ListSubscriptions")

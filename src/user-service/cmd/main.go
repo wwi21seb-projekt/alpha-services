@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
-	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"net"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/user-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -65,7 +65,7 @@ func main() {
 	}
 
 	// Create client stubs
-	mailClient := mailv1.NewMailServiceClient(cfg.GRPCClients.MailService)
+	mailClient := notificationv1.NewMailServiceClient(cfg.GRPCClients.NotificationService)
 	notificationClient := notificationv1.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 	imageClient := imagev1.NewImageServiceClient(cfg.GRPCClients.ImageService)
 	postClient := postv1.NewPostServiceClient(cfg.GRPCClients.PostService)

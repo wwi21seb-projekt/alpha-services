@@ -22,10 +22,6 @@ jobs:
         with:
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -k k8s/overlays/prod
-
       - name: Rollout Deployment Restart
         run: |
           kubectl rollout restart deployment -n prod

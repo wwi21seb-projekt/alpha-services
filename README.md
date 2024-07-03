@@ -3,7 +3,6 @@
 Welcome to the repository for Server Alpha! This project is structured as a monorepo, with multiple services located in their respective directories under src/<service-name>. Below is an overview of the services and how to get started with the project.
 
 - `api-gateway`: The API Gateway service routes requests to the appropriate service, acts as the entry point for all requests, and handles authentication.
-- `mail-service`: Responsible for sending emails to our users.
 - `notification-service`: Handles sending notifications to users, including Web Push, Expo Push Notifications and Email Notifications.
 - `post-service`: Manages feeds, posts, hashtags, and interactions (likes, comments, etc.).
 - `user-service`: Manages users, including subscriptions and followers.

@@ -3,8 +3,9 @@ package handler
 import (
 	"context"
 	"fmt"
-	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
 	"os"
+
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 
 	"github.com/mailgun/mailgun-go/v4"
 	"github.com/matcornic/hermes/v2"
@@ -23,7 +24,7 @@ type MailService struct {
 	tracer trace.Tracer
 	mg     *mailgun.MailgunImpl
 	h      *hermes.Hermes
-	mailv1.UnimplementedMailServiceServer
+	notificationv1.UnimplementedMailServiceServer
 }
 
 // NewMailService creates a new mail service
@@ -50,7 +51,7 @@ func NewMailService(logger *zap.SugaredLogger) *MailService {
 	}
 }
 
-func (ms *MailService) SendConfirmationMail(ctx context.Context, request *mailv1.SendConfirmationMailRequest) (*mailv1.SendConfirmationMailResponse, error) {
+func (ms *MailService) SendConfirmationMail(ctx context.Context, request *notificationv1.SendConfirmationMailRequest) (*notificationv1.SendConfirmationMailResponse, error) {
 	email := hermes.Email{
 		Body: hermes.Body{
 			Name: request.GetUser().GetUsername(),
@@ -71,19 +72,19 @@ func (ms *MailService) SendConfirmationMail(ctx context.Context, request *mailv1
 		return nil, status.Errorf(codes.Internal, "Failed to send confirmation mail: %v", err)
 	}
 
-	return &mailv1.SendConfirmationMailResponse{}, nil
+	return &notificationv1.SendConfirmationMailResponse{}, nil
 }
 
-func (ms *MailService) SendTokenMail(ctx context.Context, request *mailv1.SendTokenMailRequest) (*mailv1.SendTokenMailResponse, error) {
+func (ms *MailService) SendTokenMail(ctx context.Context, request *notificationv1.SendTokenMailRequest) (*notificationv1.SendTokenMailResponse, error) {
 	var email hermes.Email
 	subject := ""
 
 	switch request.GetType() {
-	case mailv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION:
+	case notificationv1.TokenMailType_TOKEN_MAIL_TYPE_REGISTRATION:
 		ms.logger.Infof("Sending registration mail to %s", request.GetUser().GetEmail())
 		subject = fmt.Sprintf("Welcome %s! Activate your account now!", request.GetUser().GetUsername())
 		email = ms.generateRegistrationMail(ctx, request)
-	case mailv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET:
+	case notificationv1.TokenMailType_TOKEN_MAIL_TYPE_PASSWORD_RESET:
 		ms.logger.Infof("Sending password reset mail to %s", request.GetUser().GetEmail())
 		subject = fmt.Sprintf("Password reset for %s", request.GetUser().GetUsername())
 		email = ms.generatePasswordResetMail(ctx, request)
@@ -97,7 +98,7 @@ func (ms *MailService) SendTokenMail(ctx context.Context, request *mailv1.SendTo
 		return nil, status.Errorf(codes.Internal, "Failed to send token mail: %v", err)
 	}
 
-	return &mailv1.SendTokenMailResponse{}, nil
+	return &notificationv1.SendTokenMailResponse{}, nil
 }
 
 // SendMail sends an email
@@ -116,6 +117,12 @@ func (ms *MailService) sendMail(ctx context.Context, email hermes.Email, subject
 
 	sendCtx, sendSpan := ms.tracer.Start(ctx, "sendMail")
 	defer sendSpan.End()
+
+	if environment := os.Getenv("ENVIRONMENT"); environment == "development" {
+		ms.logger.Info("Skipping of MailSend, since we are in dev mode")
+		return nil
+	}
+
 	_, _, err = ms.mg.Send(sendCtx, message)
 	if err != nil {
 		ms.logger.Infof("Error in ms.mg.Send: %v", err)
@@ -125,7 +132,7 @@ func (ms *MailService) sendMail(ctx context.Context, email hermes.Email, subject
 	return nil
 }
 
-func (ms *MailService) generateRegistrationMail(ctx context.Context, request *mailv1.SendTokenMailRequest) hermes.Email {
+func (ms *MailService) generateRegistrationMail(ctx context.Context, request *notificationv1.SendTokenMailRequest) hermes.Email {
 	_, span := ms.tracer.Start(ctx, "generateRegistrationMail")
 	defer span.End()
 
@@ -149,7 +156,7 @@ func (ms *MailService) generateRegistrationMail(ctx context.Context, request *ma
 	}
 }
 
-func (ms *MailService) generatePasswordResetMail(ctx context.Context, request *mailv1.SendTokenMailRequest) hermes.Email {
+func (ms *MailService) generatePasswordResetMail(ctx context.Context, request *notificationv1.SendTokenMailRequest) hermes.Email {
 	_, span := ms.tracer.Start(ctx, "generatePasswordResetMail")
 	defer span.End()
 
