@@ -1,6 +1,6 @@
 *
 !values.yaml
-!values-dev.yaml
+!values-dev.template.yaml
 !values-prod.yaml
 !Chart.yaml
 !templates/

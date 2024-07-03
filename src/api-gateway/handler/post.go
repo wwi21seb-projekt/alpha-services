@@ -180,14 +180,10 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	user := c.Param("username")
-	offset := c.Query("offset")
-	limit, err := strconv.Atoi(c.Query("limit"))
-	if err != nil {
-		limit = 10
-	}
+	offset, limit := helper.ExtractPaginationFromContext(c)
 
 	if user == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
+		c.JSON(http.StatusBadRequest, &dto.ErrorDTO{Error: goerrors.BadRequest})
 		return
 	}
 
@@ -195,25 +191,19 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 		FeedType: postv1.FeedType_FEED_TYPE_USER,
 		Username: &user,
 		Pagination: &commonv1.PaginationRequest{
-			PageToken: offset,
+			PageToken: strconv.FormatInt(offset, 10),
 			PageSize:  int32(limit),
 		},
 	})
 
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			c.JSON(http.StatusNotFound, goerrors.UserNotFound)
+			c.JSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.UserNotFound})
 			return
 		}
 
-		c.AbortWithStatusJSON(http.StatusInternalServerError, goerrors.InternalServerError)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
-	}
-
-	offsetInt, err := strconv.Atoi(offset)
-	if err != nil {
-		ph.logger.Warnw("error converting offset to int", "error", err)
-		offsetInt = 0
 	}
 
 	posts := transformListPostsResponse(resp)
@@ -221,7 +211,7 @@ func (ph *PostHandler) GetUserFeed(c *gin.Context) {
 	feedResponse := &dto.GetUserFeedResponse{
 		Posts: posts,
 		Pagination: dto.PaginationResponse{
-			Offset:  int32(offsetInt + limit),
+			Offset:  int32(int32(offset) + limit),
 			Limit:   int32(limit),
 			Records: resp.GetPagination().GetTotalSize(),
 		},
@@ -290,8 +280,9 @@ func (ph *PostHandler) DeletePost(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	postId := c.Param("postId")
-	if postId == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	if _, err := uuid.Parse(postId); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.PostNotFound})
+		return
 	}
 
 	_, err := ph.postService.DeletePost(ctx, &postv1.DeletePostRequest{PostId: postId})
@@ -343,7 +334,7 @@ func (ph *PostHandler) GetFeed(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": goerrors.InternalServerError})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
 	}
 
@@ -370,8 +361,7 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 	}
 
 	if !strings.HasPrefix(authHeader, "Bearer ") || len(authHeader) <= len("Bearer ") {
-		err := errors.New("invalid authorization header")
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, &dto.ErrorDTO{Error: goerrors.Unauthorized})
 		return false
 	}
 
@@ -392,8 +382,9 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) bool {
 func (ph *PostHandler) CreateComment(c *gin.Context) {
 	createCommentRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*dto.CreateCommentRequest)
 	postID := c.Param("postId")
-	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, dto.ErrorDTO{Error: goerrors.PostNotFound})
+	if _, err := uuid.Parse(postID); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, dto.ErrorDTO{Error: goerrors.PostNotFound})
+		return
 	}
 
 	req := &postv1.CreateCommentRequest{
@@ -426,7 +417,7 @@ func (ph *PostHandler) CreateComment(c *gin.Context) {
 func (ph *PostHandler) GetComments(c *gin.Context) {
 	postID := c.Param("postId")
 	if _, err := uuid.Parse(postID); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.PostNotFound)
+		c.AbortWithStatusJSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.PostNotFound})
 		return
 	}
 
@@ -475,8 +466,9 @@ func (ph *PostHandler) GetComments(c *gin.Context) {
 func (ph *PostHandler) CreateLike(c *gin.Context) {
 	// Get post id from path
 	postID := c.Param("postId")
-	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	if _, err := uuid.Parse(postID); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.PostNotFound})
+		return
 	}
 
 	req := &postv1.LikePostRequest{
@@ -510,8 +502,9 @@ func (ph *PostHandler) CreateLike(c *gin.Context) {
 func (ph *PostHandler) DeleteLike(c *gin.Context) {
 	// Get post id from path
 	postID := c.Param("postId")
-	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	if _, err := uuid.Parse(postID); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, goerrors.PostNotFound)
+		return
 	}
 
 	req := &postv1.UnlikePostRequest{

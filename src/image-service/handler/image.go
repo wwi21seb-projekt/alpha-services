@@ -55,6 +55,9 @@ func (s *imageService) UploadImage(ctx context.Context, request *imagev1.UploadI
 
 	// Upload the image to the storage
 	filename := s.uploadImage(imageBytes, imageType, request.GetName())
+	if filename == "" {
+		return nil, status.Errorf(codes.Internal, "could not upload image ")
+	}
 
 	response := &imagev1.UploadImageResponse{
 		Url:    filename,

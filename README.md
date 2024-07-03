@@ -29,7 +29,7 @@ Welcome to the repository for Server Alpha! This project is structured as a mono
 - [Go](https://golang.org/doc/install)
 - [Atlas](https://atlasgo.io/getting-started)
 
-Central to the deployment process is the Helm chart alpha-chart located in the helm/ directory. You need to fill out the file values-dev.yaml with your own values for your development environment.
+Central to the deployment process is the Helm chart alpha-chart located in the helm/ directory. To be able to use the service, you need to copy the file `values-dev.template.yaml` into a new file `values-dev.yaml` and fill out the `MAILGUN_API_KEY` field.
 
 ```yaml
 secretOverride:
