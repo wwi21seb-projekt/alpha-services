@@ -6,6 +6,8 @@ Welcome to the repository for Server Alpha! This project is structured as a mono
 - `notification-service`: Handles sending notifications to users, including Web Push, Expo Push Notifications and Email Notifications.
 - `post-service`: Manages feeds, posts, hashtags, and interactions (likes, comments, etc.).
 - `user-service`: Manages users, including subscriptions and followers.
+- `image-service`: Manages images, saving to a persistent storage and serving images.
+- `chat-service`: Manages chats, including the creation of chats and offering real-time chats with websockets and streams.
 
 ## Technology Stack
 
