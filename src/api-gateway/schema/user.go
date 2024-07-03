@@ -88,8 +88,8 @@ type ChangeTrivialInformamtionResponse struct {
 type CreateSubscriptionResponse struct {
 	SubscriptionId    string `json:"subscriptionId"`
 	SubscriptionDate  string `json:"subscriptionDate"`
-	FollowerUsername  string `json:"followerUsername"`
-	FollowingUsername string `json:"followingUsername"`
+	FollowerUsername  string `json:"follower"`
+	FollowingUsername string `json:"following"`
 }
 
 type GetSubscriptionsResponse struct {

@@ -3,6 +3,11 @@ package handler
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/asaskevich/govalidator"
 	"github.com/google/uuid"
@@ -21,11 +26,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"os"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var (
@@ -243,6 +243,9 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 		if err != nil {
 			return nil, err
 		}
+		if len(posts) == 0 {
+			return nil, status.Errorf(codes.NotFound, "repostedPostId was not found")
+		}
 		repost = posts[0]
 	}
 
@@ -255,19 +258,13 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 		})
 		if err != nil {
 			ps.logger.Errorw("Error in imageClient.UploadImage", "error", err)
-			return nil, status.Error(codes.Internal, "failed to upload image")
+			return nil, err
 		}
 
 		picture = &imagev1.Picture{
-			Width:  500,
-			Height: 500,
-		}
-
-		environment := os.Getenv("ENVIRONMENT")
-		if strings.ToLower(environment) == "production" {
-			picture.Url = fmt.Sprintf("https://alpha.c930.net/api/images?image=%s", uploadResponse.GetUrl())
-		} else {
-			picture.Url = fmt.Sprintf("http://localhost:8080/api/images?image=%s", uploadResponse.GetUrl())
+			Width:  uploadResponse.Width,
+			Height: uploadResponse.Height,
+			Url: uploadResponse.Url,
 		}
 
 		post.PictureURL = &picture.Url

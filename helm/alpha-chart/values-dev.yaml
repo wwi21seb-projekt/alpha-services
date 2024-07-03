@@ -2,7 +2,7 @@ overrideConfigMap:
   ENVIRONMENT: development
 
 secretOverride:
-  MAILGUN_API_KEY: "" # (Ask Luca for the key)
+  MAILGUN_API_KEY: "07767986f52a7940247ea4e4ca21c288-0996409b-5c3cabd2" # (Ask Luca for the key)
 
 postgresql:
   image:
@@ -49,7 +49,7 @@ opentelemetry-collector:
             - otlp/jaeger
 
 prometheus:
-  enabled: false  # Turn this off if you dont want to deploy kube-prometheus-stack
+  enabled: true # Turn this off if you dont want to deploy kube-prometheus-stack
 
 jaeger:
   enabled: true

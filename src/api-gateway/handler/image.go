@@ -3,7 +3,10 @@ package handler
 import (
 	"encoding/base64"
 	"fmt"
+
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
@@ -44,8 +47,15 @@ func (i *imageHandler) GetImage(c *gin.Context) {
 		Name: image,
 	})
 	if err != nil {
-		i.logger.Errorf("Error in upstream call i.imageClient.GetImage: %v", err)
-		c.JSON(500, goerrors.InternalServerError)
+		code := status.Code(err)
+		returnErr := goerrors.InternalServerError
+		if code == codes.NotFound {
+			i.logger.Infof("Image %s not found", image)
+			returnErr = goerrors.ImageNotFound
+		}
+
+		i.logger.Infof("Error in upstream call i.imageClient.GetImage: %v", err)
+		c.JSON(returnErr.HttpStatus, returnErr)
 		return
 	}
 

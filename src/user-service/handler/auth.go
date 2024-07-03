@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
-	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
-	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"math/rand"
 	"os"
 	"strconv"
 	"time"
+
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	mailv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/mail/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/ggwhite/go-masker/v2"
@@ -133,7 +134,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *userv
 		if err != nil {
 			as.logger.Errorf("Error in upstream call imageClient.UploadImage: %v", err)
 			uploadImageSpan.End()
-			return nil, status.Errorf(codes.Internal, "failed to upload image: %v", err)
+			return nil, err
 		}
 
 		environment := os.Getenv("ENVIRONMENT")

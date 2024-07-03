@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"strconv"
+	"time"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,8 +20,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"strconv"
-	"time"
 )
 
 type interactionService struct {
@@ -153,6 +154,39 @@ func (is *interactionService) CreateComment(ctx context.Context, req *postv1.Cre
 }
 
 func (is *interactionService) ListComments(ctx context.Context, req *postv1.ListCommentsRequest) (*postv1.ListCommentsResponse, error) {
+	// Check if post exists
+	postCTX, postSpan := is.tracer.Start(ctx, "Fetch post data")
+	existsQuery, existsArgs, err := psql.
+		Select("COUNT(*)").
+		From("posts").
+		Where("post_id = ?", req.GetPostId()).
+		ToSql()
+	if err != nil {
+		postSpan.End()
+		is.logger.Errorw("Error building SQL query", "error", err)
+		return nil, status.Error(codes.Internal, "Error building SQL query")
+	}
+
+	conn, err := is.db.Acquire(ctx)
+	if err != nil {
+		is.logger.Errorw("Error acquiring connection", "error", err)
+		return nil, err
+	}
+	defer conn.Release()
+
+	var exists int
+	err = conn.QueryRow(postCTX, existsQuery, existsArgs...).Scan(&exists)
+	if err != nil {
+		postSpan.End()
+		is.logger.Errorw("Error executing SQL query", "error", err)
+		return nil, status.Error(codes.Internal, "Error executing SQL query")
+	}
+	postSpan.End()
+
+	if exists == 0 {
+		return nil, status.Errorf(codes.NotFound, "post not found")
+	}
+
 	baseQueryBuilder := psql.
 		Select().
 		From("comments").
@@ -187,12 +221,6 @@ func (is *interactionService) ListComments(ctx context.Context, req *postv1.List
 		is.logger.Errorw("Error building data SQL query", "error", err)
 		return nil, status.Error(codes.Internal, "Error building data SQL query")
 	}
-
-	conn, err := is.db.Acquire(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Release()
 
 	// Execute count query to get total records
 	var totalRecords int

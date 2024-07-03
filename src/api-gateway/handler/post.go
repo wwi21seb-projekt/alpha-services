@@ -3,8 +3,14 @@ package handler
 import (
 	"context"
 	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/helper"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/manager"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/middleware"
 	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
@@ -15,9 +21,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"net/http"
-	"strconv"
-	"strings"
 )
 
 type PostHdlr interface {
@@ -390,7 +393,7 @@ func (ph *PostHandler) CreateComment(c *gin.Context) {
 	createCommentRequest := c.Value(middleware.SanitizedPayloadKey.String()).(*dto.CreateCommentRequest)
 	postID := c.Param("postId")
 	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, dto.ErrorDTO{Error: goerrors.PostNotFound})
 	}
 
 	req := &postv1.CreateCommentRequest{
@@ -422,27 +425,19 @@ func (ph *PostHandler) CreateComment(c *gin.Context) {
 
 func (ph *PostHandler) GetComments(c *gin.Context) {
 	postID := c.Param("postId")
-	if postID == "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.BadRequest)
+	if _, err := uuid.Parse(postID); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, goerrors.PostNotFound)
+		return
 	}
 
-	limit, err := strconv.Atoi(c.Query("limit"))
-	if err != nil {
-		limit = 10
-	}
-
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		offset = 0
-	}
-
+	offset, limit := helper.ExtractPaginationFromContext(c)
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
 
 	req := &postv1.ListCommentsRequest{
 		PostId: postID,
 		Pagination: &commonv1.PaginationRequest{
-			PageToken: strconv.Itoa(offset),
-			PageSize:  int32(limit),
+			PageToken: strconv.FormatInt(offset, 10),
+			PageSize:  limit,
 		},
 	}
 
@@ -451,11 +446,8 @@ func (ph *PostHandler) GetComments(c *gin.Context) {
 		rpcStatus := status.Convert(err)
 		returnErr := goerrors.InternalServerError
 
-		switch rpcStatus.Code() {
-		case codes.NotFound:
+		if rpcStatus.Code() == codes.NotFound {
 			returnErr = goerrors.PostNotFound
-		case codes.InvalidArgument:
-			returnErr = goerrors.BadRequest
 		}
 
 		ph.logger.Errorf("error in upstream call uh.postService.ListComments: %v", err)

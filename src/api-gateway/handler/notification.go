@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 
@@ -46,7 +48,7 @@ func (n *NotificationHandler) GetPublicKey(c *gin.Context) {
 		returnErr := goerrors.InternalServerError
 
 		n.logger.Infof("Error in upstream call n.pushSubscriptionService.GetPublicKey: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{Error: returnErr})
 		return
 	}
 	response := schema.GetPublicKeyResponse{
@@ -90,7 +92,7 @@ func (n *NotificationHandler) CreatePushSubscription(c *gin.Context) {
 			returnErr = goerrors.NotificationNotFound
 		}
 		n.logger.Infof("Error in upstream call n.pushSubscriptionService.CreatePushSubscription: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -115,7 +117,7 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 		}
 
 		n.logger.Infof("Error in upstream call n.notificationService.GetNotification: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -124,9 +126,14 @@ func (n *NotificationHandler) GetNotifications(c *gin.Context) {
 
 func (n *NotificationHandler) DeleteNotification(c *gin.Context) {
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)
+	notificationId := c.Param("notificationId")
+	if _, err := uuid.Parse(notificationId); err != nil {
+		c.JSON(404, dto.ErrorDTO{Error: goerrors.PostNotFound})
+		return
+	}
 
 	_, err := n.notificationService.DeleteNotification(ctx, &notificationv1.DeleteNotificationRequest{
-		NotificationId: c.Param("notificationId"),
+		NotificationId: notificationId,
 	})
 
 	if err != nil {
@@ -135,7 +142,7 @@ func (n *NotificationHandler) DeleteNotification(c *gin.Context) {
 			returnErr = goerrors.NotificationNotFound
 		}
 		n.logger.Infof("Error in upstream call n.notificationService.DeleteNotification: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, dto.ErrorDTO{Error: returnErr})
 		return
 	}
 	c.JSON(204, notificationv1.DeleteNotificationResponse{})

@@ -109,7 +109,7 @@ spec:
       volumes:
         - name: image-service-storage
           persistentVolumeClaim:
-            claimName: {{ $.Release.Name }}-image-store-pvc
+            claimName: {{ $.Release.Namespace }}-{{ $.Release.Name }}-image-store-pvc
       {{- end }}
 ---
 {{- end }}

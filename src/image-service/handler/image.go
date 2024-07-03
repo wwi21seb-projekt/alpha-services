@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
-	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	"image"
 	"os"
 	"path/filepath"
 	"strings"
+
+	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	_ "image/jpeg"
 	_ "image/png"
@@ -68,8 +70,8 @@ func (s *imageService) GetImage(ctx context.Context, request *imagev1.GetImageRe
 	filePath := filepath.Join(ImageDir, request.GetName())
 	imageBytes, err := os.ReadFile(filePath)
 	if err != nil {
-		s.logger.Error("Failed to read image from file", zap.Error(err))
-		return nil, err
+		s.logger.Error("Failed to read image from file")
+		return nil, status.Errorf(codes.NotFound, "image not found %s", request.GetName())
 	}
 
 	// Encode the image to base64
@@ -112,19 +114,23 @@ func (s *imageService) uploadImage(imageBytes []byte, imageType string, imageCon
 func (s *imageService) validateImage(imageBytes []byte) (image.Image, string, error) {
 	s.logger.Info("Checking image type...")
 	img, imageType, err := image.Decode(bytes.NewReader(imageBytes))
+	if err != nil {
+		s.logger.Error("Failed to decode image", zap.Error(err))
+		return nil, "", status.Errorf(codes.InvalidArgument, "failed to decode image")
+	}
 
 	switch imageType {
 	case "jpeg", "png", "webp":
 		// Check if the image size is within the limit
 		if len(imageBytes) > MaxImageSize {
 			s.logger.Error("Image size exceeds the limit")
-			return nil, "", errors.New("image size exceeds the limit")
+			return nil, "", status.Errorf(codes.InvalidArgument, "image size exceeds the limit with %d bytes", len(imageBytes))
 		}
 
 		return img, imageType, nil
 	default:
 		s.logger.Error("Invalid image type")
-		return nil, "", errors.Join(errors.New("invalid image type"), err)
+		return nil, "", status.Errorf(codes.InvalidArgument, "invalid image type %s", imageType)
 	}
 }
 
@@ -137,7 +143,7 @@ func (s *imageService) decodeBase64Image(base64Image string) ([]byte, error) {
 
 		if len(parts) != 2 {
 			s.logger.Error("Invalid base64 image")
-			return nil, errors.New("invalid base64 image")
+			return nil, status.Errorf(codes.InvalidArgument, "invalid base64 image")
 		}
 
 		base64str = parts[1]
@@ -146,7 +152,7 @@ func (s *imageService) decodeBase64Image(base64Image string) ([]byte, error) {
 	img, err := base64.StdEncoding.DecodeString(base64str)
 	if err != nil {
 		s.logger.Error("Failed to decode base64 image", zap.Error(err))
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "failed to decode base64 image")
 	}
 
 	return img, nil
