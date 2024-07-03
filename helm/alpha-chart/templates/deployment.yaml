@@ -74,13 +74,6 @@ spec:
                   name: {{ $.Release.Name }}-secrets
                   key: JWT_PUBLIC_KEY
             {{ end }}
-            {{- if (eq $serviceName "mail-service") }}
-            - name: MAILGUN_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $.Release.Name }}-secrets
-                  key: MAILGUN_API_KEY
-            {{ end }}
             {{- if (eq $serviceName "notification-service") }}
             - name: VAPID_PUBLIC_KEY
               valueFrom:
@@ -92,6 +85,11 @@ spec:
                 secretKeyRef:
                   name: {{ $.Release.Name }}-secrets
                   key: VAPID_PRIVATE_KEY
+            - name: MAILGUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-secrets
+                  key: MAILGUN_API_KEY
             {{ end }}
             {{- include "alpha-chart.global.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 8 }}
             {{- include "alpha-chart.service.env" (dict "Values" $.Values "serviceName" $serviceName) | nindent 8 }}
