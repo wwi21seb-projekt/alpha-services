@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/dto"
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/schema"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
-	"net/http"
-	"os"
-	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/SherClockHolmes/webpush-go"
@@ -161,7 +162,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *not
 
 	notification := schema.Notification{
 		NotificationID:    uuid.New(),
-		RecipientUsername: request.GetSender(),
+		RecipientUsername: request.GetRecipient(),
 		NotificationType:  request.NotificationType,
 		SenderUsername:    authenticatedUsername,
 		Timestamp:         time.Now(),
@@ -255,6 +256,14 @@ func sendExpoNotification(ctx context.Context, notificationType string, token st
 	case "repost":
 		title := "New Repost!"
 		body := fmt.Sprintf("%s reposted your post", authenticatedUsername)
+		data = map[string]interface{}{
+			"to":    token,
+			"title": title,
+			"body":  body,
+		}
+	case "chat":
+		title := "New Message!"
+		body := fmt.Sprintf("%s sent you a message", authenticatedUsername)
 		data = map[string]interface{}{
 			"to":    token,
 			"title": title,

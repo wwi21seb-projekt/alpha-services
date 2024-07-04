@@ -28,7 +28,7 @@ func TransformNotificationProtoToDTO(proto *notificationv1.ListNotificationsResp
 			notificationDTO.NotificationType = "follow"
 		case notificationv1.NotificationType_NOTIFICATION_TYPE_REPOST:
 			notificationDTO.NotificationType = "repost"
-		case notificationv1.NotificationType_NOTIFICATION_TYPE_UNSPECIFIED:
+		case notificationv1.NotificationType_NOTIFICATION_TYPE_CHAT:
 			notificationDTO.NotificationType = "message"
 		}
 

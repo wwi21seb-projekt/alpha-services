@@ -106,8 +106,8 @@ github.com/vanng822/css v0.0.0-20190504095207-a21e860bcd04 h1:L0rPdfzq43+NV8rfIx
 github.com/vanng822/css v0.0.0-20190504095207-a21e860bcd04/go.mod h1:tcnB1voG49QhCrwq1W0w5hhGasvOg+VQp9i9H1rCM1w=
 github.com/vanng822/go-premailer v0.0.0-20191214114701-be27abe028fe h1:9YnI5plmy+ad6BM+JCLJb2ZV7/TNiE5l7SNKfumYKgc=
 github.com/vanng822/go-premailer v0.0.0-20191214114701-be27abe028fe/go.mod h1:JTFJA/t820uFDoyPpErFQ3rb3amdZoPtxcKervG0OE4=
-github.com/wwi21seb-projekt/alpha-shared v0.23.4 h1:rweJF6w2g0ageyiI/Bxt9mDBXkaKDEbrKlezygTzL3s=
-github.com/wwi21seb-projekt/alpha-shared v0.23.4/go.mod h1:Bl0+JVcrIkRH0pJ6HRrxGy2W9o1oV5BH7UFEArPfqQo=
+github.com/wwi21seb-projekt/alpha-shared v0.24.0 h1:TtXKuYE/AsTIHpuSMFxvU9KhKCOxMXWyXFMYjzpPuSs=
+github.com/wwi21seb-projekt/alpha-shared v0.24.0/go.mod h1:Bl0+JVcrIkRH0pJ6HRrxGy2W9o1oV5BH7UFEArPfqQo=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0 h1:9G6E0TXzGFVfTnawRzrPl83iHOAV7L8NJiR8RSGYV1g=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0/go.mod h1:azvtTADFQJA8mX80jIH/akaE7h+dbm/sVuaHqN13w74=

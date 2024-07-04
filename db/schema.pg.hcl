@@ -4,7 +4,7 @@ enum "token_type" {
 }
 enum "notification_type" {
   schema = schema.notification_service
-  values = ["follow", "repost"]
+  values = ["follow", "repost", "message"]
 }
 enum "subscription_type" {
   schema = schema.notification_service

@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
-	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
-	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
-	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgerrcode"
@@ -36,17 +38,19 @@ type chatService struct {
 	tracer     trace.Tracer
 	db         *db.DB
 	userClient userv1.UserServiceClient
+	notificationClient notificationv1.NotificationServiceClient
 	streams    map[string]*chatStream
 	mu         sync.RWMutex
 	chatv1.UnimplementedChatServiceServer
 }
 
-func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient userv1.UserServiceClient) chatv1.ChatServiceServer {
+func NewChatService(logger *zap.SugaredLogger, db *db.DB, userClient userv1.UserServiceClient, notificationClient notificationv1.NotificationServiceClient) chatv1.ChatServiceServer {
 	return &chatService{
 		logger:     logger,
 		tracer:     otel.GetTracerProvider().Tracer("chat-service"),
 		db:         db,
 		userClient: userClient,
+		notificationClient: notificationClient,
 		streams:    make(map[string]*chatStream),
 	}
 }
@@ -350,23 +354,23 @@ func (cs *chatService) PrepareChatStream(ctx context.Context, req *chatv1.Prepar
 
 	// Check if the chat exists and the user is part of it
 	selectCtx, selectSpan := cs.tracer.Start(ctx, "SelectChatInfo")
-	query, args, _ := psql.Select("COUNT(*)").
+	query, args, _ := psql.Select("user1_name, user2_name").
 		From("chats").
-		Where("chat_id = ? AND (user1_name = ? OR user2_name = ?)", req.GetChatId(), username, username).
+		Where("chat_id = ?", req.GetChatId()).
 		ToSql()
 
 	cs.logger.Info("Trying to prepare chat stream...")
-	count := 0
-	if err := conn.QueryRow(selectCtx, query, args...).Scan(&count); err != nil {
+	username1, username2 := "", ""
+	if err := conn.QueryRow(selectCtx, query, args...).Scan(&username1, &username2); err != nil {
 		selectSpan.End()
 		cs.logger.Errorf("Error in conn.QueryRow: %v", err)
-		return nil, status.Error(codes.Internal, "chat not found")
+		return nil, status.Error(codes.NotFound, "chat not found")
 	}
 	selectSpan.End()
 
-	// Check if chat was found
-	if count == 0 {
-		cs.logger.Error("Chat not found")
+	// Check if user1 or user2 equals the username, otherwise return not found
+	if username1 != username && username2 != username {
+		cs.logger.Warnf("User %s is not part of chat %s", username, req.GetChatId())
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
 
@@ -376,27 +380,19 @@ func (cs *chatService) PrepareChatStream(ctx context.Context, req *chatv1.Prepar
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	_, prepareSpan := cs.tracer.Start(lockCtx, "PrepareChatStream")
-	if _, ok := cs.streams[req.GetChatId()]; !ok {
-		cs.streams[req.GetChatId()] = &chatStream{}
+	if _, ok := cs.streams[req.GetChatId()]; ok {
+		// Chat was already prepared, return early
+		prepareSpan.End()
+		return &chatv1.PrepareChatStreamResponse{}, nil
 	}
 
-	// Check if we already have a connection for the user in the chat, if yes
-	// we can return early, since the connection is already prepared
-	for _, conn := range cs.streams[req.GetChatId()].connections {
-		if conn.username == username {
-			prepareSpan.End()
-			return &chatv1.PrepareChatStreamResponse{}, nil
-		}
+	// Create chat stream if it doesn't exist with two connections
+	cs.streams[req.GetChatId()] = &chatStream{
+		connections: []*openConnection{
+			{username: username1, active: false, streams: nil},
+			{username: username2, active: false, streams: nil},
+		},
 	}
-
-	openConn := &openConnection{
-		username: username,
-		streams:  nil,
-		active:   false,
-	}
-
-	cs.streams[req.GetChatId()].connections = append(cs.streams[req.GetChatId()].connections, openConn)
-	prepareSpan.End()
 
 	return &chatv1.PrepareChatStreamResponse{}, nil
 }
@@ -469,19 +465,29 @@ func (cs *chatService) ChatMessage(stream chatv1.ChatService_ChatMessageServer) 
 			}
 
 			if len(conn.streams) == 0 {
-				cleanupSpan.AddEvent(fmt.Sprintf("No more streams for user %s in chat %s, deleting connection", username, chatId))
-				cs.logger.Infof("No more streams for user %s in chat %s, deleting connection", username, chatId)
-				cs.streams[chatId].connections = removeSingleConnection(cs.streams[chatId].connections, i)
+				cleanupSpan.AddEvent(fmt.Sprintf("No more streams for user %s in chat %s, setting to inactive", username, chatId))
+				cs.logger.Infof("No more streams for user %s in chat %s, setting to inactive", username, chatId)
+				conn.active = false
 			}
 		}
 	}
-	if len(cs.streams[chatId].connections) == 0 {
-		cleanupSpan.AddEvent(fmt.Sprintf("No more connections for chat %s, deleting chat", chatId))
-		cs.logger.Infof("No more connections for chat %s, deleting chat", chatId)
+
+	allInactive := true
+	// Check if all connections for the chat are inactive. If so, delete the chat
+	for _, c := range cs.streams[chatId].connections {
+		if c.active {
+			allInactive = false
+			break
+		}
+	}
+	if allInactive {
+		cleanupSpan.AddEvent(fmt.Sprintf("All connections for chat %s are inactive, deleting chat", chatId))
+		cs.logger.Infof("All connections for chat %s are inactive, deleting chat", chatId)
 		delete(cs.streams, chatId)
 	}
+
 	cs.mu.Unlock()
-	cs.logger.Info("Connection deleted from internal state")
+	cs.logger.Info("Connection state updated")
 	cleanupSpan.End()
 
 	return nil
@@ -502,8 +508,6 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 			// Receive message from the client
 			message, err := stream.Recv()
 
-			// Add created_at
-
 			chatCtx, chatSpan := cs.tracer.Start(handleCtx, "ReceiveMessage")
 			if err != nil {
 				chatSpan.AddEvent("Failed to receive message from client")
@@ -521,7 +525,7 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 			}
 
 			// Insert the message into the database
-			conn, err := cs.db.Acquire(chatCtx)
+			dbConn, err := cs.db.Acquire(chatCtx)
 			if err != nil {
 				chatSpan.AddEvent("Failed to start connection")
 				chatSpan.End()
@@ -535,7 +539,7 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 				CreatedAt: time.Now().Format(time.RFC3339),
 			}
 
-			if err := cs.insertMessage(chatCtx, conn, chatId, response.GetUsername(), response.GetMessage(), response.GetCreatedAt()); err != nil {
+			if err := cs.insertMessage(chatCtx, dbConn, chatId, response.GetUsername(), response.GetMessage(), response.GetCreatedAt()); err != nil {
 				chatSpan.AddEvent("Failed to insert message")
 				chatSpan.End()
 				cs.logger.Errorf("Failed to insert message: %v", err)
@@ -544,14 +548,14 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 
 			// Send the message to all open connections from the chat. This
 			// also includes the sender, so the client knows that the message
-			// was sent successfully.
+			// was sent successfully. If the other client is not connected, send
+			// a notification instead.
 			_, sendSpan := cs.tracer.Start(chatCtx, "SendMessage")
 			cs.mu.RLock()
 			error := false
 			for _, c := range cs.streams[chatId].connections {
 				if c.active {
 					for _, stream := range c.streams {
-
 						if err := stream.Send(response); err != nil {
 							sendSpan.AddEvent("Failed to send message to client")
 							cs.logger.Errorf("Failed to send message to client: %v", err)
@@ -560,6 +564,23 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 						}
 						sendSpan.AddEvent(fmt.Sprintf("Sent message to %s", c.username))
 					}
+				// We run into this case if the connection is not active, but the user is still part of the chat
+				// In this case we can't send a real-time message, but we can send a notification so the user knows
+				// that they have a new message.
+				} else if !c.active && c.username != conn.username {
+					// Send notification to the other user if they are not connected
+					chatCtx := metadata.NewOutgoingContext(chatCtx, metadata.Pairs(string(keys.SubjectKey), c.username))
+					_, notifSpan := cs.tracer.Start(chatCtx, "SendNotification")
+					_, err := cs.notificationClient.SendNotification(chatCtx, &notificationv1.SendNotificationRequest{
+						Recipient: c.username,
+						NotificationType: "message",
+					})
+					if err != nil {
+						notifSpan.AddEvent("Failed to send notification")
+						cs.logger.Errorf("Failed to send notification: %v", err)
+						// This is not a critical error, so we don't return here
+					}
+					notifSpan.End()
 				}
 			}
 			cs.mu.RUnlock()
@@ -575,6 +596,7 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 
 func (cs *chatService) insertMessage(ctx context.Context, conn *pgxpool.Conn, chatId, username, message, createdAt string) error {
 	messageId := uuid.New()
+	defer conn.Release()
 
 	insertCtx, insertSpan := cs.tracer.Start(ctx, "InsertMessage")
 	defer insertSpan.End()
@@ -585,11 +607,6 @@ func (cs *chatService) insertMessage(ctx context.Context, conn *pgxpool.Conn, ch
 
 	_, err := conn.Exec(insertCtx, query, args...)
 	return err
-}
-
-func removeSingleConnection(slice []*openConnection, i int) []*openConnection {
-	slice[i] = slice[len(slice)-1]
-	return slice[:len(slice)-1]
 }
 
 func removeSingleStream(slice []chatv1.ChatService_ChatMessageServer, i int) []chatv1.ChatService_ChatMessageServer {

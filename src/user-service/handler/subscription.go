@@ -3,12 +3,13 @@ package handler
 import (
 	"context"
 	"errors"
+	"strconv"
+	"time"
+
 	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -225,8 +226,8 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *u
 
 	// Send a notification to the user that they have been subscribed to
 	sendNotificationRequest := notificationv1.SendNotificationRequest{
-		NotificationType: "follow",
-		Sender:           request.GetFollowedUsername(),
+		NotificationType: 	"follow",
+		Recipient:       	request.GetFollowedUsername(),
 	}
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("sub", username))

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
-	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"net"
+
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
+	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 
 	"github.com/wwi21seb-projekt/alpha-services/src/chat-service/handler"
 	"github.com/wwi21seb-projekt/alpha-shared/config"
@@ -63,12 +65,13 @@ func main() {
 
 	// Create client stubs
 	userClient := userv1.NewUserServiceClient(cfg.GRPCClients.UserService)
+	notifictionClient := notificationv1.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
 	// Register services
-	chatv1.RegisterChatServiceServer(grpcServer, handler.NewChatService(logger, database, userClient))
+	chatv1.RegisterChatServiceServer(grpcServer, handler.NewChatService(logger, database, userClient, notifictionClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))
