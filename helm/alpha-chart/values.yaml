@@ -58,6 +58,7 @@ services:
       name: chat-service
     connections:
       - user-service
+      - notification-service
 
   image-service:
     replicaCount: 1

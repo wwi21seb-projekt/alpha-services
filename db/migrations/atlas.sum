@@ -1,4 +1,4 @@
-h1:yiLMmx7vJwohCATGalsBafItgEgf/gzfTJdlpEonaQ4=
+h1:DwlfYpSXtx2Mn8w4YS92xatEFmcoUsqhAuHfGm4vD3k=
 20240525191742_baseline.sql h1:NV4sYr/8qfI9Y84slewBhICxXge1q3eyldZ165sR1kc=
 20240527104134_create_unique_constraints.sql h1:0yyIMcnw3uKZJukxVqStP6IAYFOkAI1a59m0Hfh6kZ0=
 20240527111445_remove_null_constraints.sql h1:ZcYwSFI8t/fz9nTA8t6MhnYG7DFcsjuvnqiuMQkNBi0=
@@ -12,3 +12,4 @@ h1:yiLMmx7vJwohCATGalsBafItgEgf/gzfTJdlpEonaQ4=
 20240617195513_change_optionals.sql h1:LADHnK2OemQwwCGBeFtFZLe1I5HjRC/IWf5Li7MwJys=
 20240618174306_picture_changes.sql h1:r/9kPW6dyiL6ChpfYVG02TfAf8dWltVK9Dg1JoQsYYA=
 20240623214121_add_characters_to_post_pic_url.sql h1:LHgcyXE0QNmAuLbEXjOAEN3NZtdXfSoEFgcZ1EDR6co=
+20240704132617_extend_notification_enum.sql h1:HSqC976P5G2EfSsHPIV9tSWTMf8jWAHBfCswMGWec+4=

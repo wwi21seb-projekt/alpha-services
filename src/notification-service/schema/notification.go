@@ -1,10 +1,11 @@
 package schema
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
-	"time"
 )
 
 type Notification struct {
@@ -28,6 +29,8 @@ func (notification *Notification) ToProto(senderMap map[string]*userv1.User) *no
 	case "repost":
 		proto.NotificationType = notificationv1.NotificationType_NOTIFICATION_TYPE_REPOST
 	case "message":
+		proto.NotificationType = notificationv1.NotificationType_NOTIFICATION_TYPE_CHAT
+	default:
 		proto.NotificationType = notificationv1.NotificationType_NOTIFICATION_TYPE_UNSPECIFIED
 	}
 

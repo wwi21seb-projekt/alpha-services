@@ -155,7 +155,7 @@ func (uh *UserHandler) ChangeTrivialInfo(c *gin.Context) {
 	_, err := uh.profileService.UpdateUser(ctx, &userv1.UpdateUserRequest{
 		Nickname:      req.NewNickname,
 		Status:        req.Status,
-		Base64Picture: &req.Picture,
+		Base64Picture: req.Picture,
 	})
 	if err != nil {
 		code := status.Code(err)

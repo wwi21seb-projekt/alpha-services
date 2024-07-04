@@ -44,7 +44,7 @@ type SubscriptionRequest struct {
 type ChangeTrivialInformationRequest struct {
 	NewNickname string `json:"nickname" validate:"max=25"`
 	Status      string `json:"status" validate:"max=256"`
-	Picture     string `json:"picture" validate:"omitempty,base64"`
+	Picture     *string `json:"picture" validate:"omitempty"`
 }
 
 type ChangePasswordRequest struct {
