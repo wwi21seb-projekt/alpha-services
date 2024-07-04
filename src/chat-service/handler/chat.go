@@ -149,7 +149,7 @@ func (cs *chatService) CreateChat(ctx context.Context, req *chatv1.CreateChatReq
 		return nil, err
 	}
 	// Now we can commit the transaction
-	if err := cs.db.CommitTx(ctx, tx); err != nil {
+	if err = cs.db.CommitTx(ctx, tx); err != nil {
 		cs.logger.Errorf("Error in cs.db.Commit: %v", err)
 		return nil, err
 	}
