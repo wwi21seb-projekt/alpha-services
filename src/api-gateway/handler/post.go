@@ -503,7 +503,7 @@ func (ph *PostHandler) CreateLike(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusCreated)
+	c.Status(http.StatusNoContent)
 }
 
 func (ph *PostHandler) DeleteLike(c *gin.Context) {
