@@ -154,6 +154,19 @@ func (cs *chatService) CreateChat(ctx context.Context, req *chatv1.CreateChatReq
 		return nil, err
 	}
 
+	// Send notification to the other user, so they know they have a new message
+	notifCtx, notifSpan := cs.tracer.Start(ctx, "SendNotification")
+	defer notifSpan.End()
+	notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), req.GetUsername()))
+	_, err = cs.notificationClient.SendNotification(notifCtx, &notificationv1.SendNotificationRequest{
+		Recipient: req.GetUsername(),
+		NotificationType: "message",
+	})
+	if err != nil {
+		cs.logger.Errorf("Error in cs.notificationClient.SendNotification: %v", err)
+		// Non-critical error, we don't return here
+	}
+
 	return &chatv1.CreateChatResponse{
 		ChatId: chatId.String(),
 		Message: &chatv1.ChatMessageResponse{
