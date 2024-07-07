@@ -158,7 +158,7 @@ func (cs *chatService) CreateChat(ctx context.Context, req *chatv1.CreateChatReq
 	// Send notification to the other user, so they know they have a new message
 	notifCtx, notifSpan := cs.tracer.Start(ctx, "SendNotification")
 	defer notifSpan.End()
-	notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), req.GetUsername()))
+	notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), username))
 	_, err = cs.notificationClient.SendNotification(notifCtx, &notificationv1.SendNotificationRequest{
 		Recipient: req.GetUsername(),
 		NotificationType: "message",
@@ -584,7 +584,7 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 				} else if !c.active && c.username != conn.username {
 					// Send notification to the other user if they are not connected
 					notifCtx, notifSpan := cs.tracer.Start(sendCtx, "SendNotification")
-					notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), c.username))
+					notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), conn.username))
 					_, err := cs.notificationClient.SendNotification(notifCtx, &notificationv1.SendNotificationRequest{
 						Recipient: c.username,
 						NotificationType: "message",
