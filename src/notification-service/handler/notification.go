@@ -125,6 +125,7 @@ func (n *NotificationService) DeleteNotification(ctx context.Context, request *n
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := n.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -177,6 +178,7 @@ func (n *NotificationService) SendNotification(ctx context.Context, request *not
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := n.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -289,11 +291,9 @@ func (n *NotificationService) sendWebNotification(ctx context.Context, notificat
 		return status.Errorf(codes.InvalidArgument, "subscription expired")
 	}
 
-	authenticatedUsername := metadata.ValueFromIncomingContext(ctx, string(keys.SubjectKey))[0]
-
 	// Fetch User
 	users, err := n.profileClient.ListUsers(ctx, &userv1.ListUsersRequest{
-		Usernames: []string{authenticatedUsername},
+		Usernames: []string{notification.SenderUsername},
 	})
 	if err != nil {
 		n.logger.Errorw("error getting user", "error", err)
@@ -303,7 +303,6 @@ func (n *NotificationService) sendWebNotification(ctx context.Context, notificat
 	if len(users.GetUsers()) == 0 {
 		return status.Errorf(codes.NotFound, "user not found")
 	}
-
 	user := users.GetUsers()[0]
 
 	notificationDTO := dto.Notification{

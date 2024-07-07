@@ -78,6 +78,7 @@ func (as authenticationService) RegisterUser(ctx context.Context, request *userv
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -213,6 +214,7 @@ func (as authenticationService) ResendActivationEmail(ctx context.Context, reque
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -264,6 +266,7 @@ func (as authenticationService) ActivateUser(ctx context.Context, request *userv
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -426,6 +429,7 @@ func (as authenticationService) UpdatePassword(ctx context.Context, request *use
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -495,6 +499,7 @@ func (as authenticationService) ResetPassword(ctx context.Context, request *user
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -549,6 +554,7 @@ func (as authenticationService) SetPassword(ctx context.Context, request *userv1
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := as.db.BeginTx(ctx, conn)
 	if err != nil {

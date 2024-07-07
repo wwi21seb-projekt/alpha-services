@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"os"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-services/src/notification-service/schema"
 	"github.com/wwi21seb-projekt/alpha-shared/db"
@@ -12,8 +15,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"os"
-	"time"
 )
 
 type pushSubscriptionService struct {
@@ -102,6 +103,7 @@ func (p *pushSubscriptionService) CreatePushSubscription(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := p.db.BeginTx(ctx, conn)
 	if err != nil {

@@ -169,6 +169,7 @@ func (ss subscriptionService) CreateSubscription(ctx context.Context, request *u
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := ss.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -262,6 +263,7 @@ func (ss subscriptionService) DeleteSubscription(ctx context.Context, request *u
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := ss.db.BeginTx(ctx, conn)
 	if err != nil {

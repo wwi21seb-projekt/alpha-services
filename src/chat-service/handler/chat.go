@@ -84,6 +84,7 @@ func (cs *chatService) CreateChat(ctx context.Context, req *chatv1.CreateChatReq
 		cs.logger.Errorf("Error in cs.db.Acquire: %v", err)
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := cs.db.BeginTx(ctx, conn)
 	if err != nil {
@@ -563,7 +564,7 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 			// also includes the sender, so the client knows that the message
 			// was sent successfully. If the other client is not connected, send
 			// a notification instead.
-			_, sendSpan := cs.tracer.Start(chatCtx, "SendMessage")
+			sendCtx, sendSpan := cs.tracer.Start(chatCtx, "SendMessage")
 			cs.mu.RLock()
 			error := false
 			for _, c := range cs.streams[chatId].connections {
@@ -582,9 +583,9 @@ func (cs *chatService) handleMessages(ctx context.Context, cancel context.Cancel
 				// that they have a new message.
 				} else if !c.active && c.username != conn.username {
 					// Send notification to the other user if they are not connected
-					chatCtx := metadata.NewOutgoingContext(chatCtx, metadata.Pairs(string(keys.SubjectKey), c.username))
-					_, notifSpan := cs.tracer.Start(chatCtx, "SendNotification")
-					_, err := cs.notificationClient.SendNotification(chatCtx, &notificationv1.SendNotificationRequest{
+					notifCtx, notifSpan := cs.tracer.Start(sendCtx, "SendNotification")
+					notifCtx = metadata.NewOutgoingContext(notifCtx, metadata.Pairs(string(keys.SubjectKey), c.username))
+					_, err := cs.notificationClient.SendNotification(notifCtx, &notificationv1.SendNotificationRequest{
 						Recipient: c.username,
 						NotificationType: "message",
 					})

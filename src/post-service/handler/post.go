@@ -349,6 +349,7 @@ func (ps *postService) DeletePost(ctx context.Context, req *postv1.DeletePostReq
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Release()
 
 	tx, err := ps.db.BeginTx(ctx, conn)
 	if err != nil {
