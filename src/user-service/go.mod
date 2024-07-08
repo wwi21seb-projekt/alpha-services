@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.6.0
-	github.com/wwi21seb-projekt/alpha-shared v0.24.0
+	github.com/wwi21seb-projekt/alpha-shared v0.25.1
 	go.opentelemetry.io/otel/trace v1.28.0
 	golang.org/x/crypto v0.24.0
 	google.golang.org/grpc v1.65.0

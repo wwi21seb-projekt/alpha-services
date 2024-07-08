@@ -46,8 +46,8 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/wwi21seb-projekt/alpha-shared v0.24.0 h1:TtXKuYE/AsTIHpuSMFxvU9KhKCOxMXWyXFMYjzpPuSs=
-github.com/wwi21seb-projekt/alpha-shared v0.24.0/go.mod h1:Bl0+JVcrIkRH0pJ6HRrxGy2W9o1oV5BH7UFEArPfqQo=
+github.com/wwi21seb-projekt/alpha-shared v0.25.1 h1:FTg1rrKoU1Xh+20x3TUeerU237gk/IoF2+oZCmPXFNA=
+github.com/wwi21seb-projekt/alpha-shared v0.25.1/go.mod h1:Bl0+JVcrIkRH0pJ6HRrxGy2W9o1oV5BH7UFEArPfqQo=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0 h1:9G6E0TXzGFVfTnawRzrPl83iHOAV7L8NJiR8RSGYV1g=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0/go.mod h1:azvtTADFQJA8mX80jIH/akaE7h+dbm/sVuaHqN13w74=
 go.opentelemetry.io/otel v1.28.0 h1:/SqNcYk+idO0CxKEUOtKQClMK/MimZihKYMruSMViUo=

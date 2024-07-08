@@ -29,7 +29,7 @@ require (
 )
 
 require (
-	github.com/wwi21seb-projekt/alpha-shared v0.24.0
+	github.com/wwi21seb-projekt/alpha-shared v0.25.1
 	golang.org/x/image v0.18.0
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
