@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -55,7 +56,7 @@ func (i *imageHandler) GetImage(c *gin.Context) {
 		}
 
 		i.logger.Infof("Error in upstream call i.imageClient.GetImage: %v", err)
-		c.JSON(returnErr.HttpStatus, returnErr)
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -64,7 +65,7 @@ func (i *imageHandler) GetImage(c *gin.Context) {
 	imageBytes, err := decodeBase64Image(i.logger, imageResponse.GetImage())
 	if err != nil {
 		i.logger.Errorf("Failed to decode base64 image: %v", err)
-		c.JSON(500, goerrors.InternalServerError)
+		c.JSON(500, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
 	}
 

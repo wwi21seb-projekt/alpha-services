@@ -85,9 +85,7 @@ func (uh *UserHandler) RegisterUser(c *gin.Context) {
 		}
 
 		uh.logger.Errorw("Error in upstream call uh.authService.RegisterUser", zap.Error(err))
-		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{
-			Error: returnErr,
-		})
+		c.JSON(returnErr.HttpStatus, &dto.ErrorDTO{Error: returnErr})
 		return
 	}
 
@@ -115,9 +113,7 @@ func (uh *UserHandler) SearchUsers(c *gin.Context) {
 	})
 	if err != nil {
 		uh.logger.Errorw("Error in upstream call uh.profileService.SearchUsers", zap.Error(err))
-		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{
-			Error: goerrors.InternalServerError,
-		})
+		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
 	}
 
@@ -251,9 +247,7 @@ func (uh *UserHandler) RefreshToken(c *gin.Context) {
 	if err != nil {
 		refreshSpan.AddEvent("Error in jwtManager.Refresh")
 		uh.logger.Errorf("Error in jwtManager.Refresh: %v", err)
-		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{
-			Error: goerrors.InternalServerError,
-		})
+		c.JSON(goerrors.InternalServerError.HttpStatus, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
 	}
 	c.JSON(http.StatusOK, tokenPair)

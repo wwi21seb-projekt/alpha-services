@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,8 +62,10 @@ func (ph *PostHandler) CreatePost(c *gin.Context) {
 
 	req := &postv1.CreatePostRequest{
 		Content:        createPostRequest.Content,
-		Picture:        createPostRequest.Picture,
 		RepostedPostId: createPostRequest.RepostedPostID,
+	}
+	if createPostRequest.Picture != nil && *createPostRequest.Picture != ""{
+		req.Picture = createPostRequest.Picture
 	}
 
 	if createPostRequest.Location != nil {
@@ -247,7 +248,7 @@ func (ph *PostHandler) QueryPosts(c *gin.Context) {
 	resp, err := ph.postService.ListPosts(ctx, req)
 	if err != nil {
 		ph.logger.Errorw("error in upstream call uh.postService.ListPosts", "error", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, goerrors.InternalServerError)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, &dto.ErrorDTO{Error: goerrors.InternalServerError})
 		return
 	}
 
@@ -373,8 +374,7 @@ func (ph *PostHandler) isPublicFeedWanted(c *gin.Context) (bool, bool) {
 	jwtToken := authHeader[len("Bearer "):]
 	username, err := ph.jwtManager.Verify(jwtToken)
 	if err != nil {
-		err := errors.New("invalid authorization header")
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, &dto.ErrorDTO{Error: goerrors.Unauthorized})
 		return false, false
 	}
 
@@ -510,7 +510,7 @@ func (ph *PostHandler) DeleteLike(c *gin.Context) {
 	// Get post id from path
 	postID := c.Param("postId")
 	if _, err := uuid.Parse(postID); err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, goerrors.PostNotFound)
+		c.AbortWithStatusJSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.PostNotFound})
 		return
 	}
 
