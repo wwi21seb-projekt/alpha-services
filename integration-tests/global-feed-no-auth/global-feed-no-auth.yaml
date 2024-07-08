@@ -1,0 +1,14 @@
+name: Global Feed No Auth
+description: Testing the retrieval of the global feed without authentication
+
+testcases:
+- name: Global feed no auth Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 200

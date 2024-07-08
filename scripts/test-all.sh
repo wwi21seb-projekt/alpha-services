@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Set current jwt tokens
+python fetch_token.py
+echo "JWT tokens fetched Successfully!"
+
 # Parent directory containing multiple subdirectories with test cases
 PARENT_DIR="integration-tests"
 
@@ -13,7 +17,7 @@ fi
 for dir in "$PARENT_DIR"/*/; do
   if [ -d "$dir" ]; then
     echo "Running Venom tests in directory: $dir"
-    venom run "$dir" --output-dir $dir/logs
+    venom run "$dir" --var-from-file $PARENT_DIR/variables.yaml --output-dir $dir/logs
   fi
 done
 

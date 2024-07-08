@@ -1,0 +1,50 @@
+name: Change Trivial Information
+description: Testing changing the trivial information of a user
+
+testcases:
+- name: Change trivial information Success
+  steps:
+  - type: http
+    method: PUT
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "nickname": "Arda New",
+        "status": "Champion Turkey"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Change trivial information Bad Request
+  steps:
+  - type: http
+    method: PUT
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "nickname": "Arda New",
+      }
+    assertions:
+    - result.statuscode ShouldEqual 400
+
+- name: Change trivial information Unauthorized
+  steps:
+  - type: http
+    method: PUT
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt1}}"
+    body: |
+      {
+        "nickname": "Arda New",
+        "status": "Champion Turkey"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 401
