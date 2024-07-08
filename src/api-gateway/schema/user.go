@@ -7,8 +7,8 @@ type Author struct {
 }
 
 type UserSubscription struct {
-	FollowerId  string   `json:"followerId"`
-	FollowingId string   `json:"followingId"`
+	FollowerId  *string   `json:"followerId"`
+	FollowingId *string   `json:"followingId"`
 	Username    string   `json:"username"`
 	Nickname    string   `json:"nickname"`
 	Picture     *Picture `json:"picture"`
@@ -72,7 +72,7 @@ type GetUserResponse struct {
 	FollowerCount  int32    `json:"follower"`
 	FollowingCount int32    `json:"following"`
 	PostCount      int32    `json:"posts"`
-	SubscriptionId string   `json:"subscriptionId"`
+	SubscriptionId *string   `json:"subscriptionId"`
 }
 
 type SearchUsersResponse struct {

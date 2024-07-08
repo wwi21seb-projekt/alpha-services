@@ -39,7 +39,7 @@ type Post struct {
 	Likes        uint32    `json:"likes"`
 	Liked        bool      `json:"liked"`
 	Comments     uint32    `json:"comments"`
-	Repost       *Repost   `json:"repost,omitempty"`
+	Repost       *Repost   `json:"repost"`
 }
 
 type Repost struct {

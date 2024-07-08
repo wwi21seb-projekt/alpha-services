@@ -359,8 +359,11 @@ func (uh *UserHandler) GetUser(c *gin.Context) {
 		FollowerCount:  user.FollowerCount,
 		FollowingCount: user.FollowingCount,
 		PostCount:      user.PostCount,
-		SubscriptionId: user.SubscriptionId,
 	}
+	if user.SubscriptionId != "" {
+		response.SubscriptionId = &user.SubscriptionId
+	}
+
 
 	c.JSON(200, response)
 }

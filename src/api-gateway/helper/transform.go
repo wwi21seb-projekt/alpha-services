@@ -10,9 +10,7 @@ func TransformUserSubscription(subscription *userv1.Subscription) *schema.UserSu
 		return nil
 	}
 
-	return &schema.UserSubscription{
-		FollowerId:  subscription.FollowerSubscriptionId,
-		FollowingId: subscription.FollowedSubscriptionId,
+	response :=  &schema.UserSubscription{
 		Username:    subscription.Username,
 		Nickname:    subscription.Nickname,
 		Picture: &schema.Picture{
@@ -21,4 +19,11 @@ func TransformUserSubscription(subscription *userv1.Subscription) *schema.UserSu
 			Height: subscription.Picture.Height,
 		},
 	}
+	if subscription.FollowedSubscriptionId != "" {
+		response.FollowingId = &subscription.FollowedSubscriptionId
+	}
+	if subscription.FollowerSubscriptionId != "" {
+		response.FollowerId = &subscription.FollowerSubscriptionId
+	}
+	return response
 }
