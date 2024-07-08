@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	MaxImageSize = 3 * 1024 * 1024      // 3 MB in bytes
+	MaxImageSize = 7 * 1024 * 1024      // 7 MB in bytes
 	ImageDir     = "/serveralpha/data/" // Directory to store images
 )
 
