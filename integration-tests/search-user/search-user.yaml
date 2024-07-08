@@ -1,0 +1,25 @@
+name: Search User
+description: Testing the search of a user
+  
+testcases:
+- name: Search User Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users?username=arda&offset=0&limit=10"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt}}"
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Search User Unauthorized
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users?username=arda&offset=0&limit=10"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt}}"
+    assertions:
+    - result.statuscode ShouldEqual 401
