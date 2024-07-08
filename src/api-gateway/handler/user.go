@@ -192,6 +192,7 @@ func (uh *UserHandler) ChangePassword(c *gin.Context) {
 
 		if code == codes.PermissionDenied {
 			returnErr = goerrors.InvalidCredentials
+			returnErr.HttpStatus = http.StatusForbidden // little hack, since the default status is 403 but we want 401
 		}
 
 		uh.logger.Errorf("Error in upstream call uh.authService.UpdatePassword: %v", err)

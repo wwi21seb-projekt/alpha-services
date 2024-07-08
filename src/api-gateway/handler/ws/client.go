@@ -1,10 +1,11 @@
 package ws
 
 import (
-	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
-	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
 	"sync"
 	"time"
+
+	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
+	chatv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/chat/v1"
 
 	"github.com/gorilla/websocket"
 	"github.com/microcosm-cc/bluemonday"
@@ -86,8 +87,25 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 			return
 		}
 
+		// Unmarshal message and sanitize content
+		var unmarshalledMessage schema.Message
+		if err := unmarshalledMessage.UnmarshalJSON(message); err != nil {
+			c.logger.Errorf("Failed to unmarshal message: %v", err)
+			errorMessage := dto.ErrorDTO{Error: goerrors.BadRequest}
+			errorMessageBytes, err := errorMessage.MarshalJSON()
+			if err != nil {
+				c.logger.Errorf("Failed to marshal error message: %v", err)
+				return
+			}
+			c.send <- errorMessageBytes
+			return
+		}
+
+		// Sanitize the message content
+		unmarshalledMessage.Content = c.policy.Sanitize(unmarshalledMessage.Content)
+
 		// Check if the message exceeds the maximum message size or is empty
-		if len(message) == 0 || len(message) > maxMessageSize {
+		if len(unmarshalledMessage.Content) == 0 || len(unmarshalledMessage.Content) > maxMessageSize {
 			c.logger.Errorf("Message exceeds maximum message size or is empty")
 			errorMessage := dto.ErrorDTO{Error: goerrors.BadRequest}
 			errorMessageBytes, err := errorMessage.MarshalJSON()
@@ -100,7 +118,7 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 		}
 
 		// Send it to the chat service via the open gRPC stream.
-		if err := c.sendMessageToChatService(message); err != nil {
+		if err := c.sendMessageToChatService(unmarshalledMessage); err != nil {
 			c.logger.Errorf("Failed to send message to chat service: %v", err)
 			return
 		}
@@ -108,20 +126,10 @@ func (c *Client) ReadPump(wg *sync.WaitGroup) {
 }
 
 // sendMessageToChatService sends a message from the client to the chat service via gRPC.
-func (c *Client) sendMessageToChatService(message []byte) error {
-	// Prepare a message to be sent via gRPC
-	var unmarshalledMessage schema.Message
-	if err := unmarshalledMessage.UnmarshalJSON(message); err != nil {
-		c.logger.Errorf("Failed to unmarshal message: %v", err)
-		return err
-	}
-
-	// Sanitize the message content
-	unmarshalledMessage.Content = c.policy.Sanitize(unmarshalledMessage.Content)
-
+func (c *Client) sendMessageToChatService(message schema.Message) error {
 	grpcMessage := &chatv1.ChatMessageRequest{
 		Username: c.username,
-		Message:  unmarshalledMessage.Content,
+		Message:  message.Content,
 	}
 
 	// Send the message to the chat service via gRPC
