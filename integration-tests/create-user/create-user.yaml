@@ -1,6 +1,6 @@
 name: Create User
 description: Testing the Creation of a user.
-vars: 
+vars:
   baseurl: "https://alpha.c930.net/api"
   username: "testuser{{ randAlphaNum 5 }}"
   password: "Chm12345!"
@@ -8,90 +8,90 @@ vars:
   email: "testemail{{ randAlphaNum 5 }}@gmail.com"
 
 testcases:
-- name: Create User Success
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username}}",
-        "password": "{{.password}}",
-        "nickname": "{{.nickname}}",
-        "email": "{{.email}}",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 201
+  - name: Create User Success
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username}}",
+            "password": "{{.password}}",
+            "nickname": "{{.nickname}}",
+            "email": "{{.email}}",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
 
-- name: Create User Bad Request
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "Chmielarski",
-        "password": "Chm12345!",
-        "nickname": "chmielarski",
-      }
-    assertions:
-    - result.statuscode ShouldEqual 400
+  - name: Create User Bad Request
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "Chmielarski",
+            "password": "Chm12345!",
+            "nickname": "chmielarski",
+          }
+        assertions:
+          - result.statuscode ShouldEqual 400
 
-- name: Create User Username taken
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username}}",
-        "password": "Chm12345!",
-        "nickname": "chmielarski",
-        "email": "{{.email}}",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 409
+  - name: Create User Username taken
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username}}",
+            "password": "Chm12345!",
+            "nickname": "chmielarski",
+            "email": "{{.email}}",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 409
 
-- name: Create User Email taken
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "some_untaken_name",
-        "password": "Chm12345!",
-        "nickname": "chmielarski",
-        "email": "{{.email}}",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 409
+  - name: Create User Email taken
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "some_untaken_name",
+            "password": "Chm12345!",
+            "nickname": "chmielarski",
+            "email": "{{.email}}",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 409
 
-- name: Create User Email invalid
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "UntakenName",
-        "password": "Chm12345!",
-        "nickname": "chmielarski",
-        "email": "invalid_email",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 400
+  - name: Create User Email invalid
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "UntakenName",
+            "password": "Chm12345!",
+            "nickname": "chmielarski",
+            "email": "invalid_email",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 400
