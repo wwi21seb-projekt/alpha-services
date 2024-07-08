@@ -1,0 +1,49 @@
+name: Delete post
+description: Testing deleting a post
+testcases:
+- name: Delete post Success
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.post1}}"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 204
+    - result.body ShouldBeEmpty
+
+- name: Delete post Unauthorized
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.post1}}"
+    assertions:
+    - result.statuscode ShouldEqual 401
+    - result.body.error.title ShouldEqual "Unauthorized"
+    - result.body.error.code ShouldEqual "ERR-014"
+    - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+
+- name: Delete post Forbidden
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.post2}}"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 403
+    - result.body.error.message ShouldEqual "You can only delete your own posts."
+    - result.body.error.code ShouldEqual "ERR-019"
+
+- name: Delete post Not Found
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/00000000-0000-0000-0000-000000000000"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 404
+    - result.body.error.title ShouldEqual "PostNotFound"
+    - result.body.error.code ShouldEqual "ERR-020"
+    - result.body.error.message ShouldEqual "The post was not found. Please check the post ID and try again."
