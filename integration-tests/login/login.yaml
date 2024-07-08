@@ -1,5 +1,10 @@
 name: Login
 description: Testing the login of a user.
+vars:
+  username: "testuser{{ randAlphaNum 5 }}"
+  password: "Chm12345!"
+  nickname: "testnickname{{ randAlpha 5 }}"
+  email: "testemail{{ randAlphaNum 5 }}@gmail.com"
 
 testcases:
 - name: Login User Success
@@ -48,7 +53,7 @@ testcases:
     assertions:
     - result.statuscode ShouldEqual 401
 
-# Registering a user to test the server response when trying to login with a user that is not activated.
+# Creating a user to test the server response when trying to login with a user that is not activated.
 - name: Register User Token Required
   steps:
   - type: http
