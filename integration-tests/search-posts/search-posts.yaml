@@ -1,0 +1,25 @@
+name: Search Posts Endpoint Tests
+description: Testing the search functionality on posts endpoint
+
+testcases:
+  - name: Search posts success
+    steps:
+    - type: http
+      method: GET
+      url: "{{.baseurl}}/posts?q=asd&postId=&limit=null"
+      headers:
+        Authorization: "Bearer {{.jwt1}}"
+      assertions:
+      - result.statuscode ShouldEqual 200
+
+  - name: Search posts unauthorized
+    steps:
+    - type: http
+      method: GET
+      url: "{{.baseurl}}/posts?q=asd&postId=&limit=null"
+      assertions:
+      - result.statuscode ShouldEqual 401
+      - result.body.error.title ShouldEqual Unauthorized
+      - result.body.error.code ShouldEqual ERR-014
+      - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+      - result.body.error.http_status ShouldEqual 401

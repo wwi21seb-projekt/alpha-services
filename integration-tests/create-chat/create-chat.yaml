@@ -1,0 +1,97 @@
+- name: Create chat success
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/chats"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "username": "{{.username2}}",
+        "content": "hello from the other side"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 201
+    - result.body.message.content ShouldNotBeEmpty
+    - result.body.message.username ShouldEqual "{{.username2}}"
+    - result.body.message.creationDate ShouldNotBeEmpty
+
+- name: Create chat Bad Request
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/chats"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "username": "",
+        "content": "hello from the other side"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 400
+    - result.body.error.title ShouldEqual "BadRequest"
+    - result.body.error.code ShouldEqual "ERR-001"
+    - result.body.error.message ShouldEqual "The request body is invalid. Please check the request body and try again."
+    - result.body.error.http_status ShouldEqual 400
+
+- name: Create chat Unauthorized
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/chats"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "username": "{{.username2}}",
+        "content": "hello from the other side"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 401
+    - result.body.error.title ShouldEqual "Unauthorized"
+    - result.body.error.code ShouldEqual "ERR-014"
+    - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+    - result.body.error.http_status ShouldEqual 401
+
+- name: Create chat User Not Found
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/chats"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "username": "nonexistentuser",
+        "content": "hello from the other side"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 404
+    - result.body.error.title ShouldEqual "UserNotFound"
+    - result.body.error.code ShouldEqual "ERR-004"
+    - result.body.error.message ShouldEqual "The user was not found. Please check the username and try again."
+    - result.body.error.http_status ShouldEqual 404
+
+- name: Create chat Conflict Chat Already Exists
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/chats"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "username": "{{.username2}}",
+        "content": "hello from the other side"
+      }
+    assertions:
+    - result.statuscode ShouldEqual 409
+    - result.body.error.title ShouldEqual "ChatAlreadyExists"
+    - result.body.error.code ShouldEqual "ERR-026"
+    - result.body.error.message ShouldEqual "The chat already exists. Please check the username and try again."
+    - result.body.error.http_status ShouldEqual 409
