@@ -1,0 +1,25 @@
+name: Own or Global Feed
+description: Testing the retrieval of the own or global feed
+
+testcases:
+- name: Own or global feed Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/feed"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt}}"
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Own or global feed Unauthorized
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/feed"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt}}"
+    assertions:
+    - result.statuscode ShouldEqual 401

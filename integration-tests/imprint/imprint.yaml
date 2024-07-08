@@ -1,7 +1,5 @@
 name: Imprint
 description: Testing the retrieval of the imprint.
-vars: 
-  baseurl: "https://alpha.c930.net/api"
 
 testcases:
 - name: Get Imprint

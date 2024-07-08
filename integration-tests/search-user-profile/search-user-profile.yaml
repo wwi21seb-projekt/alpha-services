@@ -1,0 +1,36 @@
+name: Search User Profile
+description: Testing the search of a user
+
+testcases:
+- name: Search User Profile Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users/{{.username2}}"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Search User Profile Unauthorized
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 401
+
+- name: Search User Profile Not Found
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users/unknownuser"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 404

@@ -1,0 +1,36 @@
+name: User Feed
+description: Testing the Retrieval of a user feed
+
+testcases:
+- name: Get User Feed Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users/{{.username1}}/feed?offset=0&limit=10"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Get User Feed Unauthorized
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 401
+
+- name: Get User feed User not found
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users/unknownuser/feed?offset=0&limit=10"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 404

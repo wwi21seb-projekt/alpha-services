@@ -1,0 +1,34 @@
+name: Resend Token
+description: Testing the Resending of a token
+
+testcases:
+- name: Resend Token Success
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt}}"
+    assertions:
+    - result.statuscode ShouldEqual 200
+
+- name: Resend Token User Already Activated
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+    assertions:
+    - result.statuscode ShouldEqual 401
+
+- name: Resend Token User not found
+  steps:
+  - type: http
+    method: GET
+    url: "{{.baseurl}}/users"
+    headers:
+      Content-Type: application/json
+    assertions:
+    - result.statuscode ShouldEqual 404
