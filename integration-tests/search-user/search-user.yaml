@@ -6,10 +6,10 @@ testcases:
   steps:
   - type: http
     method: GET
-    url: "{{.baseurl}}/users?username=arda&offset=0&limit=10"
+    url: "{{.baseurl}}/users?username=arda"
     headers:
       Content-Type: application/json
-      Authorization: "Bearer {{.jwt}}"
+      Authorization: "Bearer {{.jwt1}}"
     assertions:
     - result.statuscode ShouldEqual 200
 

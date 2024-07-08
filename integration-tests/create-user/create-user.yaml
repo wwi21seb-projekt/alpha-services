@@ -1,5 +1,11 @@
 name: Create User
 description: Testing the Creation of a user.
+vars: 
+  baseurl: "https://alpha.c930.net/api"
+  username: "testuser{{ randAlphaNum 5 }}"
+  password: "Chm12345!"
+  nickname: "testnickname{{ randAlpha 5 }}"
+  email: "testemail{{ randAlphaNum 5 }}@gmail.com"
 
 testcases:
 - name: Create User Success
@@ -88,4 +94,4 @@ testcases:
         "profilePicture": ""
       }
     assertions:
-    - result.statuscode ShouldEqual 422
+    - result.statuscode ShouldEqual 400
