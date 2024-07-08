@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	imagev1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/image/v1"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	postv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/post/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
 	"net"
@@ -62,13 +63,14 @@ func main() {
 	userProfileClient := userv1.NewUserServiceClient(cfg.GRPCClients.UserService)
 	userSubscriptionClient := userv1.NewSubscriptionServiceClient(cfg.GRPCClients.UserService)
 	imageClient := imagev1.NewImageServiceClient(cfg.GRPCClients.ImageService)
+	notificationClient := notificationv1.NewNotificationServiceClient(cfg.GRPCClients.NotificationService)
 
 	// Create the gRPC Server
 	grpcServer := grpc.NewServer(sharedGRPC.NewServerOptions(logger.Desugar())...)
 
 	// Register post service
 	postv1.RegisterInteractionServiceServer(grpcServer, handler.NewInteractionService(logger, database, userProfileClient))
-	postv1.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient, imageClient))
+	postv1.RegisterPostServiceServer(grpcServer, handler.NewPostServiceServer(logger, database, userProfileClient, userSubscriptionClient, imageClient, notificationClient))
 
 	// Create listener
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.Port))

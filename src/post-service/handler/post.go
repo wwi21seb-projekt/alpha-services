@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	notificationv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/notification/v1"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,23 +36,25 @@ var (
 )
 
 type postService struct {
-	logger        *zap.SugaredLogger
-	tracer        trace.Tracer
-	db            *db.DB
-	profileClient userv1.UserServiceClient
-	subscription  userv1.SubscriptionServiceClient
-	imageClient   imagev1.ImageServiceClient
+	logger             *zap.SugaredLogger
+	tracer             trace.Tracer
+	db                 *db.DB
+	profileClient      userv1.UserServiceClient
+	subscription       userv1.SubscriptionServiceClient
+	imageClient        imagev1.ImageServiceClient
+	notificationClient notificationv1.NotificationServiceClient
 	postv1.UnimplementedPostServiceServer
 }
 
-func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscription userv1.SubscriptionServiceClient, imageClient imagev1.ImageServiceClient) postv1.PostServiceServer {
+func NewPostServiceServer(logger *zap.SugaredLogger, db *db.DB, profileClient userv1.UserServiceClient, subscription userv1.SubscriptionServiceClient, imageClient imagev1.ImageServiceClient, notificationClient notificationv1.NotificationServiceClient) postv1.PostServiceServer {
 	return &postService{
-		logger:        logger,
-		tracer:        otel.GetTracerProvider().Tracer("post-service"),
-		db:            db,
-		profileClient: profileClient,
-		subscription:  subscription,
-		imageClient:   imageClient,
+		logger:             logger,
+		tracer:             otel.GetTracerProvider().Tracer("post-service"),
+		db:                 db,
+		profileClient:      profileClient,
+		subscription:       subscription,
+		imageClient:        imageClient,
+		notificationClient: notificationClient,
 	}
 }
 
@@ -268,7 +271,7 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 		picture = &imagev1.Picture{
 			Width:  uploadResponse.Width,
 			Height: uploadResponse.Height,
-			Url: uploadResponse.Url,
+			Url:    uploadResponse.Url,
 		}
 
 		post.PictureURL = &picture.Url
@@ -301,6 +304,20 @@ func (ps *postService) CreatePost(ctx context.Context, request *postv1.CreatePos
 
 	if err = ps.db.CommitTx(ctx, tx); err != nil {
 		return nil, err
+	}
+
+	// Send Repost Notification to Repost Author his post has been reposted
+	if repost != nil {
+		notifCTX, notifSpan := ps.tracer.Start(ctx, "SendRepostNotification")
+		notifCTX = metadata.NewOutgoingContext(notifCTX, metadata.Pairs(string(keys.SubjectKey), authenticatedUsername))
+		_, err := ps.notificationClient.SendNotification(notifCTX, &notificationv1.SendNotificationRequest{
+			NotificationType: "repost",
+			Recipient:        repost.GetAuthor().GetUsername(),
+		})
+		if err != nil {
+			ps.logger.Errorw("Error sending repost notification to repost author.", zap.Error(err))
+		}
+		notifSpan.End()
 	}
 
 	return &postv1.CreatePostResponse{

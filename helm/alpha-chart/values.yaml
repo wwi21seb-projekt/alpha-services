@@ -88,6 +88,7 @@ services:
     connections:
       - user-service
       - image-service
+      - notification-service
 
   user-service:
     replicaCount: 1
