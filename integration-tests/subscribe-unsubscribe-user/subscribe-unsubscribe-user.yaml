@@ -35,6 +35,17 @@ testcases:
     assertions:
     - result.statuscode ShouldEqual 409
 
+- name: Unsubscribe User Not own subscription
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/subscriptions/{{.Subscribe-User-Success.subscriptionid}}"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt2}}"
+    assertions:
+    - result.statuscode ShouldEqual 403
+
 - name: Unsubscribe User Success
   steps:
   - type: http
@@ -93,17 +104,6 @@ testcases:
       Authorization: "Bearer wrong{{.jwt1}}"
     assertions:
     - result.statuscode ShouldEqual 401
-
-- name: Unsubscribe User Not own subscription
-  steps:
-  - type: http
-    method: DELETE
-    url: "{{.baseurl}}/subscriptions/{{.Subscribe-User-Success.subscriptionid}}"
-    headers:
-      Content-Type: application/json
-      Authorization: "Bearer {{.jwt2}}"
-    assertions:
-    - result.statuscode ShouldEqual 403
 
 - name: Unsubscribe User Subscription not found
   steps:
