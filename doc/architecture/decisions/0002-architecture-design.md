@@ -4,40 +4,63 @@ Date: 2024-05-17
 
 ## Status
 
-In discussion
+Accepted
 
 ## Context
 
-We need to define the architecture of the system to ensure that it is scalable, maintainable, and secure.
+To ensure our system is scalable, maintainable, and secure, we need to define its architecture comprehensively. Our architecture decision will influence how we handle growth, manage services, and ensure the security of our operations.
 
 ## Decision
 
-We will use a microservices architecture to build the system. This will allow us to scale the system horizontally, and to deploy and maintain the system in a more modular way.
-For simplicity, we will use a single monolithic repository to store all the services, which sounds like a contradiction, but it will allow us to manage the services in a more cohesive way.
+We will adopt a microservices architecture for our system. This approach allows us to scale horizontally and manage the system modularly. Despite using a microservices architecture, we will maintain a single monolithic repository for all services, enabling cohesive management of the services.
 
-We agreed to partition the system into the following services:
+### Service Partitioning
 
-- 'api-gateway': This service will be the entry point to the system. It will be responsible for routing requests to the appropriate services, as well as for handling authentication and authorization.
-- 'user-service': This service will be responsible for managing users. It will handle user registration, login, profile and subscription management.
-- 'post-service': This service will be responsible for managing posts. It will handle post creation, editing, deletion, and retrieval, as well as everything related to posts, such as comments, likes, and shares.
-- 'notification-service': This service will be responsible for managing notifications. It will handle storing notifications and sending them to onboarded users with web push or expo push notifications.
+- `API Gateway`: Acts as the entry point to the system. Responsible for routing requests to appropriate services, handling authentication. Authorization will be done by the services themselves.
+- `User Service`: Manages users, including registration, login, profile management, and subscription management.
+- `Post Service`: Manages posts, including creation, editing, deletion, retrieval, comments, likes, and shares.
+- `Notification Service`: Manages notifications, stores notifications, and sends them via web push or expo push notifications. Also handles mail communication using Mailgun.
+- `Image Service`: Manages images, including upload, retrieval, and deletion.
 
-For that we'll use the following technologies:
+### Technologies and Tools
 
-- 'Golang': We'll use Go for the backend services. Go is a statically typed, compiled language that is designed for building fast, reliable, and efficient software at scale.
-- 'go-micro': We'll use go-micro to build the services. go-micro is a pluggable RPC framework that provides the building blocks for building microservices in Go.
-- 'PostgreSQL': We'll use PostgreSQL as the database for the system. PostgreSQL is a powerful, open-source relational database that is designed for scalability, reliability, and performance.
-- 'Docker': We'll use Docker to containerize the services. Docker is a platform that allows us to package, distribute, and run applications in containers.
-- 'Kubernetes': We'll use Kubernetes to orchestrate the containers. Kubernetes is an open-source platform that automates the deployment, scaling, and management of containerized applications.
-- 'Jaeger': We'll use Jaeger to trace the requests between the services. Jaeger is an open-source, end-to-end distributed tracing system that is designed for monitoring and troubleshooting microservices-based architectures.
-- 'Prometheus': We'll use Prometheus to monitor the services. Prometheus is an open-source monitoring and alerting toolkit that is designed for collecting, storing, and querying metrics from microservices-based architectures.
+- `Golang`: Used for backend services. We will use the standard library along with `gin-gonic` for enhanced routing capabilities and `zap` for logging.
+- `PostgreSQL`: Used as the database for the system. Each service has its own schema to ensure data isolation and manageability.
+- `Docker`: Used to containerize the services, ensuring consistency across development and production environments.
+- `Kubernetes`: Used to orchestrate containers, automating deployment, scaling, and management.
+- `Jaeger`: Used for tracing requests between services, aiding in monitoring and troubleshooting.
+- `Prometheus`: Used for monitoring services, collecting, storing, and querying metrics.
+- `gRPC`: Used for communication between services, providing efficient, scalable, and reliable inter-service communication.
 
-As for the communication between the services, we'll use gRPC. gRPC is a high-performance, open-source, universal RPC framework that is designed for building efficient, scalable, and reliable microservices.
-The API Gateway will expose a RESTful (or more like JSON over HTTP) API to the clients, and will translate the requests to gRPC calls to the services.
+### API Gateway
 
-The API Gateway itself will be built in a "dumb" way, meaning that it will contain no or very little business logic. It will be responsible for routing requests to the appropriate services, as well as for handling
-authentication and authorization. The services themselves will contain the business logic and the Gateway will be responsible for transforming the requests and responses between the RESTful API and the gRPC services.
+The API Gateway will expose a RESTful API (JSON over HTTP) to clients, translating requests to gRPC calls for the appropriate services. It will:
+
+- Contain minimal business logic.
+- Handle JWT authentication and provide user information to services.
+- Transform requests and responses between the RESTful API and gRPC services.
+- Map proto models to HTTP over JSON schema and handle RPC status codes by returning appropriate errors from `goerrors`.
+
+### Repositories
+
+- `alpha-services`: Contains all services, Kubernetes resources, Helm resources, database schema (Atlas), and migrations.
+- `alpha-shared`: Contains shared modules such as gRPC setup, telemetry setup, database setup, logging setup, etc.
+
+### Database Management
+
+Each service with a data layer will have its own PostgreSQL schema.
+We use connection pooling to manage concurrent access, releasing connections as soon as they are no longer needed to prevent resource starvation.
+Atlas is used for database schema management, providing automatic migration creation, execution, and changelog maintenance.
+
+### Deployment
+
+Each service is containerized using Docker and published using Helm.
+A Helm chart creates a deployment for each service and manages external dependencies such as Jaeger for tracing and kube-prom-stack for monitoring.
+
+### Mail Communication
+
+The Notification Service uses Mailgun for mail distribution, ensuring reliable and scalable email communication.
 
 ## Consequences
 
-What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated.
+Using a microservices architecture will allow us to scale the system horizontally, and to deploy and maintain the system in a more modular way. However, it will also introduce additional complexity, such as the need to manage inter-service communication, data consistency, and service discovery. We will need to carefully design the services to ensure that they are loosely coupled.
