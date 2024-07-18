@@ -1,0 +1,140 @@
+name: Create Post
+description: Testing creation of a post.
+
+testcases:
+- name: Post-Creation-Success
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/posts"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "content": "Some Content #arda",
+        "picture": "",
+        "location": {
+            "longitude": 142.2,
+            "latitude": 45.2,
+            "accuracy": 39
+        }
+      }
+    vars:
+      postid: 
+        from: result.bodyjson.postId
+    assertions:
+    - result.statuscode ShouldEqual 201
+
+- name: Post Creation Bad Request
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/posts"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{.jwt1}}"
+    body: |
+      {
+        "picture":" ",
+        "location": {
+            "longitude": 142.2,
+            "latitude": -45.2,
+            "accuracy": 39
+        }
+      }
+    assertions:
+    - result.statuscode ShouldEqual 400
+
+- name: Post Creation Unauthorized
+  steps:
+  - type: http
+    method: POST
+    url: "{{.baseurl}}/posts"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer wrong{{.jwt1}}"
+    body: |
+      {
+        "content": "Post ohne Repost und Location und eigener Location #hamster",
+        "picture":" ",
+        "location": {
+            "longitude": 142.2,
+            "latitude": -45.2,
+            "accuracy": 39
+        }
+      }
+    assertions:
+    - result.statuscode ShouldEqual 401
+
+
+  - name: Search posts success
+    steps:
+    - type: http
+      method: GET
+      url: "{{.baseurl}}/posts?q=#arda&postId={{.Post-Creation-Success.postid}}&limit=null"
+      headers:
+        Authorization: "Bearer {{.jwt1}}"
+      assertions:
+      - result.statuscode ShouldEqual 200
+
+  - name: Search posts unauthorized
+    steps:
+    - type: http
+      method: GET
+      url: "{{.baseurl}}/posts?q=asd&postId=&limit=null"
+      assertions:
+      - result.statuscode ShouldEqual 401
+      - result.body.error.title ShouldEqual Unauthorized
+      - result.body.error.code ShouldEqual ERR-014
+      - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+      - result.body.error.http_status ShouldEqual 401
+
+
+
+- name: Delete post Success
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.Post-Creation-Success.postid}}"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 204
+    - result.body ShouldBeEmpty
+
+- name: Delete post Unauthorized
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.post1}}"
+    assertions:
+    - result.statuscode ShouldEqual 401
+    - result.body.error.title ShouldEqual "Unauthorized"
+    - result.body.error.code ShouldEqual "ERR-014"
+    - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+
+- name: Delete post Forbidden
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/{{.post2}}"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 403
+    - result.body.error.message ShouldEqual "You can only delete your own posts."
+    - result.body.error.code ShouldEqual "ERR-019"
+
+- name: Delete post Not Found
+  steps:
+  - type: http
+    method: DELETE
+    url: "{{.baseurl}}/posts/00000000-0000-0000-0000-000000000000"
+    headers:
+      Authorization: "Bearer {{.jwt1}}"
+    assertions:
+    - result.statuscode ShouldEqual 404
+    - result.body.error.title ShouldEqual "PostNotFound"
+    - result.body.error.code ShouldEqual "ERR-020"
+    - result.body.error.message ShouldEqual "The post was not found. Please check the post ID and try again."
