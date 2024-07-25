@@ -130,15 +130,16 @@ Test implementations can be found in the `integration-tests` folder. To execute 
 To execute individual test suites, use the following command:
 
 ```bash
-venom run <directory> --output-dir <directory>/logs
+venom run <directory> --var-from-file ../variables.yaml --output-dir <directory>/logs
 ```
 
 Example: Running the Imprint Test Suite
 For the imprint test suite, the command would be:
 
 ```bash
-venom run integration-tests/imprint --output-dir integration-tests/imprint/logs
+venom run integration-tests/imprint --var-from-file ../variables.yaml --output-dir integration-tests/imprint/logs
 ```
+
 Make sure to specify the logs directory as the output directory to prevent the log files from being stored elsewhere.
 
 ## License
