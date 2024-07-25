@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites>
+  <testsuite errors="6" name="Create Post" package="integration-tests/create-search-delete-post/create-search-delete-post.yaml" tests="7" time="0.679719">
+    <testcase classname="create-search-delete-post.yaml" name="Post-Creation-Success" time="0.092930625">
+      <error><![CDATA[Testcase "Post-Creation-Success", step #0-0: Assertion "result.statuscode ShouldEqual 201" failed. expected: 201  got: 401 (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     POST
+		URL:        https://alpha.c930.net/api/posts
+		Body:       {"error":{"code":"ERR-014","http_status":401,"message":"The request is unauthorized. Please login to your account.","title":"Unauthorized"}}
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Post-Creation-Bad-Request" time="0.094847333">
+      <error><![CDATA[Testcase "Post Creation Bad Request", step #0-0: Assertion "result.statuscode ShouldEqual 400" failed. expected: 400  got: 401 (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     POST
+		URL:        https://alpha.c930.net/api/posts
+		Body:       {"error":{"code":"ERR-014","http_status":401,"message":"The request is unauthorized. Please login to your account.","title":"Unauthorized"}}
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Post-Creation-Unauthorized" time="0.095978584">
+      <system-out></system-out>
+      <system-err><![CDATA[
+
+
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Delete-post-Success" time="0.085648416">
+      <error><![CDATA[Testcase "Delete post Success", step #0-0: Assertion "result.statuscode ShouldEqual 204" failed. expected: 204  got: 401 (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Success", step #0-0: Assertion "result.body ShouldBeEmpty" failed. expected '{"error":{"title":"Unauthorized","code":"ERR-014","message":"The request is unauthorized. Please login to your account.","http_status":401}}' to be empty but it wasn't (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     DELETE
+		URL:        https://alpha.c930.net/api/posts/%7B%7B.Post-Creation-Success.postid%7D%7D
+		Body:       {"error":{"code":"ERR-014","http_status":401,"message":"The request is unauthorized. Please login to your account.","title":"Unauthorized"}}
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Delete-post-Unauthorized" time="0.087319125">
+      <error><![CDATA[Testcase "Delete post Unauthorized", step #0-0: Assertion "result.statuscode ShouldEqual 401" failed. expected: 401  got: 404 (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.title ShouldEqual \"Unauthorized\"" failed. expected: Unauthorized  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-014\"" failed. expected: ERR-014  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.message ShouldEqual \"The request is unauthorized. Please login to your account.\"" failed. expected: The request is unauthorized. Please login to your account.  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     DELETE
+		URL:        https://alpha.c930.net/api/posts/
+		Body:       404 page not found
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Delete-post-Forbidden" time="0.131639791">
+      <error><![CDATA[Testcase "Delete post Forbidden", step #0-0: Assertion "result.statuscode ShouldEqual 403" failed. expected: 403  got: 404 (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.message ShouldEqual \"You can only delete your own posts.\"" failed. expected: You can only delete your own posts.  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-019\"" failed. expected: ERR-019  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     DELETE
+		URL:        https://alpha.c930.net/api/posts/
+		Body:       404 page not found
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+    <testcase classname="create-search-delete-post.yaml" name="Delete-post-Not-Found" time="0.090894458">
+      <error><![CDATA[Testcase "Delete post Not Found", step #0-0: Assertion "result.statuscode ShouldEqual 404" failed. expected: 404  got: 401 (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Not Found", step #0-0: Assertion "result.body.error.title ShouldEqual \"PostNotFound\"" failed. expected: PostNotFound  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Not Found", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-020\"" failed. expected: ERR-020  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <error><![CDATA[Testcase "Delete post Not Found", step #0-0: Assertion "result.body.error.message ShouldEqual \"The post was not found. Please check the post ID and try again.\"" failed. expected: The post was not found. Please check the post ID and try again.  got: <nil> (create-search-delete-post.yaml:0)]]></error>
+      <system-out><![CDATA[===== Result Info =====
+		Method:     DELETE
+		URL:        https://alpha.c930.net/api/posts/00000000-0000-0000-0000-000000000000
+		Body:       {"error":{"code":"ERR-014","http_status":401,"message":"The request is unauthorized. Please login to your account.","title":"Unauthorized"}}
+		======================
+]]></system-out>
+      <system-err><![CDATA[
+]]></system-err>
+    </testcase>
+  </testsuite>
+</testsuites>

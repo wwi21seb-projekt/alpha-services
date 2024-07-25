@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set current jwt tokens
-python scripts/fetch_token.py
+sh scripts/fetch_token.sh
 echo "JWT tokens fetched Successfully!"
 
 # Parent directory containing multiple subdirectories with test cases

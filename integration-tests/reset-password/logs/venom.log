@@ -1,0 +1,32 @@
+Jul 25 14:59:05.303 [ERRO] file content:   - name: Reset password success
+    steps:
+    - type: http
+      method: POST
+      url: "https://alpha.c930.net/api/users/reset-password"
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "email": "wevit35516@atebin.com"
+        }
+      assertions:
+      - result.statuscode ShouldEqual 200
+      - result.body.email ShouldContainSubstring "wevit35516@atebin.com"
+
+  - name: Reset password user not found
+    steps:
+    - type: http
+      method: POST
+      url: "https://alpha.c930.net/api/users/reset-password"
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "email": "nonexistent@muell.io"
+        }
+      assertions:
+      - result.statuscode ShouldEqual 404
+      - result.body.error.title ShouldEqual "UserNotFound"
+      - result.body.error.code ShouldEqual "ERR-004"
+      - result.body.error.message ShouldEqual "The user was not found. Please check the username and try again."
+      - result.body.error.http_status ShouldEqual 404
