@@ -1,5 +1,0 @@
-Jul 26 02:40:06.352 [WARN] [Push Subscriptions Test Suite] [Get-VAPID-Token-Success] Step "http" result is "PASS"
-Jul 26 02:40:06.452 [WARN] [Push Subscriptions Test Suite] [Get-VAPID-Token-Unauthorized] Step "http" result is "PASS"
-Jul 26 02:40:06.565 [WARN] [Push Subscriptions Test Suite] [Register-Push-Subscription-Success-Web] Step "http" result is "PASS"
-Jul 26 02:40:06.660 [WARN] [Push Subscriptions Test Suite] [Register-Push-Subscription-Success-Expo] Step "http" result is "PASS"
-Jul 26 02:40:06.752 [WARN] [Push Subscriptions Test Suite] [Register-Push-Subscription-Unauthorized] Step "http" result is "PASS"

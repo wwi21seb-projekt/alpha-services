@@ -1,8 +1,0 @@
-Jul 26 02:40:00.618 [WARN] [Create and Get Comments] [Create-Post-For-Comments] Step "http" result is "PASS"
-Jul 26 02:40:00.705 [WARN] [Create and Get Comments] [Create-Comment-Success] Step "http" result is "PASS"
-Jul 26 02:40:00.845 [WARN] [Create and Get Comments] [Create-Comment-Bad-Request] Step "http" result is "PASS"
-Jul 26 02:40:00.934 [WARN] [Create and Get Comments] [Create-Comment-Unauthorized] Step "http" result is "PASS"
-Jul 26 02:40:01.075 [WARN] [Create and Get Comments] [Create-Comment-Not-Found] Step "http" result is "PASS"
-Jul 26 02:40:01.165 [WARN] [Create and Get Comments] [Get-Comments-Success] Step "http" result is "PASS"
-Jul 26 02:40:01.280 [WARN] [Create and Get Comments] [Get-Comments-Unauthorized] Step "http" result is "PASS"
-Jul 26 02:40:01.370 [WARN] [Create and Get Comments] [Get-Comments-Not-Found] Step "http" result is "PASS"
