@@ -1,0 +1,35 @@
+name: Notifications Test Suite
+description: Testing get and delete notifications.
+
+testcases:
+
+  - name: Get Notifications Success
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/notifications"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 200
+
+  - name: Get Notifications Unauthorized
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/notifications"
+        headers:
+          Authorization: "Bearer wrong{{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+  - name: Delete Notification Unauthorized
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/notifications/{{Create-Notification-for-Deletion.notificationId}}"
+        headers:
+          Authorization: "Bearer wrong{{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
