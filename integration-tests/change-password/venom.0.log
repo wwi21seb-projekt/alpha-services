@@ -1,0 +1,12 @@
+Jul 21 20:29:31.288 [ERRO] [Change password] [Change-password-Success] Step "http" result is "FAIL"
+Jul 21 20:29:31.288 [ERRO] [Change password] [Change-password-Success] Errors: 
+Jul 21 20:29:31.288 [ERRO] [Change password] [Change-password-Success] [33mTestcase "Change password Success", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:8)[0m
+Jul 21 20:29:31.299 [ERRO] [Change password] [Change-password-Bad-Request] Step "http" result is "FAIL"
+Jul 21 20:29:31.299 [ERRO] [Change password] [Change-password-Bad-Request] Errors: 
+Jul 21 20:29:31.299 [ERRO] [Change password] [Change-password-Bad-Request] [33mTestcase "Change password Bad Request", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:24)[0m
+Jul 21 20:29:31.312 [ERRO] [Change password] [Change-password-Unauthorized] Step "http" result is "FAIL"
+Jul 21 20:29:31.312 [ERRO] [Change password] [Change-password-Unauthorized] Errors: 
+Jul 21 20:29:31.312 [ERRO] [Change password] [Change-password-Unauthorized] [33mTestcase "Change password Unauthorized", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:39)[0m
+Jul 21 20:29:31.356 [ERRO] [Change password] [Change-password-Wrong-old-password] Step "http" result is "FAIL"
+Jul 21 20:29:31.356 [ERRO] [Change password] [Change-password-Wrong-old-password] Errors: 
+Jul 21 20:29:31.356 [ERRO] [Change password] [Change-password-Wrong-old-password] [33mTestcase "Change password Wrong old password", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:55)[0m

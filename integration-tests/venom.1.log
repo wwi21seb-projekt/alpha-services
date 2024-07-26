@@ -1,0 +1,36 @@
+Jul 21 21:29:03.719 [INFO] Reading change-password/change-password.yaml
+Jul 21 21:29:03.728 [INFO] Has 0 Secrets
+Jul 21 21:29:03.728 [INFO] Reading variables.yaml
+Jul 21 21:29:03.731 [INFO] Has 0 Secrets
+Jul 21 21:29:03.731 [INFO] Parsing testsuite change-password/change-password.yaml
+Jul 21 21:29:03.774 [INFO] Parsing testsuite variables.yaml
+Jul 21 21:29:03.774 [INFO] [Change password] Starting testsuite
+Jul 21 21:29:03.774 [INFO] [Change password] With secrets in testsuite
+Jul 21 21:29:03.780 [INFO] [Change password] [Change-password-Success] Starting testcase
+Jul 21 21:29:03.782 [INFO] [Change password] [Change-password-Success] Step #0 content is: {"assertions":["result.statuscode ShouldEqual 204"],"body":"{\n  \"oldPassword\": \"Champion1!\",\n  \"newPassword\": \"Champion1!\"\n}\n","headers":{"Authorization":"Bearer {{.jwt1}}","Content-Type":"application/json"},"method":"PATCH","type":"http","url":"{{.baseurl}}/users"}
+Jul 21 21:29:03.787 [ERRO] [Change password] [Change-password-Success] Step "http" result is "FAIL"
+Jul 21 21:29:03.787 [ERRO] [Change password] [Change-password-Success] Errors: 
+Jul 21 21:29:03.787 [ERRO] [Change password] [Change-password-Success] [33mTestcase "Change password Success", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:0)[0m
+Jul 21 21:29:03.788 [INFO] [Change password] [Change-password-Success] Ending testcase
+Jul 21 21:29:03.788 [INFO] [Change password] [Change-password-Bad-Request] Starting testcase
+Jul 21 21:29:03.797 [INFO] [Change password] [Change-password-Bad-Request] Step #0 content is: {"assertions":["result.statuscode ShouldEqual 400"],"body":"{\n  \"newPassword\": \"Champion1!\"\n}\n","headers":{"Authorization":"Bearer {{.jwt1}}","Content-Type":"application/json"},"method":"PATCH","type":"http","url":"{{.baseurl}}/users"}
+Jul 21 21:29:03.801 [ERRO] [Change password] [Change-password-Bad-Request] Step "http" result is "FAIL"
+Jul 21 21:29:03.801 [ERRO] [Change password] [Change-password-Bad-Request] Errors: 
+Jul 21 21:29:03.801 [ERRO] [Change password] [Change-password-Bad-Request] [33mTestcase "Change password Bad Request", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:0)[0m
+Jul 21 21:29:03.804 [INFO] [Change password] [Change-password-Bad-Request] Ending testcase
+Jul 21 21:29:03.804 [INFO] [Change password] [Change-password-Unauthorized] Starting testcase
+Jul 21 21:29:03.806 [INFO] [Change password] [Change-password-Unauthorized] Step #0 content is: {"assertions":["result.statuscode ShouldEqual 401"],"body":"{\n  \"oldPassword\": \"Champion1!\",\n  \"newPassword\": \"Champion1!\"\n}\n","headers":{"Authorization":"Bearer wrong{{.jwt1}}","Content-Type":"application/json"},"method":"PATCH","type":"http","url":"{{.baseurl}}/users"}
+Jul 21 21:29:03.815 [ERRO] [Change password] [Change-password-Unauthorized] Step "http" result is "FAIL"
+Jul 21 21:29:03.815 [ERRO] [Change password] [Change-password-Unauthorized] Errors: 
+Jul 21 21:29:03.815 [ERRO] [Change password] [Change-password-Unauthorized] [33mTestcase "Change password Unauthorized", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:0)[0m
+Jul 21 21:29:03.815 [INFO] [Change password] [Change-password-Unauthorized] Ending testcase
+Jul 21 21:29:03.815 [INFO] [Change password] [Change-password-Wrong-old-password] Starting testcase
+Jul 21 21:29:03.824 [INFO] [Change password] [Change-password-Wrong-old-password] Step #0 content is: {"assertions":["result.statuscode ShouldEqual 403"],"body":"{\n  \"oldPassword\": \"Champion789!\",\n  \"newPassword\": \"Champion1!\"\n}\n","headers":{"Authorization":"Bearer {{.jwt1}}","Content-Type":"application/json"},"method":"PATCH","type":"http","url":"{{.baseurl}}/users"}
+Jul 21 21:29:03.839 [ERRO] [Change password] [Change-password-Wrong-old-password] Step "http" result is "FAIL"
+Jul 21 21:29:03.839 [ERRO] [Change password] [Change-password-Wrong-old-password] Errors: 
+Jul 21 21:29:03.839 [ERRO] [Change password] [Change-password-Wrong-old-password] [33mTestcase "Change password Wrong old password", step #0-0: Patch "%7B%7B.baseurl%7D%7D/users": unsupported protocol scheme "" (change-password.yaml:0)[0m
+Jul 21 21:29:03.845 [INFO] [Change password] [Change-password-Wrong-old-password] Ending testcase
+Jul 21 21:29:03.845 [INFO] [Change password] Ending testsuite
+Jul 21 21:29:03.845 [INFO] [] Starting testsuite
+Jul 21 21:29:03.845 [INFO] [] With secrets in testsuite
+Jul 21 21:29:03.845 [INFO] [] Ending testsuite
