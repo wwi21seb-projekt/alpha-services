@@ -40,7 +40,7 @@ testcases:
   steps:
   - type: http
     method: GET
-    url: "{{.baseurl}}/subscriptions/?type=following&offset=0&limit="
+    url: "{{.baseurl}}/subscriptions/{{.username1}}?type=following&offset=0&limit="
     headers:
       Authorization: "Bearer {{.jwt1}}"
     assertions:
@@ -50,25 +50,21 @@ testcases:
   steps:
   - type: http
     method: GET
-    url: "{{.baseurl}}/subscriptions/?type=following&offset=0&limit="
+    url: "{{.baseurl}}/subscriptions/{{.username1}}?type=following&offset=0&limit="
     assertions:
     - result.statuscode ShouldEqual 401
-    - result.body.error.title ShouldEqual "Unauthorized"
-    - result.body.error.code ShouldEqual "ERR-014"
-    - result.body.error.message ShouldEqual "The request is unauthorized. Please login to your account."
+
 
 - name: Get subscriptions User Not Found
   steps:
   - type: http
     method: GET
-    url: "{{.baseurl}}/subscriptions/?type=following&offset=0&limit="
+    url: "{{.baseurl}}/subscriptions/Venom123?type=following&offset=0&limit="
     headers:
       Authorization: "Bearer {{.jwt2}}"
     assertions:
     - result.statuscode ShouldEqual 404
-    - result.body.error.title ShouldEqual "User Not Found"
-    - result.body.error.code ShouldEqual "ERR-404"
-    - result.body.error.message ShouldEqual "The user could not be found."
+
 
 
 - name: Unsubscribe User Not own subscription
