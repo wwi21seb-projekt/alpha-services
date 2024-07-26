@@ -7,54 +7,54 @@ vars:
   email: "testemail{{ randAlphaNum 5 }}@gmail.com"
 
 testcases:
-# Creating a user to test the server response when trying to resend token to unactivated user.
-- name: Register User
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username}}",
-        "password": "{{.password}}",
-        "nickname": "{{.nickname}}",
-        "email": "{{.email}}",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 201
+  # Creating a user to test the server response when trying to resend token to unactivated user.
+  - name: Register User
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username}}",
+            "password": "{{.password}}",
+            "nickname": "{{.nickname}}",
+            "email": "{{.email}}",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
 
-- name: Resend Token Success
-  steps:
-  - type: http
-    method: DELETE
-    url: "{{.baseurl}}/users/{{.username}}/activate" 
-    headers:
-      Content-Type: application/json
-      Authorization: "Bearer {{.jwt1}}"
-    assertions:
-    - result.statuscode ShouldEqual 204
+  - name: Resend Token Success
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/users/{{.username}}/activate"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 204
 
-- name: Resend Token User Already Activated
-  steps:
-  - type: http
-    method: DELETE
-    url: "{{.baseurl}}/users/{{.username1}}/activate"
-    headers:
-      Content-Type: application/json
-      Authorization: "Bearer {{.jwt1}}"
-    assertions:
-    - result.statuscode ShouldEqual 208
+  - name: Resend Token User Already Activated
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/users/{{.username1}}/activate"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 208
 
-- name: Resend Token User not found
-  steps:
-  - type: http
-    method: DELETE
-    url: "{{.baseurl}}/users/unknownuser/activate"
-    headers:
-      Content-Type: application/json
-      Authorization: "Bearer {{.jwt1}}"
-    assertions:
-    - result.statuscode ShouldEqual 404
+  - name: Resend Token User not found
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/users/unknownuser/activate"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 404

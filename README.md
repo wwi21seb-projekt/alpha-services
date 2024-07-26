@@ -139,6 +139,7 @@ For the imprint test suite, the command would be:
 ```bash
 venom run integration-tests/imprint --var-from-file ../variables.yaml --output-dir integration-tests/imprint/logs
 ```
+
 Make sure to specify the logs directory as the output directory to prevent the log files from being stored elsewhere.
 
 ## License

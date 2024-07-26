@@ -1,0 +1,116 @@
+name: Create and Get Comments
+description: Testing creation and retrieval of comments.
+
+testcases:
+
+  - name: Create-Post-For-Comments
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": "Post for comments #test",
+            "picture": "",
+            "location": {
+                "longitude": 142.2,
+                "latitude": 45.2,
+                "accuracy": 39
+            }
+          }
+        vars:
+          postid:
+            from: result.bodyjson.postId
+        assertions:
+          - result.statuscode ShouldEqual 201
+
+  - name: Create Comment Success
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-For-Comments.postid}}/comments"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": "This is a test comment."
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
+
+  - name: Create Comment Bad Request
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-For-Comments.postid}}/comments"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 400
+
+  - name: Create Comment Unauthorized
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-For-Comments.postid}}/comments"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer wrong{{.jwt1}}"
+        body: |
+          {
+            "content": "This is a test comment."
+          }
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+  - name: Create Comment Not Found
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/00000000-0000-0000-0000-000000000000/comments"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": "This is a test comment."
+          }
+        assertions:
+          - result.statuscode ShouldEqual 404
+
+  - name: Get Comments Success
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/posts/{{.Create-Post-For-Comments.postid}}/comments"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 200
+
+  - name: Get Comments Unauthorized
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/posts/{{.Create-Post-For-Comments.postid}}/comments"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+  - name: Get Comments Not Found
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/posts/00000000-0000-0000-0000-000000000000/comments"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 404

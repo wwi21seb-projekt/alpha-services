@@ -7,85 +7,85 @@ vars:
   email: "testemail{{ randAlphaNum 5 }}@gmail.com"
 
 testcases:
-- name: Login User Success
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users/login"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username1}}",
-        "password": "{{.password1}}"
-      }
-    assertions:
-    - result.statuscode ShouldEqual 200
-    - result.bodyjson ShouldContainKey token
+  - name: Login User Success
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users/login"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username1}}",
+            "password": "{{.password1}}"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson ShouldContainKey token
 
-- name: Login User Not Found
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users/login"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "unknownuser",
-        "password": "Champion1!"
-      }
-    assertions:
-    - result.statuscode ShouldEqual 404
+  - name: Login User Not Found
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users/login"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "unknownuser",
+            "password": "Champion1!"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 404
 
-- name: Login User Password Incorrect
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users/login"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username1}}",
-        "password": "WrongPassword1!"
-      }
-    assertions:
-    - result.statuscode ShouldEqual 401
+  - name: Login User Password Incorrect
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users/login"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username1}}",
+            "password": "WrongPassword1!"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 401
 
-# Creating a user to test the server response when trying to login with a user that is not activated.
-- name: Register User Token Required
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username}}",
-        "password": "{{.password}}",
-        "nickname": "{{.nickname}}",
-        "email": "{{.email}}",
-        "profilePicture": ""
-      }
-    assertions:
-    - result.statuscode ShouldEqual 201
+  # Creating a user to test the server response when trying to login with a user that is not activated.
+  - name: Register User Token Required
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username}}",
+            "password": "{{.password}}",
+            "nickname": "{{.nickname}}",
+            "email": "{{.email}}",
+            "profilePicture": ""
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
 
-- name: Login User Token Required
-  vars:
-    username: "{{.username}}"
-    password: "{{.password}}"
-  steps:
-  - type: http
-    method: POST
-    url: "{{.baseurl}}/users/login"
-    headers:
-      Content-Type: application/json
-    body: |
-      {
-        "username": "{{.username}}",
-        "password": "{{.password}}"
-      }
-    assertions:
-    - result.statuscode ShouldEqual 403
+  - name: Login User Token Required
+    vars:
+      username: "{{.username}}"
+      password: "{{.password}}"
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/users/login"
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "username": "{{.username}}",
+            "password": "{{.password}}"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 403

@@ -1,0 +1,89 @@
+name: Push Subscriptions Test Suite
+description: Testing get VAPID token and register push subscriptions.
+
+testcases:
+
+  - name: Get VAPID Token Success
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/push/vapid"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson.key ShouldNotBeEmpty
+
+  - name: Get VAPID Token Unauthorized
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/push/vapid"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+  - name: Register Push Subscription Success Web
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/push/register"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "type": "web",
+            "subscription": {
+              "endpoint": "https://fcm.googleapis.com/fcm/send/some-id",
+              "expirationTime": null,
+              "keys": {
+                "p256dh": "some-p256dh-key",
+                "auth": "some-auth-key"
+              }
+            }
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
+          - result.bodyjson.subscriptionId ShouldNotBeEmpty
+
+  - name: Register Push Subscription Success Expo
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/push/register"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "type": "expo",
+            "token": "some-expo-token"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 201
+          - result.bodyjson.subscriptionId ShouldNotBeEmpty
+
+  - name: Register Push Subscription Unauthorized
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/push/register"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer wrong{{.jwt1}}"
+        body: |
+          {
+            "type": "web",
+            "subscription": {
+              "endpoint": "https://fcm.googleapis.com/fcm/send/some-id",
+              "expirationTime": null,
+              "keys": {
+                "p256dh": "some-p256dh-key",
+                "auth": "some-auth-key"
+              }
+            }
+          }
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+

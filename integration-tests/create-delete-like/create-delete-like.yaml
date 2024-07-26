@@ -1,0 +1,128 @@
+name: Create and Delete Like
+description: Testing creation and deletion of a like.
+
+testcases:
+
+  - name: Create-Post-1
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": "Some Content #arda",
+            "picture": "",
+            "location": {
+                "longitude": 142.2,
+                "latitude": 45.2,
+                "accuracy": 39
+            }
+          }
+        vars:
+          postid:
+            from: result.bodyjson.postId
+        assertions:
+          - result.statuscode ShouldEqual 201
+
+  - name: Create-Post-2
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        body: |
+          {
+            "content": "Normale Kartoffeln auf die 1!",
+            "picture": "",
+            "location": {
+                "longitude": 142.2,
+                "latitude": 45.2,
+                "accuracy": 39
+            }
+          }
+        vars:
+          postid:
+            from: result.bodyjson.postId
+        assertions:
+          - result.statuscode ShouldEqual 201
+
+  - name: Like Creation Success
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-1.postid}}/likes"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 204
+
+  - name: Like Creation Not found
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/00000000-0000-0000-0000-000000000000/likes"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 404
+
+  - name: Like Creation Unauthorized
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-1.postid}}/likes"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer wrong{{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+  - name: Like Creation already liked
+    steps:
+      - type: http
+        method: POST
+        url: "{{.baseurl}}/posts/{{.Create-Post-1.postid}}/likes"
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 409
+
+  - name: Delete like Success
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/posts/{{.Create-Post-1.postid}}/likes"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 204
+          - result.body ShouldBeEmpty
+
+  - name: Delete like Unauthorized
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/posts/{{.Create-Post-2.postid}}/likes"
+        headers:
+          Authorization: "Bearer wrong{{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 401
+
+
+  - name: Delete like not liked
+    steps:
+      - type: http
+        method: DELETE
+        url: "{{.baseurl}}/posts/{{.Create-Post-2.postid}}/likes"
+        headers:
+          Authorization: "Bearer {{.jwt1}}"
+        assertions:
+          - result.statuscode ShouldEqual 409
