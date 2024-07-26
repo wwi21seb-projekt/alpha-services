@@ -6,16 +6,16 @@ type: application
 
 dependencies:
   - name: postgresql
-    version: 15.5.14
+    version: 15.5.20
     repository: https://charts.bitnami.com/bitnami
   - name: opentelemetry-collector
-    version: 0.97.1
+    version: 0.99.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   - name: kube-prometheus-stack
-    version: 61.2.0
+    version: 61.3.2
     repository: https://prometheus-community.github.io/helm-charts
     condition: prometheus.enabled
   - name: jaeger
-    version: 3.1.0
+    version: 3.1.1
     repository: https://jaegertracing.github.io/helm-charts
     condition: jaeger.enabled

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/wwi21seb-projekt/alpha-services/src/api-gateway/dto"
 	commonv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/common/v1"
 	userv1 "github.com/wwi21seb-projekt/alpha-shared/gen/server_alpha/user/v1"
@@ -406,6 +407,10 @@ func (uh *UserHandler) CreateSubscription(c *gin.Context) {
 
 func (uh *UserHandler) DeleteSubscription(c *gin.Context) {
 	subscriptionId := c.Param("subscriptionId")
+	if _, err := uuid.Parse(subscriptionId); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, &dto.ErrorDTO{Error: goerrors.PostNotFound})
+		return
+	}
 
 	// Get outgoing context from metadata
 	ctx := c.MustGet(middleware.GRPCMetadataKey).(context.Context)

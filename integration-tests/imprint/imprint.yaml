@@ -2,13 +2,13 @@ name: Imprint
 description: Testing the retrieval of the imprint.
 
 testcases:
-- name: Get Imprint
-  steps:
-  - type: http
-    method: GET
-    url: "{{.baseurl}}/imprint"
-    headers:
-      Content-Type: application/json
-    assertions:
-    - result.statuscode ShouldEqual 200
-    - result.bodyjson ShouldContainKey text
+  - name: Get Imprint
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseurl}}/imprint"
+        headers:
+          Content-Type: application/json
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson ShouldContainKey text
