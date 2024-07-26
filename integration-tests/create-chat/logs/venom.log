@@ -1,11 +1,11 @@
-Jul 25 14:59:00.713 [ERRO] file content: - name: Create chat success
+Jul 26 02:39:58.568 [ERRO] file content: - name: Create chat success
   steps:
   - type: http
     method: POST
     url: "https://alpha.c930.net/api/chats"
     headers:
       Content-Type: application/json
-      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIwNjI1MzQwLCJpYXQiOjE3MjA1Mzg5NDB9.hy9wEi_GvDXWuXyMBsymMTrZYgip4jg_deVkpnL2yzIu2lJKr0lg2kmQP8NGylYxkibO0oF1qubOSLoP7b93Ag"
+      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIyMDQwNzk2LCJpYXQiOjE3MjE5NTQzOTZ9.s4zq9z3lWwexR5aDfcP1JdI5bX_GaKyr5nVjkXsu9KEdG0562GgRmnqscx46Pd04_tITAEQkDBEHYK6Ds9zkCg"
     body: |
       {
         "username": "oranje",
@@ -24,7 +24,7 @@ Jul 25 14:59:00.713 [ERRO] file content: - name: Create chat success
     url: "https://alpha.c930.net/api/chats"
     headers:
       Content-Type: application/json
-      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIwNjI1MzQwLCJpYXQiOjE3MjA1Mzg5NDB9.hy9wEi_GvDXWuXyMBsymMTrZYgip4jg_deVkpnL2yzIu2lJKr0lg2kmQP8NGylYxkibO0oF1qubOSLoP7b93Ag"
+      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIyMDQwNzk2LCJpYXQiOjE3MjE5NTQzOTZ9.s4zq9z3lWwexR5aDfcP1JdI5bX_GaKyr5nVjkXsu9KEdG0562GgRmnqscx46Pd04_tITAEQkDBEHYK6Ds9zkCg"
     body: |
       {
         "username": "",
@@ -63,7 +63,7 @@ Jul 25 14:59:00.713 [ERRO] file content: - name: Create chat success
     url: "https://alpha.c930.net/api/chats"
     headers:
       Content-Type: application/json
-      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIwNjI1MzQwLCJpYXQiOjE3MjA1Mzg5NDB9.hy9wEi_GvDXWuXyMBsymMTrZYgip4jg_deVkpnL2yzIu2lJKr0lg2kmQP8NGylYxkibO0oF1qubOSLoP7b93Ag"
+      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIyMDQwNzk2LCJpYXQiOjE3MjE5NTQzOTZ9.s4zq9z3lWwexR5aDfcP1JdI5bX_GaKyr5nVjkXsu9KEdG0562GgRmnqscx46Pd04_tITAEQkDBEHYK6Ds9zkCg"
     body: |
       {
         "username": "nonexistentuser",
@@ -83,7 +83,7 @@ Jul 25 14:59:00.713 [ERRO] file content: - name: Create chat success
     url: "https://alpha.c930.net/api/chats"
     headers:
       Content-Type: application/json
-      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIwNjI1MzQwLCJpYXQiOjE3MjA1Mzg5NDB9.hy9wEi_GvDXWuXyMBsymMTrZYgip4jg_deVkpnL2yzIu2lJKr0lg2kmQP8NGylYxkibO0oF1qubOSLoP7b93Ag"
+      Authorization: "Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJyZWZyZXNoIjpmYWxzZSwidXNlcm5hbWUiOiJhcmRhZ29hdDEyMzQiLCJpc3MiOiJhbHBoYS1hcGktZ2F0ZXdheSIsInN1YiI6ImFyZGFnb2F0MTIzNCIsImF1ZCI6WyJzZXJ2ZXItYWxwaGEiXSwiZXhwIjoxNzIyMDQwNzk2LCJpYXQiOjE3MjE5NTQzOTZ9.s4zq9z3lWwexR5aDfcP1JdI5bX_GaKyr5nVjkXsu9KEdG0562GgRmnqscx46Pd04_tITAEQkDBEHYK6Ds9zkCg"
     body: |
       {
         "username": "oranje",

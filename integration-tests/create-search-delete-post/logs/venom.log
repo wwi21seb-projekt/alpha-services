@@ -1,26 +1,25 @@
-Jul 25 14:59:01.249 [ERRO] [Create Post] [Post-Creation-Success] Step "http" result is "FAIL"
-Jul 25 14:59:01.249 [ERRO] [Create Post] [Post-Creation-Success] Errors: 
-Jul 25 14:59:01.249 [ERRO] [Create Post] [Post-Creation-Success] [33mTestcase "Post-Creation-Success", step #0-0: Assertion "result.statuscode ShouldEqual 201" failed. expected: 201  got: 401 (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.343 [ERRO] [Create Post] [Post-Creation-Bad-Request] Step "http" result is "FAIL"
-Jul 25 14:59:01.344 [ERRO] [Create Post] [Post-Creation-Bad-Request] Errors: 
-Jul 25 14:59:01.344 [ERRO] [Create Post] [Post-Creation-Bad-Request] [33mTestcase "Post Creation Bad Request", step #0-0: Assertion "result.statuscode ShouldEqual 400" failed. expected: 400  got: 401 (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.439 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "http" result is "PASS"
-Jul 25 14:59:01.440 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "Search posts success" result is "PASS"
-Jul 25 14:59:01.440 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "Search posts unauthorized" result is "PASS"
-Jul 25 14:59:01.526 [ERRO] [Create Post] [Delete-post-Success] Step "http" result is "FAIL"
-Jul 25 14:59:01.526 [ERRO] [Create Post] [Delete-post-Success] Errors: 
-Jul 25 14:59:01.526 [ERRO] [Create Post] [Delete-post-Success] [33mTestcase "Delete post Success", step #0-0: Assertion "result.statuscode ShouldEqual 204" failed. expected: 204  got: 401 (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.526 [ERRO] [Create Post] [Delete-post-Success] [33mTestcase "Delete post Success", step #0-0: Assertion "result.body ShouldBeEmpty" failed. expected '{"error":{"title":"Unauthorized","code":"ERR-014","message":"The request is unauthorized. Please login to your account.","http_status":401}}' to be empty but it wasn't (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] Step "http" result is "FAIL"
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] Errors: 
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.statuscode ShouldEqual 401" failed. expected: 401  got: 404 (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.title ShouldEqual \"Unauthorized\"" failed. expected: Unauthorized  got: <nil> (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-014\"" failed. expected: ERR-014  got: <nil> (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.613 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.message ShouldEqual \"The request is unauthorized. Please login to your account.\"" failed. expected: The request is unauthorized. Please login to your account.  got: <nil> (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.745 [ERRO] [Create Post] [Delete-post-Forbidden] Step "http" result is "FAIL"
-Jul 25 14:59:01.745 [ERRO] [Create Post] [Delete-post-Forbidden] Errors: 
-Jul 25 14:59:01.745 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.statuscode ShouldEqual 403" failed. expected: 403  got: 404 (create-search-delete-post.yaml:0)[0m
-Jul 25 14:59:01.745 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.message ShouldEqual \"You can only delete your own posts.\"" failed. expected: You can only delete your own posts.  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:01.693 [WARN] [Create Post] [Post-Creation-Success] Step "http" result is "PASS"
+Jul 26 02:40:01.791 [WARN] [Create Post] [Post-Creation-Bad-Request] Step "http" result is "PASS"
+Jul 26 02:40:01.894 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "http" result is "PASS"
+Jul 26 02:40:01.897 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "Search posts success" result is "PASS"
+Jul 26 02:40:01.897 [WARN] [Create Post] [Post-Creation-Unauthorized] Step "Search posts unauthorized" result is "PASS"
+Jul 26 02:40:02.036 [WARN] [Create Post] [Delete-post-Success] Step "http" result is "PASS"
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] Step "http" result is "FAIL"
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] Errors: 
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.statuscode ShouldEqual 401" failed. expected: 401  got: 404 (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.title ShouldEqual \"Unauthorized\"" failed. expected: Unauthorized  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-014\"" failed. expected: ERR-014  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.153 [ERRO] [Create Post] [Delete-post-Unauthorized] [33mTestcase "Delete post Unauthorized", step #0-0: Assertion "result.body.error.message ShouldEqual \"The request is unauthorized. Please login to your account.\"" failed. expected: The request is unauthorized. Please login to your account.  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.248 [ERRO] [Create Post] [Delete-post-Forbidden] Step "http" result is "FAIL"
+Jul 26 02:40:02.248 [ERRO] [Create Post] [Delete-post-Forbidden] Errors: 
+Jul 26 02:40:02.248 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.statuscode ShouldEqual 403" failed. expected: 403  got: 404 (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.248 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.message ShouldEqual \"You can only delete your own posts.\"" failed. expected: You can only delete your own posts.  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.248 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-019\"" failed. expected: ERR-019  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.353 [ERRO] [Create Post] [Delete-post-Not-Found] Step "http" result is "FAIL"
+Jul 26 02:40:02.353 [ERRO] [Create Post] [Delete-post-Not-Found] Errors: 
+Jul 26 02:40:02.353 [ERRO] [Create Post] [Delete-post-Not-Found] [33mTestcase "Delete post Not Found", step #0-0: Assertion "result.body.error.title ShouldEqual \"PostNotFound\"" failed. expected: PostNotFound  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.353 [ERRO] [Create Post] [Delete-post-Not-Found] [33mTestcase "Delete post Not Found", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-020\"" failed. expected: ERR-020  got: <nil> (create-search-delete-post.yaml:0)[0m
+Jul 26 02:40:02.353 [ERRO] [Create Post] [Delete-post-Not-Found] [33mTestcase "Delete post Not Found", step #0-0: Assertion "result.body.error.message ShouldEqual \"The post was not found. Please check the post ID and try again.\"" failed. expected: The post was not found. Please check the post ID and try again.  got: <nil> (create-search-delete-post.yaml:0)[0m
 Jul 25 14:59:01.745 [ERRO] [Create Post] [Delete-post-Forbidden] [33mTestcase "Delete post Forbidden", step #0-0: Assertion "result.body.error.code ShouldEqual \"ERR-019\"" failed. expected: ERR-019  got: <nil> (create-search-delete-post.yaml:0)[0m
 Jul 25 14:59:01.836 [ERRO] [Create Post] [Delete-post-Not-Found] Step "http" result is "FAIL"
 Jul 25 14:59:01.836 [ERRO] [Create Post] [Delete-post-Not-Found] Errors: 

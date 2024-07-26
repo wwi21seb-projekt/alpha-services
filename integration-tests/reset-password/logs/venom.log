@@ -1,4 +1,4 @@
-Jul 25 14:59:05.303 [ERRO] file content:   - name: Reset password success
+Jul 26 02:40:07.564 [ERRO] file content:   - name: Reset password success
     steps:
     - type: http
       method: POST
